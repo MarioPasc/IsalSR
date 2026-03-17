@@ -36,13 +36,25 @@ def main() -> None:
     parser.add_argument("--n-iterations", type=int, default=500)
     parser.add_argument("--max-tokens", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output", type=str, default=DEFAULT_OUTPUT)
+    parser.add_argument("--output", type=str, default=DEFAULT_OUTPUT,
+                        help="Output CSV path (used when --output-dir is not set).")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Output directory. Combined with --run-id to form the path.")
+    parser.add_argument("--run-id", type=int, default=None,
+                        help="Run identifier (used with --output-dir).")
     parser.add_argument(
         "--no-canon",
         action="store_true",
         help="Disable canonicalization (baseline for WITH vs WITHOUT comparison).",
     )
     args = parser.parse_args()
+
+    # Resolve output path: --output-dir + --run-id takes precedence over --output
+    if args.output_dir is not None:
+        run_tag = args.run_id if args.run_id is not None else 0
+        output_path = os.path.join(args.output_dir, f"run_{run_tag}.csv")
+    else:
+        output_path = args.output
 
     ops = frozenset(LABEL_CHAR_MAP.values())
     allowed_ops = OperationSet(ops)
@@ -76,12 +88,12 @@ def main() -> None:
         )
         log.info("  Best R^2: %.6f, unique: %d", best.get("r2", -1e10), len(results))
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    with open(args.output, "w", newline="") as f:
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(all_results[0].keys()))
         writer.writeheader()
         writer.writerows(all_results)
-    log.info("Results saved to %s", args.output)
+    log.info("Results saved to %s", output_path)
 
 
 if __name__ == "__main__":

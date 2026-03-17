@@ -10,16 +10,17 @@ echo "Start:  $(date)"
 
 eval "$(conda shell.bash hook 2>/dev/null)" || true
 conda activate isalsr 2>/dev/null || true
+PYTHON="$(conda run -n isalsr which python 2>/dev/null || echo python3)"
 
 REPO_DIR="${ISALSR_REPO_DIR:?ERROR: ISALSR_REPO_DIR not set}"
 CONFIG="${REPO_DIR}/slurm/config.yaml"
 cd "$REPO_DIR"
 
-RESULTS_DIR=$(python3 -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['results_dir'])")
-BENCH_CFG=$(python3 -c "import yaml,json; json.dump(yaml.safe_load(open('${CONFIG}'))['experiments']['gp_canon'], __import__('sys').stdout)")
+RESULTS_DIR=$($PYTHON -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['results_dir'])")
+BENCH_CFG=$($PYTHON -c "import yaml,json; json.dump(yaml.safe_load(open('${CONFIG}'))['experiments']['gp_canon'], __import__('sys').stdout)")
 
-N_RUNS=$(echo "$BENCH_CFG" | python3 -c "import json,sys; print(json.load(sys.stdin).get('n_runs', 30))")
-SEED_BASE=$(echo "$BENCH_CFG" | python3 -c "import json,sys; print(json.load(sys.stdin).get('seed_base', 42))")
+N_RUNS=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('n_runs', 30))")
+SEED_BASE=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('seed_base', 42))")
 OUT_DIR="${RESULTS_DIR}/gp_canon"
 
 mkdir -p "$OUT_DIR"

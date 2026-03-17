@@ -11,12 +11,13 @@ echo "Start:  $(date)"
 
 eval "$(conda shell.bash hook 2>/dev/null)" || true
 conda activate isalsr 2>/dev/null || true
+PYTHON="$(conda run -n isalsr which python 2>/dev/null || echo python3)"
 
 REPO_DIR="${ISALSR_REPO_DIR:?ERROR: ISALSR_REPO_DIR not set}"
 CONFIG="${REPO_DIR}/slurm/config.yaml"
 cd "$REPO_DIR"
 
-RESULTS_DIR=$(python3 -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['results_dir'])")
+RESULTS_DIR=$($PYTHON -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['results_dir'])")
 AGG_DIR="${RESULTS_DIR}/aggregate"
 mkdir -p "$AGG_DIR"
 

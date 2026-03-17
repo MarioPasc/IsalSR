@@ -48,10 +48,6 @@ done
 # ---------------------------------------------------------------------------
 # Parse config.yaml using Python
 # ---------------------------------------------------------------------------
-if command -v conda >/dev/null 2>&1; then
-    eval "$(conda shell.bash hook 2>/dev/null)" || true
-fi
-
 parse_config() {
     "$PYTHON" -c "
 import yaml, json, sys
