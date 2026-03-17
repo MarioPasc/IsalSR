@@ -1,0 +1,21 @@
+# SRBench standardized benchmark configuration
+# Reference: La Cava et al. (2021). Contemporary SR methods.
+experiment:
+  name: srbench
+  description: "SRBench standardized symbolic regression benchmark"
+  seed: 42
+  n_runs: 10
+
+data:
+  source: "srbench"
+
+search:
+  operations: ["+", "*", "-", "/", "s", "c", "e", "l", "r", "^", "a"]
+  max_tokens: 100
+  n_iterations: 500000
+  population_size: 2000
+
+evaluation:
+  metric: r_squared
+  constant_optimization: true
+  bfgs_max_iter: 200

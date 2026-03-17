@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "isalsr"
+version = "0.1.0"
+description = "Instruction Set and Language for Symbolic Regression"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Ezequiel Lopez-Rubio", email = "ezeqlr@lcc.uma.es"},
+    {name = "Mario Pascual Gonzalez", email = "mpascual@uma.es"},
+]
+# Core has zero dependencies
+dependencies = []
+
+[project.optional-dependencies]
+networkx = ["networkx>=3.0"]
+sympy = ["sympy>=1.12"]
+eval = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+search = [
+    "numpy>=1.24",
+]
+viz = ["matplotlib>=3.7"]
+bench = [
+    "isalsr[networkx,sympy,eval,search,viz]",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "scikit-learn>=1.3",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "hypothesis>=6.0",
+    "ruff>=0.4",
+    "mypy>=1.0",
+]
+all = ["isalsr[networkx,sympy,eval,search,viz,bench,dev]"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "unit: Unit tests (no external deps)",
+    "integration: Integration tests (external libs)",
+    "property: Property-based tests (hypothesis)",
+    "slow: Long-running tests",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "networkx", "networkx.*",
+    "sympy", "sympy.*",
+    "numpy", "numpy.*",
+    "scipy", "scipy.*",
+    "torch", "torch.*",
+    "matplotlib", "matplotlib.*",
+    "pandas", "pandas.*",
+    "sklearn", "sklearn.*",
+    "yaml", "yaml.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# E402: imports after pytest.importorskip() -- standard pattern for optional deps
+"tests/integration/*.py" = ["E402"]
+# N802: test names may use uppercase instruction names (V, C, N, P, W)
+"tests/**/*.py" = ["N802"]
+# ANN: benchmark/experiment scripts use dynamic typing for flexibility
+"benchmarks/**/*.py" = ["E402", "ANN"]
+"experiments/**/*.py" = ["E402", "ANN"]
