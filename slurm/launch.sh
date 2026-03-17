@@ -19,6 +19,12 @@ CONFIG="${SCRIPT_DIR}/config.yaml"
 eval "$(conda shell.bash hook 2>/dev/null)" || true
 conda activate isalsr 2>/dev/null || true
 
+# Resolve Python with PyYAML (conda env python preferred over system python3)
+PYTHON="${HOME}/.conda/envs/isalsr/bin/python"
+if [[ ! -x "$PYTHON" ]]; then
+    PYTHON="python3"
+fi
+
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
@@ -50,7 +56,7 @@ if command -v conda >/dev/null 2>&1; then
 fi
 
 parse_config() {
-    python3 -c "
+    "$PYTHON" -c "
 import yaml, json, sys
 with open('${CONFIG}') as f:
     cfg = yaml.safe_load(f)
@@ -60,11 +66,11 @@ json.dump(cfg, sys.stdout)
 
 CONFIG_JSON=$(parse_config)
 
-REPO_DIR=$(echo "$CONFIG_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['repo_dir'])")
-RESULTS_DIR=$(echo "$CONFIG_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['results_dir'])")
-CONDA_ENV=$(echo "$CONFIG_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['conda_env'])")
-CONSTRAINT=$(echo "$CONFIG_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['constraint'])")
-ACCOUNT=$(echo "$CONFIG_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['account'])")
+REPO_DIR=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['repo_dir'])")
+RESULTS_DIR=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['results_dir'])")
+CONDA_ENV=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['conda_env'])")
+CONSTRAINT=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['constraint'])")
+ACCOUNT=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['account'])")
 
 echo "=============================================="
 echo "IsalSR Benchmark Launcher"
@@ -82,7 +88,7 @@ echo ""
 # ---------------------------------------------------------------------------
 get_exp_config() {
     local exp_name="$1"
-    echo "$CONFIG_JSON" | python3 -c "
+    echo "$CONFIG_JSON" | "$PYTHON" -c "
 import json, sys
 cfg = json.load(sys.stdin)
 exp = cfg['experiments'].get('${exp_name}', {})
@@ -99,16 +105,16 @@ submit_experiment() {
     exp_config=$(get_exp_config "$exp_name")
 
     local enabled
-    enabled=$(echo "$exp_config" | python3 -c "import json,sys; print(json.load(sys.stdin).get('enabled', False))")
+    enabled=$(echo "$exp_config" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin).get('enabled', False))")
     if [[ "$enabled" != "True" ]]; then
         echo "[SKIP] ${exp_name}: disabled in config"
         return
     fi
 
     local time_limit cpus mem_gb
-    time_limit=$(echo "$exp_config" | python3 -c "import json,sys; print(json.load(sys.stdin)['time_limit'])")
-    cpus=$(echo "$exp_config" | python3 -c "import json,sys; print(json.load(sys.stdin)['cpus'])")
-    mem_gb=$(echo "$exp_config" | python3 -c "import json,sys; print(json.load(sys.stdin)['mem_gb'])")
+    time_limit=$(echo "$exp_config" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['time_limit'])")
+    cpus=$(echo "$exp_config" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['cpus'])")
+    mem_gb=$(echo "$exp_config" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['mem_gb'])")
 
     local out_dir="${RESULTS_DIR}/${exp_name}"
     local worker_script="${SCRIPT_DIR}/workers/${exp_name}_slurm.sh"
