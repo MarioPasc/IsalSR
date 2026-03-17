@@ -96,8 +96,13 @@ class Population:
         mutation_rate: float = 0.3,
         crossover_rate: float = 0.7,
         seed: int = 42,
+        use_canonical: bool = True,
     ) -> dict[str, object]:
         """Run evolutionary search for n_generations.
+
+        Args:
+            use_canonical: If True, canonicalize after every modification.
+                If False, use greedy D2S (baseline for comparison).
 
         Returns dict with 'best_string', 'best_r2', 'history'.
         """
@@ -132,12 +137,17 @@ class Population:
                     # Mutation.
                     if rng.random() < mutation_rate:
                         child_str = point_mutation(child_str, self._allowed_ops, rng)
-                    # Canonicalize (MANDATORY) and evaluate.
+                    # Canonicalize (if enabled) and evaluate.
                     try:
                         dag = StringToDAG(child_str, self._num_variables, self._allowed_ops).run()
                         if dag.node_count <= self._num_variables:
                             continue
-                        canon = canonical_string(dag)
+                        if use_canonical:
+                            canon = canonical_string(dag)
+                        else:
+                            from isalsr.core.dag_to_string import DAGToString
+
+                            canon = DAGToString(dag).run()
                         dag2 = StringToDAG(canon, self._num_variables, self._allowed_ops).run()
                         metrics = evaluate_expression(dag2, x_data, y_true)
                         new_individuals.append(canon)

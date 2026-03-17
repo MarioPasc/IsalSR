@@ -32,11 +32,13 @@ def hill_climbing(
     max_tokens: int = 50,
     n_restarts: int = 10,
     seed: int = 42,
+    use_canonical: bool = True,
 ) -> list[dict[str, object]]:
-    """Multi-restart hill climbing in the canonical IsalSR space.
+    """Multi-restart hill climbing in the IsalSR string space.
 
-    Each restart: random init -> canonical -> iterate mutations, keeping
-    improvements. Returns best results across all restarts.
+    When ``use_canonical=True`` (default), strings are canonicalized after
+    every mutation. When ``use_canonical=False``, no canonicalization
+    (baseline for WITH vs WITHOUT comparison).
 
     Args:
         x_data: Input matrix (N, m).
@@ -47,6 +49,7 @@ def hill_climbing(
         max_tokens: Maximum tokens per string.
         n_restarts: Number of restarts.
         seed: Random seed.
+        use_canonical: If True, canonicalize after every mutation.
 
     Returns:
         Sorted list of dicts with keys: 'string', 'r2', 'nrmse', 'mse'.
@@ -55,8 +58,8 @@ def hill_climbing(
     results: list[dict[str, object]] = []
 
     for _restart in range(n_restarts):
-        # Initialize with random canonical string.
-        current = _init_canonical(num_variables, max_tokens, allowed_ops, rng)
+        # Initialize with random string (canonicalized if use_canonical).
+        current = _init_canonical(num_variables, max_tokens, allowed_ops, rng, use_canonical)
         if current is None:
             continue
         current_metrics = _eval_string(current, num_variables, allowed_ops, x_data, y_true)
@@ -71,7 +74,12 @@ def hill_climbing(
                 dag = StringToDAG(mutated, num_variables, allowed_ops).run()
                 if dag.node_count <= num_variables:
                     continue
-                canon = canonical_string(dag)  # MANDATORY canonicalization
+                if use_canonical:
+                    canon = canonical_string(dag)
+                else:
+                    from isalsr.core.dag_to_string import DAGToString
+
+                    canon = DAGToString(dag).run()
                 metrics = _eval_string(canon, num_variables, allowed_ops, x_data, y_true)
                 if metrics is not None and metrics["r2"] > current_metrics["r2"]:
                     current = canon
@@ -90,15 +98,20 @@ def _init_canonical(
     max_tokens: int,
     allowed_ops: OperationSet,
     rng: np.random.Generator,
+    use_canonical: bool = True,
 ) -> str | None:
-    """Generate a random canonical string, retrying on failure."""
+    """Generate a random string (canonicalized if use_canonical), retrying on failure."""
     for _ in range(100):
         raw = random_isalsr_string(num_variables, max_tokens, allowed_ops, rng)
         try:
             dag = StringToDAG(raw, num_variables, allowed_ops).run()
             if dag.node_count <= num_variables:
                 continue
-            return canonical_string(dag)
+            if use_canonical:
+                return canonical_string(dag)
+            from isalsr.core.dag_to_string import DAGToString
+
+            return DAGToString(dag).run()
         except Exception:  # noqa: BLE001
             continue
     return None
