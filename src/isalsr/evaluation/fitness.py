@@ -54,6 +54,20 @@ def mse(
     return float(np.mean((y_true - y_pred) ** 2))
 
 
+def reward(
+    y_true: np.ndarray[Any, np.dtype[Any]],
+    y_pred: np.ndarray[Any, np.dtype[Any]],
+) -> float:
+    """Reward function R = 1 / (NRMSE + 1).
+
+    From Liu2025 (GraphDSR), Eq. 12. Bounded in (0, 1].
+    R = 1.0 for perfect fit, R -> 0 for poor fit.
+
+    Used for constant optimization objective and risk-seeking policy gradient.
+    """
+    return 1.0 / (nrmse(y_true, y_pred) + 1.0)
+
+
 def evaluate_expression(
     dag: LabeledDAG,
     x_data: np.ndarray[Any, np.dtype[Any]],

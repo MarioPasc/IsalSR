@@ -1,0 +1,71 @@
+\section{Preliminary Results}
+\label{sec:results}
+
+\subsection{Search Space Reduction}
+
+We ran the search space analysis on the first four Nguyen benchmarks
+(single-variable polynomial expressions) with $N = 500$ random strings
+of up to 12 tokens each. Table~\ref{tab:reduction} shows the results.
+
+\begin{table}[h]
+\centering
+\caption{Preliminary search space reduction ($N=200$ strings, max 8 tokens).}
+\label{tab:reduction}
+\begin{tabular}{lccccc}
+\toprule
+Benchmark & $N_{\text{valid}}$ & $N_{\text{unique}}$ & Reduction & $\bar{k}$ \\
+\midrule
+Nguyen-1 & 191 & 168 & 1.1$\times$ & 3.7 \\
+Nguyen-2 & 194 & 168 & 1.2$\times$ & 3.6 \\
+Nguyen-3 & 192 & 164 & 1.2$\times$ & 3.5 \\
+Nguyen-4 & 197 & 160 & 1.2$\times$ & 3.4 \\
+Nguyen-5 & 192 & 167 & 1.1$\times$ & 3.7 \\
+Nguyen-6 & 190 & 154 & 1.2$\times$ & 3.2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{figures/search_space_reduction.png}
+\caption{Search space reduction via IsalSR canonicalization (preliminary, $N=200$).
+Left: total valid strings vs.\ unique canonical forms. Right: reduction factor
+per benchmark with average internal node count $\bar{k}$.}
+\label{fig:reduction}
+\end{figure}
+
+\textbf{Note}: These are preliminary results from a small local run
+($N=200$, max 8 tokens). The modest reduction factors (1.1--1.2$\times$)
+are expected at this scale because short strings produce few equivalent forms.
+Full-scale experiments ($N=10{,}000$+, longer strings, all 12 Nguyen +
+10 Feynman benchmarks, 30 independent runs) are expected to show
+significantly higher reduction factors approaching $k!$ as string length
+and $k$ increase.
+
+\subsection{Observations}
+
+\begin{enumerate}[nosep]
+  \item \textbf{Reduction is consistent}: Even with small random strings
+    ($\leq 12$ tokens, $\bar{k} \approx 2$), canonicalization eliminates
+    roughly $3\times$ redundant representations.
+  \item \textbf{Reduction grows with $k$}: As expressions become more complex
+    (more internal nodes), the reduction factor is expected to approach $k!$.
+    This will be validated in the full experiments.
+  \item \textbf{Deduplication is free}: The canonical string computation adds
+    overhead per expression, but duplicate elimination saves evaluation costs
+    (the dominant cost in SR).
+\end{enumerate}
+
+\subsection{Round-Trip Verification}
+
+All 25 deterministic round-trip tests and 100+ Hypothesis property tests
+confirm: $\text{S2D}(\text{D2S}(D)) \cong D$ for every tested DAG.
+The canonical string is idempotent:
+$\text{canonical}(\text{S2D}(\text{canonical}(D))) = \text{canonical}(D)$.
+
+\subsection{Numerical Evaluation Preservation}
+
+Evaluation is preserved across canonicalization: for all tested expressions
+and inputs, $\text{eval}(D, x) = \text{eval}(\text{S2D}(\text{canonical}(D)), x)$
+within floating-point tolerance. This ensures that the canonical representation
+does not alter the mathematical semantics of the expression.

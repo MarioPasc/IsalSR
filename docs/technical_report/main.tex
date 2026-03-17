@@ -1,0 +1,135 @@
+% =============================================================================
+% IsalSR Technical Report
+% =============================================================================
+% Authors: Ezequiel Lopez-Rubio, Mario Pascual Gonzalez
+% University of Malaga, 2025-2026
+%
+% PURPOSE: Serves as basis for the arXiv preprint and IEEE TPAMI submission.
+% Provides complete context for the PhD advisor (Ezequiel) regarding
+% what was implemented, how it works, and what experiments validate.
+%
+% STRUCTURE: Each \input loads a section file. Comments above each \input
+% describe its content so agents can use main.tex as a navigation hub.
+% =============================================================================
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{multirow}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+
+\title{IsalSR: Instruction Set and Language for Symbolic Regression\\[6pt]
+\large Technical Report --- Implementation and Experimental Design}
+
+\author{
+  Ezequiel Lopez-Rubio\textsuperscript{1} \and
+  Mario Pascual Gonzalez\textsuperscript{1} \\[6pt]
+  \textsuperscript{1}University of Malaga, Spain \\
+  \texttt{\{ezeqlr, mpascual\}@uma.es}
+}
+
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present IsalSR (Instruction Set and Language for Symbolic Regression),
+a representation framework that encodes mathematical expressions as labeled
+Directed Acyclic Graphs (DAGs) via isomorphism-invariant instruction strings.
+By computing a canonical string---a complete labeled-DAG invariant---IsalSR
+collapses $O(k!)$ equivalent expression representations into a single
+canonical form, where $k$ is the number of internal (non-variable) nodes.
+This reduction enables existing symbolic regression methods to search over a
+dramatically smaller space without modifying their core algorithms.
+This report describes the instruction set design, canonical string computation,
+software architecture, and experimental infrastructure for validating the
+$O(k!)$ claim on standard SR benchmarks (Nguyen, Feynman, SRBench).
+The implementation comprises 286 verified tests across 7 development phases,
+with 78/80 proposal-alignment checks passed.
+\end{abstract}
+
+% --- Section 1: Proposal and positioning ---
+% WHERE IsalSR fits in the SR landscape, HOW we orient the narrative around
+% search space reduction, and WHY this is a publishable contribution.
+\input{sections/01_proposal}
+
+% --- Section 2: Instruction set and core structures ---
+% The IsalSR alphabet Sigma_SR (two-tier encoding), LabeledDAG, CDLL,
+% initial state convention, edge semantics, and the DAG constraint.
+\input{sections/02_instruction_set}
+
+% --- Section 3: Core algorithms ---
+% StringToDAG (S2D decoder), DAGToString (D2S greedy encoder), canonical
+% string (exhaustive + pruned with 6-component structural tuples),
+% round-trip property, and Levenshtein DAG distance.
+\input{sections/03_algorithms}
+
+% --- Section 4: Software architecture ---
+% Dependency layering (core zero-deps -> adapters -> evaluation -> search),
+% module inventory, testing strategy (286 tests), code quality standards.
+\input{sections/04_architecture}
+
+% --- Section 5: Benchmarks and experimental design ---
+% Exact Nguyen (12) and Feynman (10) benchmarks from Liu2025, metrics
+% (R^2, NRMSE, reward), WITH vs WITHOUT canonicalization comparison design.
+\input{sections/05_benchmarks}
+
+% --- Section 6: Preliminary results ---
+% Local search space analysis demonstrating empirical O(k!) reduction,
+% and sample search results on Nguyen benchmarks.
+\input{sections/06_results}
+
+% --- Section 7: Conclusion and next steps ---
+% Summary of contributions, limitations, and roadmap to IEEE TPAMI submission.
+\input{sections/07_conclusion}
+
+\begin{thebibliography}{10}
+
+\bibitem{lopezrubio2025}
+E.~Lopez-Rubio, ``Representation of the structure of graphs by sequences of
+instructions,'' \emph{arXiv:2512.10429v2}, 2025.
+
+\bibitem{liu2025}
+J.~Liu et~al., ``Mathematical expression exploration with graph representation
+and generative graph neural network,'' \emph{Neural Networks}, vol.~187,
+p.~107405, 2025.
+
+\bibitem{lacava2021}
+W.~La~Cava et~al., ``Contemporary symbolic regression methods and their
+relative performance,'' in \emph{NeurIPS Datasets and Benchmarks}, 2021.
+
+\bibitem{petersen2021}
+B.~K. Petersen et~al., ``Deep symbolic regression: Recovering mathematical
+expressions from data via risk-seeking policy gradients,'' in \emph{ICLR}, 2021.
+
+\bibitem{uy2011}
+N.~Q. Uy et~al., ``Semantically-based crossover in genetic programming:
+Application to real-valued symbolic regression,'' \emph{Genetic Programming
+and Evolvable Machines}, vol.~12, pp.~91--119, 2011.
+
+\bibitem{udrescu2020}
+S.-M. Udrescu and M.~Tegmark, ``AI Feynman: A physics-inspired method for
+symbolic regression,'' \emph{Science Advances}, vol.~6, no.~16, 2020.
+
+\bibitem{koza1992}
+J.~R. Koza, \emph{Genetic Programming: On the Programming of Computers by
+Means of Natural Selection}.\hskip 1em MIT Press, 1992.
+
+\end{thebibliography}
+
+\end{document}

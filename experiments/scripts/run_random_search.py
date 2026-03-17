@@ -1,4 +1,88 @@
 """Run random search experiment on SR benchmarks.
 
-Usage: python experiments/scripts/run_random_search.py --config experiments/configs/nguyen.yaml
+Generates random IsalSR strings, canonicalizes, evaluates fitness on each
+Nguyen benchmark. Saves results as CSV.
+
+Usage:
+    python experiments/scripts/run_random_search.py \
+        --n-iterations 500 --max-tokens 30 --seed 42 \
+        --output results/random_search.csv
 """
+
+from __future__ import annotations
+
+import argparse
+import csv
+import logging
+import os
+import sys
+from typing import Any
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
+from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS, generate_data  # noqa: E402
+from isalsr.core.node_types import LABEL_CHAR_MAP, OperationSet  # noqa: E402
+from isalsr.search.random_search import random_search  # noqa: E402
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+log = logging.getLogger(__name__)
+
+DEFAULT_OUTPUT = "/media/mpascual/Sandisk2TB/research/isalsr/results/random_search.csv"
+
+
+def main() -> None:
+    """Run random search on all Nguyen benchmarks."""
+    parser = argparse.ArgumentParser(description="IsalSR random search experiment")
+    parser.add_argument("--n-iterations", type=int, default=500)
+    parser.add_argument("--max-tokens", type=int, default=30)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--output", type=str, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--no-canon",
+        action="store_true",
+        help="Disable canonicalization (baseline for WITH vs WITHOUT comparison).",
+    )
+    args = parser.parse_args()
+
+    ops = frozenset(LABEL_CHAR_MAP.values())
+    allowed_ops = OperationSet(ops)
+    use_canonical = not args.no_canon
+    mode = "canonical" if use_canonical else "no-canonical"
+    log.info("Mode: %s", mode)
+
+    all_results: list[dict[str, Any]] = []
+    for bench in NGUYEN_BENCHMARKS:
+        log.info("Benchmark: %s", bench["name"])
+        x_train, y_train, x_test, y_test = generate_data(bench)
+        results = random_search(
+            x_train,
+            y_train,
+            bench["num_variables"],
+            allowed_ops,
+            n_iterations=args.n_iterations,
+            max_tokens=args.max_tokens,
+            seed=args.seed,
+            use_canonical=use_canonical,
+        )
+        best = results[0] if results else {"r2": -1e10, "canonical": ""}
+        all_results.append(
+            {
+                "benchmark": bench["name"],
+                "mode": mode,
+                "best_r2": best.get("r2", -1e10),
+                "best_canonical": best.get("canonical", ""),
+                "n_unique": len(results),
+            }
+        )
+        log.info("  Best R^2: %.6f, unique: %d", best.get("r2", -1e10), len(results))
+
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    with open(args.output, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(all_results[0].keys()))
+        writer.writeheader()
+        writer.writerows(all_results)
+    log.info("Results saved to %s", args.output)
+
+
+if __name__ == "__main__":
+    main()

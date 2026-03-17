@@ -1,0 +1,106 @@
+\section{Core Algorithms}
+\label{sec:algorithms}
+
+\subsection{StringToDAG (S2D) --- The Decoder}
+
+The S2D decoder executes an IsalSR instruction string token-by-token to
+build a \texttt{LabeledDAG}. It tokenizes the input using a greedy scanner
+(consuming two characters for $V/v$ compound tokens) and dispatches each
+token to update the shared state: (DAG, CDLL, primary pointer, secondary pointer).
+
+\begin{algorithm}[h]
+\caption{StringToDAG (S2D)}
+\begin{algorithmic}[1]
+\Require String $w$, number of variables $m$
+\State Initialize DAG with $m$ VAR nodes; CDLL $\leftarrow [x_1, \ldots, x_m]$
+\State $\text{pri} \leftarrow \text{CDLL node for } x_1$; $\text{sec} \leftarrow \text{pri}$
+\For{each token $t$ in $\textsc{Tokenize}(w)$}
+  \If{$t \in \{N, P, n, p\}$} move corresponding pointer
+  \ElsIf{$t = V\ell$} create node with label $\ell$, edge pri$\to$new, insert after pri
+  \ElsIf{$t = v\ell$} same from secondary pointer
+  \ElsIf{$t = C$} add edge pri$\to$sec if acyclic
+  \ElsIf{$t = c$} add edge sec$\to$pri if acyclic
+  \EndIf
+\EndFor
+\State \Return DAG
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{DAGToString (D2S) --- The Greedy Encoder}
+
+The D2S encoder converts a \texttt{LabeledDAG} back into an instruction string
+using a greedy algorithm adapted from IsalGraph \cite{lopezrubio2025}.
+It searches for the minimum-cost pointer displacement that enables a structural
+operation (V, v, C, or c) at each step.
+
+The displacement pairs $(a, b)$ are sorted by $|a| + |b|$ (total movement cost),
+ensuring the shortest possible movement instructions are emitted first.
+The priority order is $V > v > C > c$: node insertion is preferred over edge-only
+insertion.
+
+Key adaptations from IsalGraph:
+\begin{itemize}[nosep]
+  \item Token emission: \texttt{"V" + label\_char} (two-character compound tokens).
+  \item Neighbor search: \texttt{out\_neighbors()} only (directed data flow).
+  \item All $m$ VAR nodes are pre-mapped at initialization.
+\end{itemize}
+
+\subsection{Round-Trip Property}
+
+\begin{theorem}[Round-trip]
+For any valid IsalSR string $w$ and number of variables $m$:
+\[
+  \text{S2D}(w, m) \cong \text{S2D}(\text{D2S}(\text{S2D}(w, m), x_1), m)
+\]
+where $\cong$ denotes labeled-DAG isomorphism.
+\end{theorem}
+
+This property is verified by 25 deterministic tests and Hypothesis property
+tests across random strings.
+
+\subsection{Canonical String --- The Core Contribution}
+
+\begin{definition}[Canonical string]
+For a labeled DAG $D$ with initial node $x_1$:
+\[
+  w^*_D = \text{lexmin}\left\{ w \in \arg\min_{P \in \text{Paths}(D, x_1)} |P| \right\}
+\]
+The shortest D2S string from $x_1$, with ties broken lexicographically.
+Computed via exhaustive backtracking over all valid neighbor choices at V/v
+branch points.
+\end{definition}
+
+\begin{theorem}[Complete invariant]
+\label{thm:invariant}
+$w^*_{D_1} = w^*_{D_2}$ if and only if $D_1 \cong D_2$ (labeled-DAG isomorphism).
+\end{theorem}
+
+\textbf{Simplification from IsalGraph}: Since input variables are distinguishable
+($x_i$ maps to $x_i$ under any isomorphism), the canonical string is computed
+from $x_1$ only---no iteration over starting nodes. This reduces the canonical
+computation cost by a factor of $O(n)$.
+
+\subsection{Pruned Canonical with 6-Component Structural Tuples}
+
+At each V/v branch point, only candidates sharing the maximum 6-component
+structural tuple are explored:
+\[
+  \tau(v) = (|\text{in}_{N_1}(v)|, |\text{out}_{N_1}(v)|,
+             |\text{in}_{N_2}(v)|, |\text{out}_{N_2}(v)|,
+             |\text{in}_{N_3}(v)|, |\text{out}_{N_3}(v)|)
+\]
+where $\text{in}_{N_k}(v)$ and $\text{out}_{N_k}(v)$ count nodes at distance $k$
+following incoming and outgoing edges, respectively. This is computed via
+truncated BFS in both directions.
+
+The pruned variant preserves the complete invariant property while dramatically
+reducing the branching factor (empirically 10--100$\times$ faster).
+
+\subsection{DAG Distance Metric}
+
+The Levenshtein distance between canonical strings defines a metric on
+labeled DAGs:
+\[
+  d(D_1, D_2) = \text{Levenshtein}(w^*_{D_1}, w^*_{D_2})
+\]
+This satisfies symmetry, triangle inequality, and identity of indiscernibles.

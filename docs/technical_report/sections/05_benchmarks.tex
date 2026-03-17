@@ -1,0 +1,84 @@
+\section{Benchmarks and Experimental Design}
+\label{sec:benchmarks}
+
+\subsection{Benchmark Datasets}
+
+We use the standard SR benchmarks from Liu et~al.\ \cite{liu2025} (Table~1)
+and Udrescu \& Tegmark \cite{udrescu2020}.
+
+\subsubsection{Nguyen Benchmarks (12 expressions)}
+
+\begin{table}[h]
+\centering
+\caption{Nguyen symbolic regression benchmarks (from Liu2025, Table 1).}
+\label{tab:nguyen}
+\begin{tabular}{llcl}
+\toprule
+ID & Expression & Vars & Range \\
+\midrule
+Nguyen-1  & $x^3 + x^2 + x$ & 1 & $[-1, 1]$ \\
+Nguyen-2  & $x^4 + x^3 + x^2 + x$ & 1 & $[-1, 1]$ \\
+Nguyen-3  & $x^5 + x^4 + x^3 + x^2 + x$ & 1 & $[-1, 1]$ \\
+Nguyen-4  & $x^6 + x^5 + x^4 + x^3 + x^2 + x$ & 1 & $[-1, 1]$ \\
+Nguyen-5  & $\sin(x^2)\cos(x) - 1$ & 1 & $[-1, 1]$ \\
+Nguyen-6  & $\sin(x) + \sin(x + x^2)$ & 1 & $[-1, 1]$ \\
+Nguyen-7  & $\log(x+1) + \log(x^2+1)$ & 1 & $[0, 2]$ \\
+Nguyen-8  & $\sqrt{x}$ & 1 & $[0, 4]$ \\
+Nguyen-9  & $\sin(x) + \sin(y^2)$ & 2 & $[-1, 1]$ \\
+Nguyen-10 & $2\sin(x)\cos(y)$ & 2 & $[-1, 1]$ \\
+Nguyen-11 & $x^y$ & 2 & $[0, 1]$ \\
+Nguyen-12 & $x^4 - x^3 + \frac{y^2}{2} - y$ & 2 & $[-1, 1]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Data configuration} (following Liu2025 Section 4.1): 20 training
+points and 100 test points uniformly sampled from the specified range.
+All experiments use seed 42 for reproducibility.
+
+\subsubsection{Feynman Physics Benchmarks}
+
+10 selected equations from the AI Feynman dataset \cite{udrescu2020},
+as used in Liu2025 Table 2. These range from simple products
+(e.g., $F = \mu N_s$) to relativistic expressions
+(e.g., $m = m_0 / \sqrt{1 - v^2/c^2}$), with 1--3 variables each.
+
+\subsection{Evaluation Metrics}
+
+\begin{itemize}[nosep]
+  \item \textbf{$R^2$ (Coefficient of Determination)}: Primary metric.
+    $R^2 = 1 - \frac{\sum_i (y_i - \hat{y}_i)^2}{\sum_i (y_i - \bar{y})^2}$.
+    Perfect fit: $R^2 = 1$.
+  \item \textbf{NRMSE}: $\text{NRMSE} = \frac{\sqrt{\text{MSE}}}{\sigma_y}$.
+    Scale-invariant error metric.
+  \item \textbf{Reward} (Liu2025, Eq.~12):
+    $R(\mathcal{G}) = \frac{1}{\text{NRMSE} + 1}$.
+    Bounded in $(0, 1]$.
+\end{itemize}
+
+\subsection{Experimental Design: WITH vs WITHOUT Canonicalization}
+
+The key experiment compares the \textbf{same search algorithm} operating
+in two modes:
+\begin{enumerate}[nosep]
+  \item \textbf{Canonical mode}: Every generated/mutated string is canonicalized
+    before evaluation. Duplicates detected via canonical string equality
+    ($O(k!)$ deduplication).
+  \item \textbf{Non-canonical mode} (\texttt{--no-canon}): Strings are evaluated
+    as-is, without canonicalization. No deduplication.
+\end{enumerate}
+
+This paired design directly measures the benefit of the $O(k!)$ search space
+reduction without confounding it with algorithm differences.
+
+\subsection{Search Space Reduction Analysis}
+
+The primary experiment generates $N$ random IsalSR strings, computes the
+canonical string for each, and measures:
+\begin{equation}
+  \text{Reduction factor} = \frac{N_{\text{valid}}}{N_{\text{unique canonical}}}
+\end{equation}
+
+This is compared against the theoretical bound $k!$ where $k$ is the average
+number of internal nodes. A reduction factor approaching $k!$ validates the
+paper's central claim.

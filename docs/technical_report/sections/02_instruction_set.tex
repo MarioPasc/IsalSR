@@ -1,0 +1,85 @@
+\section{Instruction Set and Core Structures}
+\label{sec:instruction_set}
+
+\subsection{The IsalSR Alphabet $\Sigma_{\mathrm{SR}}$}
+
+IsalSR uses a \textbf{two-tier token encoding}: single-character tokens for
+movement and edge operations, and two-character compound tokens for labeled
+node insertion.
+
+\begin{definition}[IsalSR Alphabet]
+The alphabet $\Sigma_{\mathrm{SR}}$ consists of:
+\begin{itemize}[nosep]
+  \item \textbf{Movement} (single-char): $\{N, P, n, p\}$ --- move primary/secondary
+    pointer next/prev in the CDLL.
+  \item \textbf{Edge creation} (single-char): $\{C, c\}$ --- directed edge
+    primary$\to$secondary / secondary$\to$primary, with DAG cycle check.
+  \item \textbf{No-op} (single-char): $\{W\}$.
+  \item \textbf{Node insertion} (two-char): $V\ell$ or $v\ell$ where $\ell$ is a
+    label character from
+    $\mathcal{L} = \{+, *, -, /, s, c, e, l, r, \hat{}, a, k\}$.
+\end{itemize}
+Total vocabulary: 7 single-char $+$ 24 compound $= 31$ tokens (configurable
+subset per experiment).
+\end{definition}
+
+\begin{table}[h]
+\centering
+\caption{Operation types and their label characters.}
+\label{tab:operations}
+\begin{tabular}{llcl}
+\toprule
+Label & NodeType & Arity & Description \\
+\midrule
+$+$ & ADD & Variable ($\geq 2$) & Sum of all inputs \\
+$*$ & MUL & Variable ($\geq 2$) & Product of all inputs \\
+$-$ & SUB & Binary (2) & Subtraction \\
+$/$ & DIV & Binary (2) & Protected division \\
+$s$ & SIN & Unary (1) & Sine \\
+$c$ & COS & Unary (1) & Cosine \\
+$e$ & EXP & Unary (1) & Protected exponential \\
+$l$ & LOG & Unary (1) & Protected logarithm \\
+$r$ & SQRT & Unary (1) & Protected square root \\
+$\hat{}$ & POW & Binary (2) & Protected power \\
+$a$ & ABS & Unary (1) & Absolute value \\
+$k$ & CONST & Leaf (0) & Learnable constant \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Initial State}
+
+For $m$ input variables $x_1, \ldots, x_m$:
+\begin{itemize}[nosep]
+  \item The DAG contains $m$ VAR nodes (IDs $0, 1, \ldots, m-1$), no edges.
+  \item The CDLL contains $m$ entries $[x_1, x_2, \ldots, x_m]$ in order.
+  \item Both pointers (primary, secondary) start on the CDLL node for $x_1$.
+\end{itemize}
+
+Variables are \textbf{pre-numbered and distinguishable}: $x_1 \neq x_2$ under
+isomorphism. This eliminates isomorphism ambiguity over variable assignments
+and is the key simplification that allows the canonical string to be computed
+from $x_1$ only.
+
+\subsection{Edge Semantics and the DAG Constraint}
+
+An edge $u \to v$ means ``$u$ provides input to $v$'' (data flow direction).
+For $\sin(x)$: edge $x \to \sin$. For $x + y$: edges $x \to +$ and $y \to +$.
+
+The $C$ instruction creates a directed edge from the primary pointer's graph
+node to the secondary pointer's graph node. Before adding any edge via $C/c$,
+the system checks whether the edge would create a cycle (via BFS reachability).
+If a cycle would result, the instruction is \textbf{silently skipped}.
+$V/v$ insertions never create cycles because new nodes have no outgoing edges.
+
+\subsection{Core Data Structures}
+
+\textbf{LabeledDAG}: Directed acyclic graph with dual adjacency lists
+(in-edges and out-edges), node labels ($\texttt{NodeType}$ enum), and per-node
+metadata (variable index, constant value). Supports $O(V+E)$ cycle detection,
+Kahn's topological sort, and label-aware backtracking isomorphism.
+
+\textbf{CircularDoublyLinkedList (CDLL)}: Array-backed circular list with $O(1)$
+insert-after, remove, and traversal. Reused verbatim from IsalGraph
+\cite{lopezrubio2025}. Pointers are CDLL node indices (not graph node IDs);
+conversion via \texttt{get\_value(ptr)}.

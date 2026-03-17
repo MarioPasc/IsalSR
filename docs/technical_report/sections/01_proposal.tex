@@ -1,0 +1,72 @@
+\section{Proposal and Positioning}
+\label{sec:proposal}
+
+\subsection{The Problem: Redundancy in Symbolic Regression Search Spaces}
+
+Symbolic regression (SR) seeks a mathematical expression $f(x_1, \ldots, x_m)$
+that best fits observed data $(X, y)$. Modern approaches represent expressions
+as Directed Acyclic Graphs (DAGs) where leaf nodes are variables or constants,
+and internal nodes are operations ($+, \times, \sin, \cos$, etc.)
+\cite{liu2025, petersen2021}.
+
+A fundamental issue plagues all existing SR methods: the search space contains
+\textbf{massive redundancy}. For an expression DAG with $k$ internal nodes,
+there exist $O(k!)$ distinct node labelings that all represent the
+\emph{same expression}. Each of these $k!$ variants occupies a separate point
+in the search space, wasting computational effort on equivalent candidates.
+
+\begin{proposition}[Search space redundancy]
+For an expression DAG $D$ with $k$ internal (non-variable) nodes,
+the number of structurally equivalent but differently-labeled DAGs is
+$\Theta(k!)$ in the worst case.
+\end{proposition}
+
+\subsection{Our Contribution: Isomorphism-Invariant Representation}
+
+IsalSR extends the IsalGraph framework \cite{lopezrubio2025}---originally
+designed for topology-only unlabeled graphs---to \textbf{labeled DAGs} for
+symbolic regression. The key contribution is the \textbf{canonical string}
+$w^*_D$: a complete labeled-DAG invariant that satisfies
+\begin{equation}
+  w^*_{D_1} = w^*_{D_2} \iff D_1 \cong D_2
+  \label{eq:invariant}
+\end{equation}
+where $\cong$ denotes labeled-DAG isomorphism (preserving node labels and
+edge directions).
+
+By mapping every expression to its canonical string before evaluation,
+the search space is reduced from $O(N \cdot k!)$ to $O(N)$ unique expressions,
+where $N$ is the number of structurally distinct DAGs. This is the
+\textbf{sole contribution}: we provide an invariant representation that
+existing SR methods can plug into for acceleration.
+
+\subsection{What IsalSR Is NOT}
+
+Following the advisor's explicit guidance, we emphasize:
+\begin{itemize}[nosep]
+  \item IsalSR is \textbf{not a new SR method}. It is a representation layer.
+  \item We do \textbf{not claim SR expertise}. Our expertise is in graph theory
+    and combinatorics applied to expression representation.
+  \item The search operators (mutation, crossover, hill climbing, evolutionary
+    population) are \textbf{standard, generic wrappers}---not novel algorithms.
+  \item The experimental design compares the \textbf{same algorithm} operating
+    in canonical vs.\ non-canonical space, not different algorithms.
+\end{itemize}
+
+\subsection{Relationship to IsalGraph}
+
+IsalGraph \cite{lopezrubio2025} represents arbitrary \emph{unlabeled, undirected}
+graphs as instruction strings. IsalSR adapts this framework with four key
+modifications:
+\begin{enumerate}[nosep]
+  \item \textbf{Labeled nodes}: Each node has a type (VAR, ADD, MUL, SIN, etc.)
+    encoded in two-character compound tokens.
+  \item \textbf{Directed edges}: Edges represent data flow
+    ($u \to v$ means ``$u$ provides input to $v$'').
+  \item \textbf{DAG constraint}: The C/c edge instructions enforce acyclicity
+    via cycle detection (silently skipping cycle-creating edges).
+  \item \textbf{Fixed starting node}: The canonical string is computed from
+    $x_1$ only (the first input variable), since variables are distinguishable
+    and pre-numbered. This eliminates the $O(n)$ loop over starting nodes
+    present in IsalGraph.
+\end{enumerate}

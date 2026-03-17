@@ -52,11 +52,14 @@ def random_search(
     n_iterations: int = 1000,
     max_tokens: int = 50,
     seed: int = 42,
+    use_canonical: bool = True,
 ) -> list[dict[str, object]]:
-    """Run random search in the canonical IsalSR string space.
+    """Run random search in IsalSR string space.
 
-    For each iteration: generate random string -> S2D -> canonicalize
-    (MANDATORY) -> evaluate fitness. Returns results sorted by R^2.
+    When ``use_canonical=True`` (default), every generated string is
+    canonicalized before evaluation, eliminating O(k!) duplicate
+    representations. When ``use_canonical=False``, strings are evaluated
+    as-is (baseline for WITH vs WITHOUT comparison).
 
     Args:
         x_data: Input matrix (N, m).
@@ -66,6 +69,8 @@ def random_search(
         n_iterations: Number of random strings to evaluate.
         max_tokens: Maximum tokens per string.
         seed: Random seed for reproducibility.
+        use_canonical: If True, canonicalize before evaluation (default).
+            If False, skip canonicalization (baseline comparison).
 
     Returns:
         Sorted list of dicts with keys: 'string', 'canonical', 'r2', 'nrmse', 'mse'.
@@ -80,12 +85,18 @@ def random_search(
             dag = StringToDAG(raw, num_variables, allowed_ops).run()
             if dag.node_count <= num_variables:
                 continue  # VAR-only, skip.
-            canon = canonical_string(dag)
-            if canon in seen:
-                continue  # Duplicate canonical, skip (O(k!) deduplication!).
-            seen.add(canon)
-            dag2 = StringToDAG(canon, num_variables, allowed_ops).run()
-            metrics = evaluate_expression(dag2, x_data, y_true)
+
+            if use_canonical:
+                canon = canonical_string(dag)
+                if canon in seen:
+                    continue  # O(k!) deduplication.
+                seen.add(canon)
+                dag_eval = StringToDAG(canon, num_variables, allowed_ops).run()
+            else:
+                canon = raw  # No canonicalization (baseline).
+                dag_eval = dag
+
+            metrics = evaluate_expression(dag_eval, x_data, y_true)
             results.append(
                 {
                     "string": raw,

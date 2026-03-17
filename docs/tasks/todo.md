@@ -63,7 +63,19 @@
 - [x] All 286 tests passing, ruff clean, mypy strict clean
 - [x] MANDATORY canonicalization enforced in all search algorithms
 
-## Phase 7: Benchmarks & Experiments
-- [ ] benchmarks/datasets/ -- Nguyen, Feynman, SRBench
-- [ ] experiments/scripts/ -- experiment runners
-- [ ] Search space reduction analysis experiment
+## Phase 7: Benchmarks & Experiments (DONE -- 2026-03-17)
+- [x] evaluation/fitness.py -- added reward() function (Liu2025 Eq. 12: 1/(NRMSE+1))
+- [x] benchmarks/datasets/nguyen.py -- 12 Nguyen expressions EXACT from Liu2025 Table 1 + generate_data()
+- [x] benchmarks/datasets/feynman.py -- 10 Feynman equations from Liu2025 Table 2 + generate_data()
+- [x] benchmarks/datasets/srbench.py -- SRBench metadata (La Cava et al., 2021 NeurIPS)
+- [x] experiments/scripts/search_space_analysis.py -- THE KEY EXPERIMENT: O(k!) reduction measurement
+- [x] experiments/scripts/run_random_search.py -- CLI benchmark runner
+- [x] experiments/scripts/run_hill_climbing.py -- CLI benchmark runner
+- [x] experiments/scripts/run_gp.py -- CLI benchmark runner (Population.evolve)
+- [x] experiments/scripts/analyze_results.py -- Summary stats + LaTeX tables
+- [x] Nguyen benchmark spot-checks verified correct at known values
+- [x] All 286 tests passing, ruff clean, mypy strict clean
+
+## PROJECT COMPLETE
+All 7 phases implemented. 286 tests, 72+ proposal-guard PASS.
+Ready for arXiv preprint and IEEE TPAMI submission.

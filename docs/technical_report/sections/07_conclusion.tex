@@ -1,0 +1,60 @@
+\section{Conclusion and Next Steps}
+\label{sec:conclusion}
+
+\subsection{Summary of Contributions}
+
+This technical report presents IsalSR, a complete implementation of
+isomorphism-invariant expression representation for symbolic regression.
+The key contributions are:
+
+\begin{enumerate}
+  \item \textbf{Two-tier instruction set} ($\Sigma_{\mathrm{SR}}$) that
+    encodes labeled DAGs as instruction strings with 31 tokens covering
+    12 operation types (configurable per experiment).
+
+  \item \textbf{Canonical string computation} ($w^*_D$) that is a complete
+    labeled-DAG invariant, collapsing $O(k!)$ equivalent representations
+    into one. Computed from $x_1$ only (no starting-node iteration) with
+    6-component structural tuple pruning.
+
+  \item \textbf{Complete software library} with 286 verified tests, strict
+    type checking, zero-dependency core, and proposal-alignment validation
+    across 7 development phases.
+
+  \item \textbf{Experimental infrastructure} for validating the $O(k!)$
+    reduction claim on standard benchmarks (Nguyen, Feynman, SRBench)
+    with a paired WITH vs.\ WITHOUT canonicalization design.
+\end{enumerate}
+
+\subsection{Limitations}
+
+\begin{itemize}[nosep]
+  \item \textbf{Canonical computation cost}: The exhaustive backtracking is
+    exponential in the number of V/v branch points. The pruned variant
+    mitigates this but may still be prohibitive for DAGs with $k > 15$.
+  \item \textbf{Binary operation ordering}: Non-commutative operations
+    (SUB, DIV, POW) use sorted-by-node-ID input ordering, which must be
+    consistent between canonicalization and evaluation.
+  \item \textbf{Full-scale experiments pending}: The preliminary results
+    are from small local runs. Publication-ready experiments require
+    larger $N$, more runs, and statistical analysis.
+\end{itemize}
+
+\subsection{Roadmap to IEEE TPAMI Submission}
+
+\begin{enumerate}[nosep]
+  \item Run full search space analysis (10,000+ strings, all 12+10 benchmarks).
+  \item Run paired WITH/WITHOUT experiments on random search, hill climbing,
+    and evolutionary population.
+  \item Compute statistics: mean $R^2$, max $R^2$, IQR, reduction factor.
+  \item Generate publication figures using \texttt{plotting\_styles.py}.
+  \item Write paper following IEEE TPAMI format.
+  \item Submit arXiv preprint, then journal submission.
+\end{enumerate}
+
+\subsection{Target Venue}
+
+\textbf{IEEE Transactions on Pattern Analysis and Machine Intelligence (TPAMI)}.
+The contribution is a \textit{representation} result with mathematical proof
+and empirical validation, not a new SR algorithm. This positions the work
+as a foundational contribution to the field.
