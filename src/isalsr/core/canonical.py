@@ -18,12 +18,22 @@ Complete invariant property proof sketch:
     - x_1 is fixed (no starting-node ambiguity)
     - Therefore: isomorphic labeled DAGs produce identical canonical strings
 
+Performance optimizations (2026-03):
+    - Timeout support to skip pathological DAGs.
+    - Uses unchecked accessors (node_label_unchecked, node_data_unchecked,
+      has_edge_unchecked, out_neighbors_raw) to eliminate bounds-check overhead
+      in the backtracking hot path.
+    - Uses add_edge_unchecked for V/v insertions (new node has no out-edges,
+      so acyclicity is guaranteed by construction — no BFS needed).
+    - generate_pairs_sorted_by_sum is cached via @lru_cache.
+
 Restriction: ZERO external dependencies. Only Python stdlib.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections import deque
 
 from isalsr.core.cdll import CircularDoublyLinkedList
@@ -34,12 +44,16 @@ from isalsr.core.node_types import NODE_TYPE_TO_LABEL, NodeType
 log = logging.getLogger(__name__)
 
 
+class CanonicalTimeoutError(Exception):
+    """Raised when canonical string computation exceeds the time budget."""
+
+
 # ======================================================================
 # Public API
 # ======================================================================
 
 
-def canonical_string(dag: LabeledDAG) -> str:
+def canonical_string(dag: LabeledDAG, *, timeout: float | None = None) -> str:
     """Compute the canonical IsalSR string via exhaustive backtracking.
 
     Explores ALL valid neighbor choices at each V/v branch point.
@@ -48,8 +62,13 @@ def canonical_string(dag: LabeledDAG) -> str:
     This is a **complete labeled-DAG invariant**:
         canonical_string(D1) == canonical_string(D2)  iff  D1 ~ D2
 
+    WARNING: For DAGs with many internal nodes, the unpruned search can be
+    extremely slow (factorial branching). Prefer ``pruned_canonical_string``
+    for production use.
+
     Args:
         dag: The labeled DAG to canonicalize.
+        timeout: Maximum wall-clock seconds. Raises CanonicalTimeoutError if exceeded.
 
     Returns:
         The canonical string w*_D (shortest, then lexmin).
@@ -59,18 +78,26 @@ def canonical_string(dag: LabeledDAG) -> str:
     num_vars = len(dag.var_nodes())
     if dag.node_count == num_vars and dag.edge_count == 0:
         return ""
-    return _canonical_d2s(dag, pruned=False)
+    return _canonical_d2s(dag, pruned=False, timeout=timeout)
 
 
-def pruned_canonical_string(dag: LabeledDAG) -> str:
+def pruned_canonical_string(dag: LabeledDAG, *, timeout: float | None = None) -> str:
     """Compute the canonical IsalSR string with 6-tuple pruning.
 
     At each V/v branch point, only candidates sharing the maximum
     6-component structural tuple are explored. This preserves the
     complete invariant property while reducing branching.
 
+    Mathematical justification:
+        The 6-tuple is an automorphism-invariant descriptor. Candidates with
+        the max tuple form an equivalence class under automorphism. Restricting
+        to this class still produces a deterministic, isomorphism-invariant
+        canonical form (same pruned candidates for isomorphic DAGs). The
+        round-trip property (S2D(D2S(D)) ~ D) guarantees correctness.
+
     Args:
         dag: The labeled DAG to canonicalize.
+        timeout: Maximum wall-clock seconds. Raises CanonicalTimeoutError if exceeded.
 
     Returns:
         The canonical string w*_D (pruned variant).
@@ -80,7 +107,7 @@ def pruned_canonical_string(dag: LabeledDAG) -> str:
     num_vars = len(dag.var_nodes())
     if dag.node_count == num_vars and dag.edge_count == 0:
         return ""
-    return _canonical_d2s(dag, pruned=True)
+    return _canonical_d2s(dag, pruned=True, timeout=timeout)
 
 
 def compute_structural_tuples(
@@ -184,13 +211,15 @@ def _bfs_distance_counts(dag: LabeledDAG, source: int, direction: str) -> tuple[
     queue: deque[int] = deque([source])
     counts = [0, 0, 0]
 
+    # Use raw accessors for BFS (no frozenset copy per neighbor lookup).
+    get_neighbors = dag.in_neighbors_raw if direction == "in" else dag.out_neighbors_raw
+
     while queue:
         u = queue.popleft()
         d = dist[u]
         if d >= 3:
             continue
-        neighbors = dag.in_neighbors(u) if direction == "in" else dag.out_neighbors(u)
-        for v in neighbors:
+        for v in get_neighbors(u):
             if dist[v] == -1:
                 dist[v] = d + 1
                 if dist[v] <= 3:
@@ -227,7 +256,7 @@ def _secondary_moves(b: int) -> str:
 # ======================================================================
 
 
-def _canonical_d2s(input_dag: LabeledDAG, *, pruned: bool) -> str:
+def _canonical_d2s(input_dag: LabeledDAG, *, pruned: bool, timeout: float | None) -> str:
     """Find the shortest, then lex-smallest D2S string from x_1.
 
     Initializes m VAR nodes in the output DAG, then runs exhaustive
@@ -236,6 +265,7 @@ def _canonical_d2s(input_dag: LabeledDAG, *, pruned: bool) -> str:
     Args:
         input_dag: The input labeled DAG.
         pruned: If True, use 6-tuple pruning at V/v branch points.
+        timeout: Maximum wall-clock seconds, or None for no limit.
     """
     n = input_dag.node_count
     og = LabeledDAG(n)
@@ -245,6 +275,11 @@ def _canonical_d2s(input_dag: LabeledDAG, *, pruned: bool) -> str:
     tuples: list[tuple[int, int, int, int, int, int]] | None = None
     if pruned:
         tuples = compute_structural_tuples(input_dag)
+
+    # Compute timeout deadline.
+    deadline: float | None = None
+    if timeout is not None:
+        deadline = time.monotonic() + timeout
 
     # Initialize: map all m VAR nodes, insert into CDLL.
     i2o: dict[int, int] = {}
@@ -284,6 +319,7 @@ def _canonical_d2s(input_dag: LabeledDAG, *, pruned: bool) -> str:
         eleft,
         "",
         tuples,
+        deadline,
     )
 
 
@@ -299,12 +335,17 @@ def _step(
     eleft: int,
     prefix: str,
     tuples: list[tuple[int, int, int, int, int, int]] | None,
+    deadline: float | None,
 ) -> str:
     """One step of the exhaustive/pruned canonical D2S search.
 
     Mirrors the greedy DAGToString algorithm but branches over all valid
     neighbor choices at V/v steps. Uses in-place mutation with undo
     (backtracking) instead of deep copies for performance.
+
+    Performance: uses unchecked accessors (no bounds checking) and
+    add_edge_unchecked (no BFS cycle check) for V/v insertions where
+    acyclicity is guaranteed by construction.
 
     At V/v branch points:
         - Collect ALL uninserted outgoing neighbors of the tentative pointer node.
@@ -316,6 +357,10 @@ def _step(
     if nleft <= 0 and eleft <= 0:
         return prefix
 
+    # Timeout check (every entry into _step).
+    if deadline is not None and time.monotonic() > deadline:
+        raise CanonicalTimeoutError("Canonical string computation exceeded time budget")
+
     pairs = generate_pairs_sorted_by_sum(og.node_count)
 
     for a, b in pairs:
@@ -326,7 +371,8 @@ def _step(
 
         # -- V: primary has uninserted outgoing neighbor --
         if nleft > 0:
-            cands = [n for n in ig.out_neighbors(tp_in) if n not in i2o]
+            # Use raw set access (no frozenset copy).
+            cands = [n for n in ig.out_neighbors_raw(tp_in) if n not in i2o]
             if cands:
                 # Pruning: only keep max-tuple candidates.
                 if tuples is not None:
@@ -336,11 +382,13 @@ def _step(
                 mov = _primary_moves(a)
                 best: str | None = None
                 for c in cands:
-                    label = ig.node_label(c)
+                    # Use unchecked accessors (nodes guaranteed valid).
+                    label = ig.node_label_unchecked(c)
                     label_char = NODE_TYPE_TO_LABEL[label]
-                    data = ig.node_data(c)
+                    data = ig.node_data_unchecked(c)
 
-                    # Forward
+                    # Forward: add node + edge (unchecked — new node has no
+                    # out-edges, so adding an edge TO it can never create a cycle).
                     new_out = og.add_node(
                         label,
                         var_index=int(data["var_index"]) if "var_index" in data else None,
@@ -348,7 +396,7 @@ def _step(
                     )
                     i2o[c] = new_out
                     o2i[new_out] = c
-                    og.add_edge(tp_out, new_out)
+                    og.add_edge_unchecked(tp_out, new_out)
                     new_cdll = cdll.insert_after(tp, new_out)
 
                     r = _step(
@@ -363,6 +411,7 @@ def _step(
                         eleft - 1,
                         prefix + mov + "V" + label_char,
                         tuples,
+                        deadline,
                     )
                     if best is None or (len(r), r) < (len(best), best):
                         best = r
@@ -383,7 +432,7 @@ def _step(
 
         # -- v: secondary has uninserted outgoing neighbor --
         if nleft > 0:
-            cands = [n for n in ig.out_neighbors(ts_in) if n not in i2o]
+            cands = [n for n in ig.out_neighbors_raw(ts_in) if n not in i2o]
             if cands:
                 if tuples is not None:
                     max_tup = max(tuples[c] for c in cands)
@@ -392,11 +441,11 @@ def _step(
                 mov = _secondary_moves(b)
                 best = None
                 for c in cands:
-                    label = ig.node_label(c)
+                    label = ig.node_label_unchecked(c)
                     label_char = NODE_TYPE_TO_LABEL[label]
-                    data = ig.node_data(c)
+                    data = ig.node_data_unchecked(c)
 
-                    # Forward
+                    # Forward (unchecked — same reasoning as V above).
                     new_out = og.add_node(
                         label,
                         var_index=int(data["var_index"]) if "var_index" in data else None,
@@ -404,7 +453,7 @@ def _step(
                     )
                     i2o[c] = new_out
                     o2i[new_out] = c
-                    og.add_edge(ts_out, new_out)
+                    og.add_edge_unchecked(ts_out, new_out)
                     new_cdll = cdll.insert_after(ts, new_out)
 
                     r = _step(
@@ -419,6 +468,7 @@ def _step(
                         eleft - 1,
                         prefix + mov + "v" + label_char,
                         tuples,
+                        deadline,
                     )
                     if best is None or (len(r), r) < (len(best), best):
                         best = r
@@ -433,7 +483,8 @@ def _step(
                 return best  # type: ignore[return-value]
 
         # -- C: edge primary -> secondary in input but not output --
-        if ig.has_edge(tp_in, ts_in) and not og.has_edge(tp_out, ts_out):
+        # Use unchecked has_edge (nodes guaranteed valid in canonical search).
+        if ig.has_edge_unchecked(tp_in, ts_in) and not og.has_edge_unchecked(tp_out, ts_out):
             og.add_edge(tp_out, ts_out)
             r = _step(
                 ig,
@@ -447,12 +498,13 @@ def _step(
                 eleft - 1,
                 prefix + _primary_moves(a) + _secondary_moves(b) + "C",
                 tuples,
+                deadline,
             )
             og.remove_edge(tp_out, ts_out)
             return r
 
         # -- c: edge secondary -> primary in input but not output --
-        if ig.has_edge(ts_in, tp_in) and not og.has_edge(ts_out, tp_out):
+        if ig.has_edge_unchecked(ts_in, tp_in) and not og.has_edge_unchecked(ts_out, tp_out):
             og.add_edge(ts_out, tp_out)
             r = _step(
                 ig,
@@ -466,6 +518,7 @@ def _step(
                 eleft - 1,
                 prefix + _primary_moves(a) + _secondary_moves(b) + "c",
                 tuples,
+                deadline,
             )
             og.remove_edge(ts_out, tp_out)
             return r

@@ -13,11 +13,14 @@ from typing import Any
 
 import numpy as np
 
-from isalsr.core.canonical import canonical_string
+from isalsr.core.canonical import CanonicalTimeoutError, pruned_canonical_string
 from isalsr.core.node_types import OperationSet
 from isalsr.core.string_to_dag import StringToDAG
 from isalsr.evaluation.fitness import evaluate_expression
 from isalsr.search.operators import detokenize, random_token
+
+# Default timeout (seconds) per canonicalization call.
+_CANON_TIMEOUT: float = 5.0
 
 log = logging.getLogger(__name__)
 
@@ -57,9 +60,9 @@ def random_search(
     """Run random search in IsalSR string space.
 
     When ``use_canonical=True`` (default), every generated string is
-    canonicalized before evaluation, eliminating O(k!) duplicate
-    representations. When ``use_canonical=False``, strings are evaluated
-    as-is (baseline for WITH vs WITHOUT comparison).
+    canonicalized (pruned 6-tuple variant) before evaluation, eliminating
+    O(k!) duplicate representations. When ``use_canonical=False``, strings
+    are evaluated as-is (baseline for WITH vs WITHOUT comparison).
 
     Args:
         x_data: Input matrix (N, m).
@@ -78,6 +81,7 @@ def random_search(
     rng = np.random.default_rng(seed)
     results: list[dict[str, object]] = []
     seen: set[str] = set()
+    n_timeouts = 0
 
     for _ in range(n_iterations):
         raw = random_isalsr_string(num_variables, max_tokens, allowed_ops, rng)
@@ -87,7 +91,7 @@ def random_search(
                 continue  # VAR-only, skip.
 
             if use_canonical:
-                canon = canonical_string(dag)
+                canon = pruned_canonical_string(dag, timeout=_CANON_TIMEOUT)
                 if canon in seen:
                     continue  # O(k!) deduplication.
                 seen.add(canon)
@@ -106,8 +110,16 @@ def random_search(
                     "mse": metrics["mse"],
                 }
             )
+        except CanonicalTimeoutError:
+            n_timeouts += 1
+            continue  # Skip DAGs that are too expensive to canonicalize.
         except Exception:  # noqa: BLE001
             continue  # Invalid string, skip.
+
+    if n_timeouts > 0:
+        log.warning(
+            "Skipped %d/%d strings due to canonicalization timeout", n_timeouts, n_iterations
+        )
 
     results.sort(key=lambda d: -float(d.get("r2", -1e10)))  # type: ignore[arg-type]
     return results
