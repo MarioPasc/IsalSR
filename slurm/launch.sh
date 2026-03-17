@@ -19,11 +19,8 @@ CONFIG="${SCRIPT_DIR}/config.yaml"
 eval "$(conda shell.bash hook 2>/dev/null)" || true
 conda activate isalsr 2>/dev/null || true
 
-# Resolve Python with PyYAML (conda env python preferred over system python3)
-PYTHON="${HOME}/.conda/envs/isalsr/bin/python"
-if [[ ! -x "$PYTHON" ]]; then
-    PYTHON="python3"
-fi
+# Resolve Python from the active conda env (works regardless of install path)
+PYTHON="$(conda run -n isalsr which python 2>/dev/null || echo python3)"
 
 # ---------------------------------------------------------------------------
 # Parse arguments
