@@ -34,73 +34,90 @@
 \newlabel{tab:operations}{{1}{3}{Operation types and their label characters}{table.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Edge Semantics and the DAG Constraint}{3}{subsection.2.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Core Data Structures}{3}{subsection.2.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3}Core Algorithms}{3}{section.3}\protected@file@percent }
-\newlabel{sec:algorithms}{{3}{3}{Core Algorithms}{section.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}StringToDAG (S2D) --- The Decoder}{3}{subsection.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}DAGToString (D2S) --- The Greedy Encoder}{3}{subsection.3.2}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces StringToDAG (S2D)}}{4}{algorithm.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Round-Trip Property}{4}{subsection.3.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Canonical String --- The Core Contribution}{4}{subsection.3.4}\protected@file@percent }
-\newlabel{thm:invariant}{{2}{4}{Complete invariant}{theorem.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Pruned Canonical with 6-Component Structural Tuples}{4}{subsection.3.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}DAG Distance Metric}{5}{subsection.3.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4}Software Architecture}{5}{section.4}\protected@file@percent }
-\newlabel{sec:architecture}{{4}{5}{Software Architecture}{section.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Dependency Layering}{5}{subsection.4.1}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces IsalSR dependency architecture. Each layer only depends on layers below it. The core layer has zero external dependencies.}}{5}{figure.1}\protected@file@percent }
-\newlabel{fig:architecture}{{1}{5}{IsalSR dependency architecture. Each layer only depends on layers below it. The core layer has zero external dependencies}{figure.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Module Inventory}{5}{subsection.4.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Testing Strategy}{5}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Core Algorithms and Formal Properties}{3}{section.3}\protected@file@percent }
+\newlabel{sec:algorithms}{{3}{3}{Core Algorithms and Formal Properties}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Preliminaries: Labeled-DAG Isomorphism}{3}{subsection.3.1}\protected@file@percent }
+\newlabel{def:labeled_dag}{{2}{3}{Labeled Directed Acyclic Graph}{definition.2}{}}
+\newlabel{def:isomorphism}{{3}{3}{Labeled-DAG Isomorphism}{definition.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}StringToDAG (S2D) --- The Decoder}{4}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}DAGToString (D2S) --- The Greedy Encoder}{4}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Round-Trip Property}{4}{subsection.3.4}\protected@file@percent }
+\newlabel{thm:roundtrip}{{1}{4}{Round-Trip Fidelity}{theorem.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Canonical String --- The Complete Invariant}{5}{subsection.3.5}\protected@file@percent }
+\newlabel{sec:canonical}{{3.5}{5}{Canonical String --- The Complete Invariant}{subsection.3.5}{}}
+\newlabel{def:canonical}{{6}{5}{Canonical String}{definition.6}{}}
+\newlabel{thm:invariant}{{2}{5}{Complete Invariant}{theorem.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Pruned Canonical via 6-Component Structural Tuples}{5}{subsection.3.6}\protected@file@percent }
+\newlabel{def:6tuple}{{7}{5}{6-Component Structural Tuple}{definition.7}{}}
+\newlabel{lem:tuple_invariance}{{1}{6}{Automorphism Invariance of $\tau $}{lemma.1}{}}
+\newlabel{prop:pruning}{{2}{6}{Pruning Preserves Completeness}{proposition.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}DAG Distance Metric}{6}{subsection.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.8}Complexity Analysis}{6}{subsection.3.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Software Architecture}{6}{section.4}\protected@file@percent }
+\newlabel{sec:architecture}{{4}{6}{Software Architecture}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Dependency Layering}{6}{subsection.4.1}\protected@file@percent }
 \citation{liu2025}
 \citation{udrescu2020}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces IsalSR dependency architecture. Each layer only depends on layers below it. The core layer has zero external dependencies.}}{7}{figure.1}\protected@file@percent }
+\newlabel{fig:architecture}{{1}{7}{IsalSR dependency architecture. Each layer only depends on layers below it. The core layer has zero external dependencies}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Module Inventory}{7}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Testing Strategy}{7}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Proposal Alignment Guard}{7}{subsection.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Benchmarks and Experimental Design}{7}{section.5}\protected@file@percent }
+\newlabel{sec:benchmarks}{{5}{7}{Benchmarks and Experimental Design}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Benchmark Datasets}{7}{subsection.5.1}\protected@file@percent }
 \citation{udrescu2020}
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces IsalSR module inventory with line counts and purposes.}}{6}{table.2}\protected@file@percent }
-\newlabel{tab:modules}{{2}{6}{IsalSR module inventory with line counts and purposes}{table.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Proposal Alignment Guard}{6}{subsection.4.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {5}Benchmarks and Experimental Design}{6}{section.5}\protected@file@percent }
-\newlabel{sec:benchmarks}{{5}{6}{Benchmarks and Experimental Design}{section.5}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Benchmark Datasets}{6}{subsection.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.1}Nguyen Benchmarks (12 expressions)}{6}{subsubsection.5.1.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.2}Feynman Physics Benchmarks}{6}{subsubsection.5.1.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Nguyen symbolic regression benchmarks (from Liu2025, Table 1).}}{7}{table.3}\protected@file@percent }
-\newlabel{tab:nguyen}{{3}{7}{Nguyen symbolic regression benchmarks (from Liu2025, Table 1)}{table.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Evaluation Metrics}{7}{subsection.5.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Experimental Design: WITH vs WITHOUT Canonicalization}{7}{subsection.5.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Search Space Reduction Analysis}{7}{subsection.5.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6}Empirical Validation of Fundamental Properties}{7}{section.6}\protected@file@percent }
-\newlabel{sec:results}{{6}{7}{Empirical Validation of Fundamental Properties}{section.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Concrete Example: $\sin (x) + \cos (x)$}{8}{subsection.6.1}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Concrete example: $\sin (x) + \cos (x)$. (a) Expression DAG structure. (b) Encoding pipeline showing greedy D2S and canonical strings, plus verification that a relabeled DAG produces the same canonical. (c) All 5 property checks pass. (d) DAG evaluation matches ground truth across the full domain.}}{8}{figure.2}\protected@file@percent }
-\newlabel{fig:concrete}{{2}{8}{Concrete example: $\sin (x) + \cos (x)$. (a) Expression DAG structure. (b) Encoding pipeline showing greedy D2S and canonical strings, plus verification that a relabeled DAG produces the same canonical. (c) All 5 property checks pass. (d) DAG evaluation matches ground truth across the full domain}{figure.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Property 1: Round-Trip Fidelity}{8}{subsection.6.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Property 2: DAG Acyclicity}{8}{subsection.6.3}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Property 1: Round-trip fidelity. Node counts (left) and edge counts (center) fall exactly on the identity diagonal. The round-trip success rate is 100\% (right), confirming no information loss in encoding/decoding.}}{9}{figure.3}\protected@file@percent }
-\newlabel{fig:p1}{{3}{9}{Property 1: Round-trip fidelity. Node counts (left) and edge counts (center) fall exactly on the identity diagonal. The round-trip success rate is 100\% (right), confirming no information loss in encoding/decoding}{figure.3}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Property 2: DAG acyclicity. 100\% of random strings produce valid acyclic DAGs (left). The distribution of C/c edge instructions (center) shows that cycle-creating edges are silently rejected. All DAGs have valid topological orderings (right).}}{9}{figure.4}\protected@file@percent }
-\newlabel{fig:p2}{{4}{9}{Property 2: DAG acyclicity. 100\% of random strings produce valid acyclic DAGs (left). The distribution of C/c edge instructions (center) shows that cycle-creating edges are silently rejected. All DAGs have valid topological orderings (right)}{figure.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Property 3: Canonical Invariance --- The Core Property}{9}{subsection.6.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Property 4: Evaluation Preservation}{9}{subsection.6.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.6}Property 5: Search Space Reduction}{9}{subsection.6.6}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Property 3: Canonical invariance. The confusion matrix (left) shows perfect diagonal agreement---canonical string equality perfectly predicts labeled-DAG isomorphism. 100\% accuracy across 427 tested pairs (right).}}{10}{figure.5}\protected@file@percent }
-\newlabel{fig:p3}{{5}{10}{Property 3: Canonical invariance. The confusion matrix (left) shows perfect diagonal agreement---canonical string equality perfectly predicts labeled-DAG isomorphism. 100\% accuracy across 427 tested pairs (right)}{figure.5}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Property 4: Evaluation preservation. Original vs canonical evaluations fall on the identity line (left). The Bland--Altman plot (center) is flat at $y = 0$. The error distribution (right) shows nearly all differences are below $10^{-8}$.}}{10}{figure.6}\protected@file@percent }
-\newlabel{fig:p4}{{6}{10}{Property 4: Evaluation preservation. Original vs canonical evaluations fall on the identity line (left). The Bland--Altman plot (center) is flat at $y = 0$. The error distribution (right) shows nearly all differences are below $10^{-8}$}{figure.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.7}Summary of Property Validation}{10}{subsection.6.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7}Conclusion and Next Steps}{10}{section.7}\protected@file@percent }
-\newlabel{sec:conclusion}{{7}{10}{Conclusion and Next Steps}{section.7}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Summary of Contributions}{10}{subsection.7.1}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Property 5: Search space reduction via canonicalization. Left: grouped bars showing total valid strings (blue), unique greedy strings (cyan), and unique canonical strings (green). Right: reduction factors showing canonical deduplication is more effective than greedy deduplication, with the gap increasing as average internal node count $\bar  {k}$ grows.}}{11}{figure.7}\protected@file@percent }
-\newlabel{fig:p5}{{7}{11}{Property 5: Search space reduction via canonicalization. Left: grouped bars showing total valid strings (blue), unique greedy strings (cyan), and unique canonical strings (green). Right: reduction factors showing canonical deduplication is more effective than greedy deduplication, with the gap increasing as average internal node count $\bar {k}$ grows}{figure.7}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Summary of empirical property validation ($N = 300$ random strings).}}{11}{table.4}\protected@file@percent }
-\newlabel{tab:properties}{{4}{11}{Summary of empirical property validation ($N = 300$ random strings)}{table.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Limitations}{11}{subsection.7.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces IsalSR module inventory with line counts and purposes.}}{8}{table.2}\protected@file@percent }
+\newlabel{tab:modules}{{2}{8}{IsalSR module inventory with line counts and purposes}{table.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Nguyen symbolic regression benchmarks (from Liu2025, Table 1).}}{8}{table.3}\protected@file@percent }
+\newlabel{tab:nguyen}{{3}{8}{Nguyen symbolic regression benchmarks (from Liu2025, Table 1)}{table.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.1}Nguyen Benchmarks (12 expressions)}{8}{subsubsection.5.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.2}Feynman Physics Benchmarks}{8}{subsubsection.5.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Evaluation Metrics}{8}{subsection.5.2}\protected@file@percent }
+\citation{liu2025}
+\citation{wilson1927}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Experimental Design: WITH vs WITHOUT Canonicalization}{9}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Search Space Reduction Analysis}{9}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Empirical Validation of Fundamental Properties}{9}{section.6}\protected@file@percent }
+\newlabel{sec:results}{{6}{9}{Empirical Validation of Fundamental Properties}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Experimental Protocol}{9}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.1.1}Random DAG Generation Model}{9}{subsubsection.6.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.1.2}Sample Sizes and Reproducibility}{9}{subsubsection.6.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.1.3}Statistical Framework}{9}{subsubsection.6.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Concrete Example: $\sin (x) + \cos (x)$}{10}{subsection.6.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Concrete example: $\sin (x) + \cos (x)$. (a)\nobreakspace  {}DAG structure with node types color-coded. (b)\nobreakspace  {}Encoding pipeline: greedy D2S and canonical strings; a relabeled DAG (SIN/COS swapped) yields the same canonical. (c)\nobreakspace  {}All five property checks pass. (d)\nobreakspace  {}Evaluation perfectly matches the ground truth $\sin (x) + \cos (x)$ across the domain.}}{10}{figure.2}\protected@file@percent }
+\newlabel{fig:concrete}{{2}{10}{Concrete example: $\sin (x) + \cos (x)$. (a)~DAG structure with node types color-coded. (b)~Encoding pipeline: greedy D2S and canonical strings; a relabeled DAG (SIN/COS swapped) yields the same canonical. (c)~All five property checks pass. (d)~Evaluation perfectly matches the ground truth $\sin (x) + \cos (x)$ across the domain}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Property 1: Round-Trip Fidelity}{10}{subsection.6.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Property\nobreakspace  {}1: Round-trip fidelity ($N = 287$). Node counts (left) and edge counts (center) fall exactly on the identity diagonal $y = x$. Success rate is 100\% (right). Wilson 95\% CI: $[0.987, 1.000]$.}}{11}{figure.3}\protected@file@percent }
+\newlabel{fig:p1}{{3}{11}{Property~1: Round-trip fidelity ($N = 287$). Node counts (left) and edge counts (center) fall exactly on the identity diagonal $y = x$. Success rate is 100\% (right). Wilson 95\% CI: $[0.987, 1.000]$}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Property 2: DAG Acyclicity}{11}{subsection.6.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Property\nobreakspace  {}2: DAG acyclicity ($N = 300$). All DAGs are acyclic (left). C/c instructions are present in the random strings (center), confirming cycle detection is exercised. DAG complexity distribution (right).}}{11}{figure.4}\protected@file@percent }
+\newlabel{fig:p2}{{4}{11}{Property~2: DAG acyclicity ($N = 300$). All DAGs are acyclic (left). C/c instructions are present in the random strings (center), confirming cycle detection is exercised. DAG complexity distribution (right)}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Property 3: Canonical Invariance --- The Core Property}{12}{subsection.6.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Property\nobreakspace  {}3: Canonical invariance ($N = 427$ pairs). The confusion matrix (left) shows perfect diagonal agreement: zero false positives and zero false negatives. Accuracy is 100\% across all tested pairs (right).}}{12}{figure.5}\protected@file@percent }
+\newlabel{fig:p3}{{5}{12}{Property~3: Canonical invariance ($N = 427$ pairs). The confusion matrix (left) shows perfect diagonal agreement: zero false positives and zero false negatives. Accuracy is 100\% across all tested pairs (right)}{figure.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.6}Property 4: Evaluation Preservation Under Canonicalization}{12}{subsection.6.6}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Property\nobreakspace  {}4: Evaluation preservation ($N = 345$ points). Original vs.\ canonical evaluations fall on the identity line (left). The Bland--Altman plot (center) is flat at $y = 0$. Error distribution (right) shows nearly all differences are below $10^{-8}$.}}{13}{figure.6}\protected@file@percent }
+\newlabel{fig:p4}{{6}{13}{Property~4: Evaluation preservation ($N = 345$ points). Original vs.\^^Mcanonical evaluations fall on the identity line (left). The Bland--Altman plot (center) is flat at $y = 0$. Error distribution (right) shows nearly all differences are below $10^{-8}$}{figure.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.7}Property 5: Search Space Reduction via Canonicalization}{13}{subsection.6.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.8}Summary of Property Validation}{13}{subsection.6.8}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Search space reduction by configuration ($N = 300$).}}{14}{table.4}\protected@file@percent }
+\newlabel{tab:reduction_detail}{{4}{14}{Search space reduction by configuration ($N = 300$)}{table.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Property\nobreakspace  {}5: Search space reduction ($N = 300$). Left: grouped bars showing total valid (blue), unique greedy (cyan), and unique canonical (green). Right: reduction factors with average internal node count $\bar  {k}$ annotated. Canonical deduplication consistently outperforms greedy.}}{14}{figure.7}\protected@file@percent }
+\newlabel{fig:p5}{{7}{14}{Property~5: Search space reduction ($N = 300$). Left: grouped bars showing total valid (blue), unique greedy (cyan), and unique canonical (green). Right: reduction factors with average internal node count $\bar {k}$ annotated. Canonical deduplication consistently outperforms greedy}{figure.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Conclusion and Next Steps}{14}{section.7}\protected@file@percent }
+\newlabel{sec:conclusion}{{7}{14}{Conclusion and Next Steps}{section.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Summary of Contributions}{14}{subsection.7.1}\protected@file@percent }
 \bibcite{lopezrubio2025}{1}
 \bibcite{liu2025}{2}
 \bibcite{lacava2021}{3}
 \bibcite{petersen2021}{4}
 \bibcite{uy2011}{5}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Summary of empirical property validation. CI = Wilson 95\% confidence interval.}}{15}{table.5}\protected@file@percent }
+\newlabel{tab:properties}{{5}{15}{Summary of empirical property validation. CI = Wilson 95\% confidence interval}{table.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Limitations}{15}{subsection.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}Roadmap to IEEE TPAMI Submission}{15}{subsection.7.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4}Target Venue}{15}{subsection.7.4}\protected@file@percent }
 \bibcite{udrescu2020}{6}
 \bibcite{koza1992}{7}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}Roadmap to IEEE TPAMI Submission}{12}{subsection.7.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.4}Target Venue}{12}{subsection.7.4}\protected@file@percent }
-\gdef \@abspage@last{12}
+\gdef \@abspage@last{16}

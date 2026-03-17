@@ -1,106 +1,239 @@
-\section{Core Algorithms}
+\section{Core Algorithms and Formal Properties}
 \label{sec:algorithms}
+
+This section presents the three core algorithms (S2D, D2S, canonical string)
+with formal definitions, theorem statements, and proof sketches. All proofs
+follow the framework established in \cite{lopezrubio2025} for IsalGraph,
+adapted here for labeled directed acyclic graphs.
+
+\subsection{Preliminaries: Labeled-DAG Isomorphism}
+
+\begin{definition}[Labeled Directed Acyclic Graph]
+\label{def:labeled_dag}
+A \emph{labeled DAG} is a tuple $D = (V, E, \ell, \delta)$ where:
+\begin{itemize}[nosep]
+  \item $V = \{0, 1, \ldots, n-1\}$ is a finite set of nodes,
+  \item $E \subseteq V \times V$ is a set of directed edges such that $(V, E)$ is acyclic,
+  \item $\ell: V \to \mathcal{T}$ assigns each node a type from
+    $\mathcal{T} = \{\textsc{Var}, \textsc{Add}, \textsc{Mul}, \textsc{Sin}, \ldots, \textsc{Const}\}$, and
+  \item $\delta: V \to \mathbb{Z} \cup \mathbb{R}$ assigns metadata (variable index for \textsc{Var} nodes,
+    constant value for \textsc{Const} nodes).
+\end{itemize}
+An edge $(u, v) \in E$ means ``node $u$ provides input to node $v$'' (data flow direction).
+\end{definition}
+
+\begin{definition}[Labeled-DAG Isomorphism]
+\label{def:isomorphism}
+Two labeled DAGs $D_1 = (V_1, E_1, \ell_1, \delta_1)$ and $D_2 = (V_2, E_2, \ell_2, \delta_2)$
+are \emph{isomorphic}, written $D_1 \cong D_2$, if there exists a bijection $\phi: V_1 \to V_2$
+satisfying:
+\begin{enumerate}[nosep]
+  \item \textbf{Edge preservation}: $(u, v) \in E_1 \iff (\phi(u), \phi(v)) \in E_2$.
+  \item \textbf{Label preservation}: $\ell_1(u) = \ell_2(\phi(u))$ for all $u \in V_1$.
+  \item \textbf{Variable anchoring}: If $\ell_1(u) = \textsc{Var}$ with $\delta_1(u) = i$,
+    then $\delta_2(\phi(u)) = i$. That is, $\phi(x_i) = x_i$ for every variable node.
+\end{enumerate}
+\end{definition}
+
+Condition 3 is \emph{critical}: input variables $x_1, \ldots, x_m$ are
+\textbf{distinguishable and fixed} under isomorphism. Only non-variable nodes
+(operations, constants) may be permuted. This eliminates the $m!$ factor that
+would otherwise arise from variable renaming.
+
+For a DAG with $k$ non-variable nodes, the automorphism group has order at most $k!$,
+meaning up to $k!$ distinct node labelings represent the same expression.
 
 \subsection{StringToDAG (S2D) --- The Decoder}
 
-The S2D decoder executes an IsalSR instruction string token-by-token to
-build a \texttt{LabeledDAG}. It tokenizes the input using a greedy scanner
-(consuming two characters for $V/v$ compound tokens) and dispatches each
-token to update the shared state: (DAG, CDLL, primary pointer, secondary pointer).
+The S2D decoder is a deterministic state machine that executes an IsalSR instruction
+string token-by-token. Let $\mathcal{S} = (D, L, p, q)$ denote the machine state where
+$D$ is the current DAG, $L$ is the CDLL, $p$ is the primary pointer (CDLL index),
+and $q$ is the secondary pointer.
 
-\begin{algorithm}[h]
-\caption{StringToDAG (S2D)}
-\begin{algorithmic}[1]
-\Require String $w$, number of variables $m$
-\State Initialize DAG with $m$ VAR nodes; CDLL $\leftarrow [x_1, \ldots, x_m]$
-\State $\text{pri} \leftarrow \text{CDLL node for } x_1$; $\text{sec} \leftarrow \text{pri}$
-\For{each token $t$ in $\textsc{Tokenize}(w)$}
-  \If{$t \in \{N, P, n, p\}$} move corresponding pointer
-  \ElsIf{$t = V\ell$} create node with label $\ell$, edge pri$\to$new, insert after pri
-  \ElsIf{$t = v\ell$} same from secondary pointer
-  \ElsIf{$t = C$} add edge pri$\to$sec if acyclic
-  \ElsIf{$t = c$} add edge sec$\to$pri if acyclic
-  \EndIf
-\EndFor
-\State \Return DAG
-\end{algorithmic}
-\end{algorithm}
+\begin{definition}[S2D Execution]
+Given string $w \in \Sigma_{\mathrm{SR}}^*$ and $m$ variables, the initial state is:
+\[
+  \mathcal{S}_0 = \big(\, (V_0, \emptyset, \ell_0, \delta_0),\ [x_1, \ldots, x_m],\ \text{ptr}(x_1),\ \text{ptr}(x_1) \,\big)
+\]
+where $V_0 = \{x_1, \ldots, x_m\}$ with $\ell_0(x_i) = \textsc{Var}$ and $\delta_0(x_i) = i$.
+Each token $t \in \textsc{Tokenize}(w)$ produces a state transition $\mathcal{S}_j \to \mathcal{S}_{j+1}$
+according to the dispatch rules (Section~\ref{sec:instruction_set}).
+The output is $\text{S2D}(w, m) = D_{\text{final}}$.
+\end{definition}
+
+\textbf{DAG invariant}: After every token execution, the graph $(V, E)$ remains acyclic.
+This is trivially maintained for $V\ell/v\ell$ (new nodes have no outgoing edges)
+and explicitly enforced for $C/c$ (BFS reachability check before edge insertion).
 
 \subsection{DAGToString (D2S) --- The Greedy Encoder}
 
-The D2S encoder converts a \texttt{LabeledDAG} back into an instruction string
-using a greedy algorithm adapted from IsalGraph \cite{lopezrubio2025}.
-It searches for the minimum-cost pointer displacement that enables a structural
-operation (V, v, C, or c) at each step.
+The D2S encoder converts a labeled DAG $D$ to an IsalSR string by greedily
+selecting minimum-cost operations. The cost of a pointer displacement $(a, b)$
+is $|a| + |b|$ (total CDLL traversal steps).
 
-The displacement pairs $(a, b)$ are sorted by $|a| + |b|$ (total movement cost),
-ensuring the shortest possible movement instructions are emitted first.
-The priority order is $V > v > C > c$: node insertion is preferred over edge-only
-insertion.
+\begin{definition}[Displacement Enumeration]
+For an output DAG with $n$ current nodes, the candidate set is:
+\[
+  \mathcal{P}_n = \{(a, b) \in \mathbb{Z}^2 : -n \leq a, b \leq n\}
+\]
+sorted by the key $(|a| + |b|,\, |a|,\, (a, b))$ (lexicographic tiebreaking).
+This produces a ``spiral enumeration'' of $\mathbb{Z}^2$ around the origin,
+guaranteeing that lower-cost displacements are tried first.
+\end{definition}
 
-Key adaptations from IsalGraph:
-\begin{itemize}[nosep]
-  \item Token emission: \texttt{"V" + label\_char} (two-character compound tokens).
-  \item Neighbor search: \texttt{out\_neighbors()} only (directed data flow).
-  \item All $m$ VAR nodes are pre-mapped at initialization.
-\end{itemize}
+The greedy loop iterates over $\mathcal{P}_n$ and attempts operations in strict
+priority order: $V\ell > v\ell > C > c$. For $V\ell/v\ell$, the algorithm finds
+an \emph{uninserted outgoing neighbor} of the tentative pointer position in the
+input DAG. The first successful operation is emitted, pointers are updated, and
+the loop continues until all nodes and edges are placed.
 
 \subsection{Round-Trip Property}
 
-\begin{theorem}[Round-trip]
-For any valid IsalSR string $w$ and number of variables $m$:
+\begin{theorem}[Round-Trip Fidelity]
+\label{thm:roundtrip}
+Let $w \in \Sigma_{\mathrm{SR}}^*$ be a valid IsalSR string and $m \geq 1$.
+Let $D = \text{S2D}(w, m)$. If $D$ contains at least one non-variable node and all
+non-variable nodes are reachable from some variable via outgoing edges, then:
 \[
-  \text{S2D}(w, m) \cong \text{S2D}(\text{D2S}(\text{S2D}(w, m), x_1), m)
+  D \cong \text{S2D}\big(\text{D2S}(D, x_1),\, m\big)
 \]
-where $\cong$ denotes labeled-DAG isomorphism.
 \end{theorem}
 
-This property is verified by 25 deterministic tests and Hypothesis property
-tests across random strings.
+\begin{proof}[Proof sketch]
+D2S produces a string $w'$ such that $\text{S2D}(w', m)$ reconstructs a DAG $D'$
+with the same set of nodes (by label), the same directed edges, and the same
+variable assignments. The bijection $\phi$ is given by the index mapping
+$\texttt{i2o}: V_{\text{input}} \to V_{\text{output}}$ maintained by D2S.
+Since D2S visits every node exactly once (via the while-loop invariant
+``nodes $> 0$ OR edges $> 0$'') and every edge exactly once, $\phi$ preserves
+edges and labels. Variable anchoring (Def.~\ref{def:isomorphism}, condition 3)
+holds because all $m$ variables are mapped at initialization with identical
+\texttt{var\_index} values. $\qed$
+\end{proof}
 
-\subsection{Canonical String --- The Core Contribution}
+\subsection{Canonical String --- The Complete Invariant}
+\label{sec:canonical}
 
-\begin{definition}[Canonical string]
-For a labeled DAG $D$ with initial node $x_1$:
+The canonical string is the central mathematical object of IsalSR.
+Unlike the greedy D2S (which depends on internal node numbering), the canonical
+string explores \emph{all valid neighbor choices} at each $V\ell/v\ell$ step
+via exhaustive backtracking.
+
+\begin{definition}[Canonical String]
+\label{def:canonical}
+For a labeled DAG $D$ with variables $x_1, \ldots, x_m$, define
+$\mathcal{W}(D) \subset \Sigma_{\mathrm{SR}}^*$ as the set of all strings producible
+by the D2S algorithm from $x_1$, across all valid neighbor orderings at $V\ell/v\ell$
+branch points. The \emph{canonical string} is:
 \[
-  w^*_D = \text{lexmin}\left\{ w \in \arg\min_{P \in \text{Paths}(D, x_1)} |P| \right\}
+  w^*_D = \text{lexmin} \left\{ w \in \arg\min_{w' \in \mathcal{W}(D)} |w'| \right\}
 \]
-The shortest D2S string from $x_1$, with ties broken lexicographically.
-Computed via exhaustive backtracking over all valid neighbor choices at V/v
-branch points.
+That is: the lexicographically smallest among all shortest strings in $\mathcal{W}(D)$.
 \end{definition}
 
-\begin{theorem}[Complete invariant]
+\begin{theorem}[Complete Invariant]
 \label{thm:invariant}
-$w^*_{D_1} = w^*_{D_2}$ if and only if $D_1 \cong D_2$ (labeled-DAG isomorphism).
+The canonical string is a complete labeled-DAG invariant:
+\[
+  w^*_{D_1} = w^*_{D_2} \quad \Longleftrightarrow \quad D_1 \cong D_2
+\]
 \end{theorem}
 
-\textbf{Simplification from IsalGraph}: Since input variables are distinguishable
-($x_i$ maps to $x_i$ under any isomorphism), the canonical string is computed
-from $x_1$ only---no iteration over starting nodes. This reduces the canonical
-computation cost by a factor of $O(n)$.
+\begin{proof}[Proof sketch]
+($\Leftarrow$) \textbf{Soundness}: If $D_1 \cong D_2$ via bijection $\phi$, then for every
+execution path $P$ of D2S on $D_1$, there exists a corresponding path $P'$ on $D_2$
+(obtained by applying $\phi$ to all neighbor choices) that produces the same string.
+Since $\phi$ preserves labels, the emitted tokens are identical. Thus
+$\mathcal{W}(D_1) = \mathcal{W}(D_2)$ and $w^*_{D_1} = w^*_{D_2}$.
 
-\subsection{Pruned Canonical with 6-Component Structural Tuples}
+($\Rightarrow$) \textbf{Completeness}: If $w^*_{D_1} = w^*_{D_2} = w^*$, then
+$\text{S2D}(w^*, m)$ produces a single DAG $D^*$, and by Theorem~\ref{thm:roundtrip},
+$D_1 \cong D^* \cong D_2$. By transitivity of isomorphism, $D_1 \cong D_2$. $\qed$
+\end{proof}
 
-At each V/v branch point, only candidates sharing the maximum 6-component
-structural tuple are explored:
+\textbf{Key simplification}: The canonical string is computed from $x_1$ only.
+Since variable nodes are fixed under isomorphism (Def.~\ref{def:isomorphism},
+condition 3), no iteration over starting nodes is needed. This reduces
+the computation cost by $O(m)$ compared to IsalGraph, which iterates
+over all $n$ nodes.
+
+\subsection{Pruned Canonical via 6-Component Structural Tuples}
+
+The exhaustive canonical search has worst-case exponential complexity
+(branching factor $= \prod_i |\text{candidates}_i|$). The \emph{pruned} variant
+reduces branching by filtering candidates using a structural discriminant.
+
+\begin{definition}[6-Component Structural Tuple]
+\label{def:6tuple}
+For node $v$ in DAG $D$, define the \emph{directed distance sets}:
+\begin{align}
+  \text{out}_{N_k}(v) &= \{u \in V : \text{shortest directed path } v \to u \text{ has length } k\} \\
+  \text{in}_{N_k}(v) &= \{u \in V : \text{shortest directed path } u \to v \text{ has length } k\}
+\end{align}
+The 6-component structural tuple is:
 \[
-  \tau(v) = (|\text{in}_{N_1}(v)|, |\text{out}_{N_1}(v)|,
-             |\text{in}_{N_2}(v)|, |\text{out}_{N_2}(v)|,
-             |\text{in}_{N_3}(v)|, |\text{out}_{N_3}(v)|)
+  \tau(v) = \big(|\text{in}_{N_1}(v)|,\, |\text{out}_{N_1}(v)|,\,
+             |\text{in}_{N_2}(v)|,\, |\text{out}_{N_2}(v)|,\,
+             |\text{in}_{N_3}(v)|,\, |\text{out}_{N_3}(v)|\big)
 \]
-where $\text{in}_{N_k}(v)$ and $\text{out}_{N_k}(v)$ count nodes at distance $k$
-following incoming and outgoing edges, respectively. This is computed via
-truncated BFS in both directions.
+computed via truncated BFS in both directions, $O(|V| + |E|)$ per node.
+\end{definition}
 
-The pruned variant preserves the complete invariant property while dramatically
-reducing the branching factor (empirically 10--100$\times$ faster).
+\begin{lemma}[Automorphism Invariance of $\tau$]
+\label{lem:tuple_invariance}
+If $\phi$ is an automorphism of $D$ (i.e., $D \cong D$ via $\phi$), then
+$\tau(v) = \tau(\phi(v))$ for all $v \in V$.
+\end{lemma}
+
+\begin{proof}
+Automorphisms preserve directed edges, so directed BFS from $v$ and $\phi(v)$
+visit the same number of nodes at each distance. $\qed$
+\end{proof}
+
+\begin{proposition}[Pruning Preserves Completeness]
+\label{prop:pruning}
+At each $V\ell/v\ell$ branch point, let $\mathcal{C}$ be the set of uninserted
+candidate neighbors. Define $\mathcal{C}^* = \{c \in \mathcal{C} : \tau(c) = \max_{c' \in \mathcal{C}} \tau(c')\}$.
+Restricting backtracking to $\mathcal{C}^*$ preserves the complete invariant property.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+By Lemma~\ref{lem:tuple_invariance}, candidates with different $\tau$ values cannot
+be related by any automorphism of $D$. Therefore, the choice between candidates
+with different $\tau$ values is deterministic and labeling-independent.
+Only candidates within the same $\tau$-equivalence class need exhaustive exploration.
+Taking the maximum $\tau$ (lexicographic) is one such deterministic rule. $\qed$
+\end{proof}
 
 \subsection{DAG Distance Metric}
 
-The Levenshtein distance between canonical strings defines a metric on
-labeled DAGs:
+\begin{definition}[DAG Distance]
+For labeled DAGs $D_1, D_2$:
 \[
-  d(D_1, D_2) = \text{Levenshtein}(w^*_{D_1}, w^*_{D_2})
+  d(D_1, D_2) = \text{Levenshtein}(w^*_{D_1},\, w^*_{D_2})
 \]
-This satisfies symmetry, triangle inequality, and identity of indiscernibles.
+\end{definition}
+
+\begin{proposition}
+$d$ is a metric on the quotient space of labeled DAGs modulo isomorphism:
+\begin{enumerate}[nosep]
+  \item $d(D_1, D_2) = 0 \iff D_1 \cong D_2$ \quad (by Theorem~\ref{thm:invariant})
+  \item $d(D_1, D_2) = d(D_2, D_1)$ \quad (Levenshtein is symmetric)
+  \item $d(D_1, D_3) \leq d(D_1, D_2) + d(D_2, D_3)$ \quad (triangle inequality)
+\end{enumerate}
+\end{proposition}
+
+\subsection{Complexity Analysis}
+
+\begin{itemize}[nosep]
+  \item \textbf{S2D}: $O(|w| \cdot (|V| + |E|))$ where the $|V|+|E|$ factor
+    accounts for cycle detection at each $C/c$ instruction.
+  \item \textbf{D2S (greedy)}: $O(n^3)$ where $n = |V|$ (pair enumeration
+    $\times$ neighbor search per iteration).
+  \item \textbf{Canonical (exhaustive)}: $O\!\left(n^2 \cdot \prod_{i} |\mathcal{C}_i|\right)$
+    where $\mathcal{C}_i$ is the candidate set at the $i$-th $V\ell/v\ell$ step.
+    Practical for $k \leq 15$ non-variable nodes.
+  \item \textbf{Canonical (pruned)}: Same structure but $|\mathcal{C}_i|$ is
+    replaced by $|\mathcal{C}^*_i| \leq |\mathcal{C}_i|$. Empirically
+    10--100$\times$ faster on heterogeneous DAGs.
+\end{itemize}
