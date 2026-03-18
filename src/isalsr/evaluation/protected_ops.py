@@ -52,6 +52,14 @@ def protected_pow(
     return np.clip(result, -_MAX_VALUE, _MAX_VALUE)  # type: ignore[no-any-return]
 
 
+def protected_inv(x: np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any, np.dtype[Any]]:
+    """Protected multiplicative inverse: 1/x where |x| > epsilon, else 1.0.
+
+    Semantically equivalent to ``protected_div(np.ones_like(x), x)``.
+    """
+    return np.where(np.abs(x) > 1e-10, 1.0 / x, 1.0)
+
+
 def clamp(x: np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any, np.dtype[Any]]:
     """Clamp array values: NaN -> 0, clip to [-MAX_VALUE, MAX_VALUE]."""
     result = np.where(np.isnan(x), 0.0, x)

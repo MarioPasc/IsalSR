@@ -29,7 +29,10 @@ InstructionString = str
 VALID_SINGLE_INSTRUCTIONS: frozenset[str] = frozenset("NnPpCcW")
 
 # Valid label characters for V/v compound tokens.
-VALID_LABEL_CHARS: frozenset[str] = frozenset("+*-/scelr^ak")
+# Derived from node_types.LABEL_CHAR_MAP to ensure single source of truth.
+# NOTE: Cannot import at module level (circular import). The authoritative
+# source is node_types.VALID_LABEL_CHARS; this copy must be kept in sync.
+VALID_LABEL_CHARS: frozenset[str] = frozenset("+*-/scelr^akgi")
 
 __all__: list[str] = [
     "NodeId",

@@ -71,11 +71,18 @@ for symbolic regression with isomorphism-invariant string representations.
 | `Vr`  | Insert | New SQRT node (unary, protected) + edge primary→new |
 | `V^`  | Insert | New POW node (binary) + edge primary→new |
 | `Va`  | Insert | New ABS node (unary) + edge primary→new |
+| `Vg`  | Insert | New NEG node (unary: -x) + edge primary→new |
+| `Vi`  | Insert | New INV node (unary: 1/x, protected) + edge primary→new |
 | `Vk`  | Insert | New CONST node (leaf) + edge primary→new |
 | `v[label]` | Insert | Same as V-variants but from secondary pointer |
 
 **Tokenization**: V/v consume the next character as a label; all others are single-char tokens.
 Bare 'c' = edge instruction; 'c' after V/v = COS label. Tokenizer disambiguates by context.
+
+**Commutative encoding**: NEG and INV enable elimination of non-commutative binary ops:
+SUB(x,y) = ADD(x, NEG(y)), DIV(x,y) = MUL(x, INV(y)). Use `OperationSet.commutative()`
+for a fully commutative alphabet (no SUB, DIV; optionally include POW).
+Inspired by GraphSR (Xiang et al.).
 
 ### Initial State
 
@@ -114,6 +121,7 @@ src/isalsr/core/string_to_dag.py     StringToDAG converter (S2D)
 src/isalsr/core/dag_to_string.py     DAGToString converter (D2S)
 src/isalsr/core/canonical.py         Canonical string (from x_1, 6-tuple pruning)
 src/isalsr/core/dag_evaluator.py     Evaluate DAG numerically (topological sort)
+src/isalsr/core/commutative.py       SUB/DIV <-> ADD+NEG/MUL+INV conversion
 src/isalsr/core/algorithms/          D2S algorithm variants
 src/isalsr/adapters/                 NetworkX, SymPy bridges
 src/isalsr/evaluation/               Fitness metrics, constant optimization

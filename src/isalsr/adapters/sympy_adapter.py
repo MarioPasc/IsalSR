@@ -102,6 +102,12 @@ class SympyAdapter(DAGAdapter[sympy.Expr]):
             elif label == NodeType.ABS:
                 node_exprs[node] = Abs(node_exprs[in_nodes[0]])
 
+            elif label == NodeType.NEG:
+                node_exprs[node] = -node_exprs[in_nodes[0]]
+
+            elif label == NodeType.INV:
+                node_exprs[node] = sympy.Integer(1) / node_exprs[in_nodes[0]]
+
         out = dag.output_node()
         return node_exprs[out]
 

@@ -11,7 +11,19 @@ enabling isomorphism-free search spaces for symbolic regression.
 Two-tier encoding:
 - Movement/structure: N, P, n, p, C, c, W (single-char)
 - Labeled insertion: V[label], v[label] (two-char)
-- Labels: +, *, -, /, s, c, e, l, r, ^, a, k
+- Labels: +, *, -, /, s, c, e, l, r, ^, a, g, i, k
+
+### 2.1 Commutative Encoding
+
+Non-commutative binary ops can be decomposed into commutative variadic + unary pairs:
+- SUB(x, y) = ADD(x, NEG(y)) where NEG (label 'g') is unary negation (-x)
+- DIV(x, y) = MUL(x, INV(y)) where INV (label 'i') is unary inverse (1/x)
+
+This eliminates operand-ordering requirements from the isomorphism definition
+for all operations except POW (whose operand order is inherently semantic).
+The commutative operation set is available via `OperationSet.commutative()`.
+
+Inspired by the term-rewriting approach of GraphSR (Xiang et al.).
 
 ## 3. Initial State
 

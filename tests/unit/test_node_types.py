@@ -34,6 +34,8 @@ class TestNodeTypeEnum:
             "SQRT",
             "POW",
             "ABS",
+            "NEG",
+            "INV",
             "CONST",
         }
         actual = {nt.name for nt in NodeType}
@@ -158,3 +160,69 @@ class TestOperationSet:
         opset = OperationSet(frozenset({NodeType.ADD}))
         # ADD + VAR + CONST = 3
         assert len(opset) == 3
+
+    def test_commutative_factory(self) -> None:
+        """OperationSet.commutative() includes NEG/INV, excludes SUB/DIV."""
+        from isalsr.core.node_types import COMMUTATIVE_OPS
+
+        opset = OperationSet.commutative()
+        assert NodeType.NEG in opset
+        assert NodeType.INV in opset
+        assert NodeType.ADD in opset
+        assert NodeType.MUL in opset
+        assert NodeType.SUB not in opset
+        assert NodeType.DIV not in opset
+        assert NodeType.POW not in opset
+        # All commutative ops are present.
+        for op in COMMUTATIVE_OPS:
+            assert op in opset
+
+    def test_commutative_factory_with_pow(self) -> None:
+        opset = OperationSet.commutative(include_pow=True)
+        assert NodeType.POW in opset
+        assert NodeType.NEG in opset
+        assert NodeType.SUB not in opset
+
+    def test_commutative_label_chars(self) -> None:
+        opset = OperationSet.commutative()
+        assert "g" in opset.label_chars  # NEG
+        assert "i" in opset.label_chars  # INV
+        assert "-" not in opset.label_chars  # SUB excluded
+        assert "/" not in opset.label_chars  # DIV excluded
+        assert "^" not in opset.label_chars  # POW excluded
+
+
+class TestNegInvTypes:
+    """NEG and INV are properly registered as unary operations."""
+
+    def test_neg_is_unary(self) -> None:
+        assert NodeType.NEG in UNARY_OPS
+        assert ARITY_MAP[NodeType.NEG] == 1
+
+    def test_inv_is_unary(self) -> None:
+        assert NodeType.INV in UNARY_OPS
+        assert ARITY_MAP[NodeType.INV] == 1
+
+    def test_neg_label_char(self) -> None:
+        assert LABEL_CHAR_MAP["g"] == NodeType.NEG
+        assert NODE_TYPE_TO_LABEL[NodeType.NEG] == "g"
+
+    def test_inv_label_char(self) -> None:
+        assert LABEL_CHAR_MAP["i"] == NodeType.INV
+        assert NODE_TYPE_TO_LABEL[NodeType.INV] == "i"
+
+    def test_neg_inv_in_all_ops(self) -> None:
+        assert NodeType.NEG in ALL_OPS
+        assert NodeType.INV in ALL_OPS
+
+    def test_neg_inv_not_binary(self) -> None:
+        assert NodeType.NEG not in BINARY_OPS
+        assert NodeType.INV not in BINARY_OPS
+
+    def test_neg_inv_not_variadic(self) -> None:
+        assert NodeType.NEG not in VARIADIC_OPS
+        assert NodeType.INV not in VARIADIC_OPS
+
+    def test_neg_inv_in_valid_labels(self) -> None:
+        assert "g" in VALID_LABEL_CHARS
+        assert "i" in VALID_LABEL_CHARS

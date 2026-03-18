@@ -11,6 +11,12 @@ Mathematical justification for variable-arity ADD/MUL:
     enabling natural representation of expressions like x_1 + x_2 + x_3
     without nested binary trees.
 
+Commutative encoding (inspired by GraphSR, Xiang et al.):
+    Non-commutative binary ops can be eliminated via unary decomposition:
+    SUB(x, y) = ADD(x, NEG(y)) and DIV(x, y) = MUL(x, INV(y)).
+    This simplifies the isomorphism definition to standard labeled graph
+    isomorphism (no operand ordering needed except for POW).
+
 Restriction: ZERO external dependencies. Only Python stdlib + enum.
 """
 
@@ -39,6 +45,8 @@ class NodeType(Enum):
     SQRT = "r"  # Square root (protected). Arity = 1 (unary).
     POW = "^"  # Power. Arity = 2 (binary).
     ABS = "a"  # Absolute value. Arity = 1 (unary).
+    NEG = "g"  # Negation (unary: -x). Commutative encoding for SUB.
+    INV = "i"  # Multiplicative inverse (unary: 1/x). Commutative encoding for DIV.
     CONST = "k"  # Learnable constant. Arity = 0 (leaf).
 
 
@@ -56,6 +64,8 @@ LABEL_CHAR_MAP: dict[str, NodeType] = {
     "r": NodeType.SQRT,
     "^": NodeType.POW,
     "a": NodeType.ABS,
+    "g": NodeType.NEG,
+    "i": NodeType.INV,
     "k": NodeType.CONST,
 }
 
@@ -77,16 +87,45 @@ ARITY_MAP: dict[NodeType, int | None] = {
     NodeType.LOG: 1,
     NodeType.SQRT: 1,
     NodeType.ABS: 1,
+    NodeType.NEG: 1,
+    NodeType.INV: 1,
 }
 
 # Category sets for quick membership checks.
 UNARY_OPS: frozenset[NodeType] = frozenset(
-    {NodeType.SIN, NodeType.COS, NodeType.EXP, NodeType.LOG, NodeType.SQRT, NodeType.ABS}
+    {
+        NodeType.SIN,
+        NodeType.COS,
+        NodeType.EXP,
+        NodeType.LOG,
+        NodeType.SQRT,
+        NodeType.ABS,
+        NodeType.NEG,
+        NodeType.INV,
+    }
 )
 BINARY_OPS: frozenset[NodeType] = frozenset({NodeType.SUB, NodeType.DIV, NodeType.POW})
 VARIADIC_OPS: frozenset[NodeType] = frozenset({NodeType.ADD, NodeType.MUL})
 LEAF_TYPES: frozenset[NodeType] = frozenset({NodeType.VAR, NodeType.CONST})
 ALL_OPS: frozenset[NodeType] = UNARY_OPS | BINARY_OPS | VARIADIC_OPS
+
+# Operations that form a fully commutative alphabet (no operand ordering needed
+# except for POW if included). Inspired by GraphSR (Xiang et al., NeurIPS 2025).
+# SUB is replaced by ADD + NEG, DIV by MUL + INV.
+COMMUTATIVE_OPS: frozenset[NodeType] = frozenset(
+    {
+        NodeType.ADD,
+        NodeType.MUL,
+        NodeType.NEG,
+        NodeType.INV,
+        NodeType.SIN,
+        NodeType.COS,
+        NodeType.EXP,
+        NodeType.LOG,
+        NodeType.SQRT,
+        NodeType.ABS,
+    }
+)
 
 # Valid label characters (keys of LABEL_CHAR_MAP).
 VALID_LABEL_CHARS: frozenset[str] = frozenset(LABEL_CHAR_MAP.keys())
@@ -136,6 +175,23 @@ class OperationSet:
     def __len__(self) -> int:
         return len(self._ops)
 
+    @classmethod
+    def commutative(cls, *, include_pow: bool = False) -> OperationSet:
+        """Create an operation set with only commutative binary ops.
+
+        Replaces SUB/DIV with NEG/INV (unary decomposition).
+        All binary ops (ADD, MUL) are commutative, so no operand ordering
+        is needed in the isomorphism definition -- except for POW if included.
+
+        Args:
+            include_pow: If True, include POW (the sole non-commutative
+                binary op). Default False for fully commutative mode.
+        """
+        ops = COMMUTATIVE_OPS
+        if include_pow:
+            ops = ops | {NodeType.POW}
+        return cls(ops)
+
     def __repr__(self) -> str:
         names = sorted(op.name for op in self._ops if op not in LEAF_TYPES)
         return f"OperationSet({', '.join(names)})"
@@ -151,6 +207,7 @@ __all__: list[str] = [
     "VARIADIC_OPS",
     "LEAF_TYPES",
     "ALL_OPS",
+    "COMMUTATIVE_OPS",
     "VALID_LABEL_CHARS",
     "OperationSet",
 ]

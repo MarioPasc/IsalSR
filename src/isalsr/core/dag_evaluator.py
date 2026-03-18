@@ -121,6 +121,10 @@ def _apply_unary(label: NodeType, x: float) -> float:
         return _protected_sqrt(x)
     if label == NodeType.ABS:
         return abs(x)
+    if label == NodeType.NEG:
+        return -x
+    if label == NodeType.INV:
+        return _protected_inv(x)
     raise EvaluationError(f"Unknown unary op: {label}")
 
 
@@ -151,6 +155,18 @@ def _apply_variadic(label: NodeType, xs: list[float]) -> float:
 # ======================================================================
 # Protected operations (numerical stability)
 # ======================================================================
+
+
+def _protected_inv(x: float) -> float:
+    """Protected multiplicative inverse: 1/x if |x| > epsilon, else 1.0.
+
+    Semantically equivalent to ``_protected_div(1.0, x)`` -- same epsilon
+    threshold (1e-10) and fallback value (1.0).  This guarantees that
+    ``MUL(a, INV(b))`` evaluates identically to ``DIV(a, b)`` for all b.
+    """
+    if abs(x) > 1e-10:
+        return 1.0 / x
+    return 1.0
 
 
 def _protected_log(x: float) -> float:
