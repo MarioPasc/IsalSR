@@ -606,11 +606,15 @@ class LabeledDAG:
             if label == NodeType.CONST:
                 const_nodes.add(i)
 
-        # Copy all edges EXCEPT creation edges (edges TO CONST nodes).
-        for src in range(self._node_count):
-            for tgt in self._out_adj[src]:
-                if tgt in const_nodes:
-                    continue  # Skip creation edges; will re-add from x_1.
+        # Copy all edges preserving _input_order for non-CONST targets.
+        # CRITICAL: iterate by TARGET using original _input_order to preserve
+        # operand ordering for binary ops (B9). The old approach iterated by
+        # SOURCE, which scrambled _input_order when CONST had a lower node ID
+        # than the other operand of a binary op.
+        for tgt in range(self._node_count):
+            if tgt in const_nodes:
+                continue  # CONST targets get a new creation edge from x_1 below.
+            for src in self._input_order[tgt]:
                 new.add_edge(src, tgt)
 
         # Add normalized creation edges: x_1 (node 0) -> each CONST.

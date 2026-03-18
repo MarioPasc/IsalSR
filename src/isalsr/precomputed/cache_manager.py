@@ -106,7 +106,14 @@ class CacheManager:
         except ValueError:
             return None
 
-        return self._compute_entry_from_dag(dag, raw_string)
+        try:
+            return self._compute_entry_from_dag(dag, raw_string)
+        except (RuntimeError, ValueError) as exc:
+            # RuntimeError: canonical search failed for a pathological DAG.
+            # ValueError: DAG structure issue (unreachable nodes, etc.).
+            # Skip gracefully instead of crashing the entire shard.
+            log.debug("Skipping DAG due to %s: %s", type(exc).__name__, str(exc)[:80])
+            return None
 
     def _compute_entry_from_dag(
         self,
