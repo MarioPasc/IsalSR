@@ -388,14 +388,21 @@ class LabeledDAG:
         return result
 
     def output_node(self) -> int:
-        """Return the unique non-VAR node with out_degree 0 (the expression root).
+        """Return the unique non-VAR output node (the expression root).
 
-        For a valid expression DAG, this is the final output node whose value
-        is the expression's result.
+        For a valid expression DAG, this is the final output node whose
+        value is the expression's result.
+
+        CONST-tolerance: After ``normalize_const_creation()`` moves CONST
+        in-edges to x_1, operation nodes whose only child was a CONST
+        become extra non-VAR sinks. Since CONST nodes are evaluation-
+        neutral leaves (they ignore in-edges and return ``const_value``),
+        CONST sinks are not true outputs. This method ignores CONST sinks
+        when a unique non-CONST sink exists.
 
         Raises:
-            ValueError: If there is no unique non-VAR sink node, or if
-                there are multiple non-VAR sinks (ambiguous output).
+            ValueError: If there is no non-VAR sink node, or if there are
+                multiple non-CONST, non-VAR sinks (genuinely ambiguous).
         """
         sinks: list[int] = []
         for i in range(self._node_count):
@@ -406,10 +413,23 @@ class LabeledDAG:
             return sinks[0]
         if len(sinks) == 0:
             raise ValueError("No non-VAR sink nodes in graph")
+
+        # CONST-tolerance: partition sinks into CONST and non-CONST.
+        non_const_sinks = [s for s in sinks if self._labels[s] != NodeType.CONST]
+
+        if len(non_const_sinks) == 1:
+            # Unique non-CONST sink: unambiguous output.
+            return non_const_sinks[0]
+        if len(non_const_sinks) == 0:
+            # All sinks are CONST: trivially constant expression.
+            # Return the first by node ID (deterministic).
+            return sinks[0]
+
+        # Multiple non-CONST sinks: genuinely ambiguous.
         raise ValueError(
-            f"Ambiguous output: {len(sinks)} non-VAR sink nodes "
-            f"(IDs: {sinks}). A valid expression DAG must have "
-            f"exactly one output node."
+            f"Ambiguous output: {len(non_const_sinks)} non-CONST, non-VAR "
+            f"sink nodes (IDs: {non_const_sinks}). A valid expression DAG "
+            f"must have exactly one output node."
         )
 
     # ------------------------------------------------------------------

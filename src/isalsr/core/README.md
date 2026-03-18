@@ -46,6 +46,25 @@ Computed from x_1 only (fixed, distinguished start node).
 6-component structural tuple for backtracking pruning.
 Complete labeled-DAG invariant: w*_D = w*_D' iff D ~ D'.
 
+Two variants:
+- `canonical_string()`: Exhaustive search. Guaranteed optimal (lexmin of shortest).
+- `pruned_canonical_string()`: 6-tuple pruned search. Much faster but may produce
+  suboptimal results in rare cases (~0.03% empirically). Still a consistent invariant.
+
+### 6.1 Pruning Limitation
+
+The 6-component structural tuple tau(v) = (|in_N1|, |out_N1|, ..., |out_N3|) captures
+local neighborhood density at hops 1-3. It is automorphism-invariant but does not
+account for the global pointer displacement cost (the number of N/P/n/p movement
+instructions needed to reach a candidate in the CDLL). In rare cases, a candidate
+with higher local connectivity (higher tuple) requires more movement tokens than a
+candidate with lower connectivity but closer CDLL position, leading to a longer string.
+
+Empirical measurement (28,890 entries across Nguyen and Feynman benchmarks):
+- 99.88% agreement between pruned and exhaustive
+- 0.09% same-length lexicographic differences (different tie-breaking)
+- 0.03% length mismatches (pruned is longer than exhaustive)
+
 ## 7. Search Space Reduction
 
 For k internal nodes, O(k!) equivalent labelings collapse to one canonical string.

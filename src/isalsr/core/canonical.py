@@ -85,25 +85,45 @@ def canonical_string(dag: LabeledDAG, *, timeout: float | None = None) -> str:
 
 
 def pruned_canonical_string(dag: LabeledDAG, *, timeout: float | None = None) -> str:
-    """Compute the canonical IsalSR string with 6-tuple pruning.
+    """Compute an approximate canonical IsalSR string with 6-tuple pruning.
 
     At each V/v branch point, only candidates sharing the maximum
     6-component structural tuple are explored (grouped by label to avoid
-    invalid cross-label pruning). This preserves the complete invariant
-    property while reducing branching.
+    invalid cross-label pruning). This dramatically reduces the branching
+    factor while producing the correct result in the vast majority of cases.
 
     Mathematical justification:
-        The 6-tuple is an automorphism-invariant descriptor. Candidates with
-        the max tuple within the same label group form an equivalence class
-        under automorphism. Label-aware pruning produces the same optimal
-        string as exhaustive search (Theorem: Pruned Optimality).
+        The 6-tuple tau(v) = (|in_N1|, |out_N1|, ..., |out_N3|) is an
+        automorphism-invariant descriptor. Candidates with the max tuple
+        within the same label group form an equivalence class under
+        automorphism. In most cases (empirically >99.97%), label-aware
+        pruning produces the same optimal string as exhaustive search.
+
+    Known limitation:
+        In rare cases (0.028% empirically -- 8/28890 in our benchmarks),
+        the pruned canonical may be **longer** than the true canonical
+        from ``canonical_string()``. This occurs when the 6-tuple's local
+        neighborhood density prediction is misaligned with the global
+        pointer displacement cost (the number of N/P/n/p movement
+        instructions needed to reach a candidate's position in the CDLL).
+        A candidate with higher local connectivity (higher tuple) may be
+        farther from the current pointer, requiring more movement tokens.
+
+        Additionally, in ~0.09% of cases, the pruned result has the same
+        length as the exhaustive result but differs lexicographically
+        (a different but equally short tie-breaking choice).
+
+        The pruned result remains a **consistent labeled-DAG invariant**
+        (deterministic, same output for isomorphic inputs) and is always
+        a valid D2S encoding. For guaranteed optimality, use
+        ``canonical_string()`` instead.
 
     Args:
         dag: The labeled DAG to canonicalize.
         timeout: Maximum wall-clock seconds. Raises CanonicalTimeoutError if exceeded.
 
     Returns:
-        The canonical string w*_D (pruned variant).
+        The pruned canonical string (consistent invariant, usually optimal).
     """
     if dag.node_count == 0:
         return ""

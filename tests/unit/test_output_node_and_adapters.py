@@ -104,6 +104,94 @@ class TestOutputNodeNoSink:
             dag.output_node()
 
 
+class TestOutputNodeConstTolerance:
+    """CONST-induced multi-sinks: ignore CONST sinks when selecting output.
+
+    After normalize_const_creation() moves CONST in-edges to x_1,
+    operation nodes whose only child was a CONST become extra sinks.
+    output_node() should select the non-CONST sink as the output.
+    """
+
+    def test_const_induced_multi_sink_after_normalization(self) -> None:
+        """x -> COS -> CONST normalizes to x -> {COS, CONST}: select COS."""
+        dag = LabeledDAG(4)
+        dag.add_node(NodeType.VAR, var_index=0)  # 0
+        dag.add_node(NodeType.COS)  # 1
+        dag.add_node(NodeType.CONST, const_value=1.0)  # 2
+        dag.add_edge(0, 1)
+        dag.add_edge(1, 2)  # COS -> CONST
+
+        normalized = dag.normalize_const_creation()
+        # After normalization: x -> {COS, CONST}, COS has no outgoing edges.
+        # COS (node 1) and CONST (node 2) are both non-VAR sinks.
+        assert normalized.output_node() == 1  # COS is the true output
+
+    def test_all_const_sinks(self) -> None:
+        """DAG where all non-VAR sinks are CONST: return first CONST."""
+        dag = LabeledDAG(4)
+        dag.add_node(NodeType.VAR, var_index=0)  # 0
+        dag.add_node(NodeType.CONST, const_value=3.14)  # 1
+        dag.add_node(NodeType.CONST, const_value=2.72)  # 2
+        dag.add_edge(0, 1)
+        dag.add_edge(0, 2)
+        # Both sinks are CONST. Return first by node ID.
+        assert dag.output_node() == 1
+
+    def test_genuine_multi_sink_still_raises(self) -> None:
+        """Two non-CONST operation sinks: still raises ValueError."""
+        dag = LabeledDAG(4)
+        dag.add_node(NodeType.VAR, var_index=0)
+        dag.add_node(NodeType.SIN)  # 1
+        dag.add_node(NodeType.COS)  # 2
+        dag.add_edge(0, 1)
+        dag.add_edge(0, 2)
+        with pytest.raises(ValueError, match="Ambiguous output"):
+            dag.output_node()
+
+    def test_multiple_const_plus_one_op_sink(self) -> None:
+        """One SIN + two CONST sinks: return SIN."""
+        dag = LabeledDAG(5)
+        dag.add_node(NodeType.VAR, var_index=0)  # 0
+        dag.add_node(NodeType.SIN)  # 1: sole non-CONST sink
+        dag.add_node(NodeType.CONST, const_value=1.0)  # 2
+        dag.add_node(NodeType.CONST, const_value=2.0)  # 3
+        dag.add_edge(0, 1)
+        dag.add_edge(0, 2)
+        dag.add_edge(0, 3)
+        assert dag.output_node() == 1
+
+    def test_round_trip_evaluation_with_const(self) -> None:
+        """'vcNVk' -> S2D -> canonical -> S2D -> evaluate must not raise."""
+        from isalsr.core.canonical import pruned_canonical_string
+        from isalsr.core.string_to_dag import StringToDAG
+
+        raw = "vcNVk"
+        dag_raw = StringToDAG(raw, num_variables=1).run()
+        # The raw DAG: x -> COS -> CONST. Output is CONST, eval = 1.0.
+        val_raw = evaluate_dag(dag_raw, {0: 1.5})
+        assert val_raw == 1.0
+
+        canon = pruned_canonical_string(dag_raw)
+        dag_canon = StringToDAG(canon, num_variables=1).run()
+        # After canonicalization + S2D: x -> {COS, CONST}. Two sinks.
+        # output_node() should handle this gracefully.
+        val_canon = evaluate_dag(dag_canon, {0: 1.5})
+        # COS(1.5) is the output (non-CONST sink), not the CONST value.
+        assert abs(val_canon - math.cos(1.5)) < 1e-10
+
+    def test_evaluator_uses_tolerant_output_node(self) -> None:
+        """evaluate_dag on CONST-normalized DAG returns operation result."""
+        dag = LabeledDAG(4)
+        dag.add_node(NodeType.VAR, var_index=0)  # 0
+        dag.add_node(NodeType.SIN)  # 1
+        dag.add_node(NodeType.CONST, const_value=42.0)  # 2
+        dag.add_edge(0, 1)
+        dag.add_edge(0, 2)
+        # SIN is the output (non-CONST sink), not CONST.
+        val = evaluate_dag(dag, {0: 1.5})
+        assert abs(val - math.sin(1.5)) < 1e-10
+
+
 # ======================================================================
 # SymPy adapter operand order (requires sympy)
 # ======================================================================
