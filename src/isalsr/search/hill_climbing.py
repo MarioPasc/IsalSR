@@ -13,12 +13,15 @@ from typing import Any
 
 import numpy as np
 
-from isalsr.core.canonical import canonical_string
+from isalsr.core.canonical import CanonicalTimeoutError, pruned_canonical_string
 from isalsr.core.node_types import OperationSet
 from isalsr.core.string_to_dag import StringToDAG
 from isalsr.evaluation.fitness import evaluate_expression
 from isalsr.search.operators import insertion_mutation, point_mutation
 from isalsr.search.random_search import random_isalsr_string
+
+# Default timeout (seconds) per canonicalization call.
+_CANON_TIMEOUT: float = 5.0
 
 log = logging.getLogger(__name__)
 
@@ -36,9 +39,10 @@ def hill_climbing(
 ) -> list[dict[str, object]]:
     """Multi-restart hill climbing in the IsalSR string space.
 
-    When ``use_canonical=True`` (default), strings are canonicalized after
-    every mutation. When ``use_canonical=False``, no canonicalization
-    (baseline for WITH vs WITHOUT comparison).
+    When ``use_canonical=True`` (default), strings are canonicalized
+    (pruned 6-tuple variant with timeout) after every mutation.
+    When ``use_canonical=False``, no canonicalization (baseline for
+    WITH vs WITHOUT comparison).
 
     Args:
         x_data: Input matrix (N, m).
@@ -75,7 +79,7 @@ def hill_climbing(
                 if dag.node_count <= num_variables:
                     continue
                 if use_canonical:
-                    canon = canonical_string(dag)
+                    canon = pruned_canonical_string(dag, timeout=_CANON_TIMEOUT)
                 else:
                     from isalsr.core.dag_to_string import DAGToString
 
@@ -84,6 +88,8 @@ def hill_climbing(
                 if metrics is not None and metrics["r2"] > current_metrics["r2"]:
                     current = canon
                     current_metrics = metrics
+            except CanonicalTimeoutError:
+                continue  # Skip DAGs too expensive to canonicalize.
             except Exception:  # noqa: BLE001
                 continue
 
@@ -108,11 +114,11 @@ def _init_canonical(
             if dag.node_count <= num_variables:
                 continue
             if use_canonical:
-                return canonical_string(dag)
+                return pruned_canonical_string(dag, timeout=_CANON_TIMEOUT)
             from isalsr.core.dag_to_string import DAGToString
 
             return DAGToString(dag).run()
-        except Exception:  # noqa: BLE001
+        except (CanonicalTimeoutError, Exception):  # noqa: BLE001
             continue
     return None
 

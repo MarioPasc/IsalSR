@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from functools import lru_cache
 
 from isalsr.core.cdll import CircularDoublyLinkedList
 from isalsr.core.labeled_dag import LabeledDAG
@@ -29,7 +30,8 @@ from isalsr.core.node_types import BINARY_OPS, NODE_TYPE_TO_LABEL, NodeType
 log = logging.getLogger(__name__)
 
 
-def generate_pairs_sorted_by_sum(m: int) -> list[tuple[int, int]]:
+@lru_cache(maxsize=64)
+def generate_pairs_sorted_by_sum(m: int) -> tuple[tuple[int, int], ...]:
     """Return all integer pairs (a, b) with a, b in [-m, m],
     sorted by |a| + |b| (total displacement cost).
 
@@ -39,11 +41,14 @@ def generate_pairs_sorted_by_sum(m: int) -> list[tuple[int, int]]:
     This is the "spiral enumeration" of Z^2 around the origin from
     Lopez-Rubio (2025), Idea.pdf.
 
+    Results are cached (LRU, maxsize=64) to avoid regenerating and sorting
+    O(m^2) pairs on every call during canonical backtracking.
+
     Args:
         m: Positive integer defining the range bounds.
 
     Returns:
-        Sorted list of (a, b) tuples.
+        Sorted tuple of (a, b) pairs (tuple for hashability/caching).
 
     Raises:
         ValueError: If *m* is not positive.
@@ -54,7 +59,7 @@ def generate_pairs_sorted_by_sum(m: int) -> list[tuple[int, int]]:
     pairs: list[tuple[int, int]] = [(a, b) for a in range(-m, m + 1) for b in range(-m, m + 1)]
     # BUG FIX B2: was pair[0] + pair[1]. Must be |a| + |b|.
     pairs.sort(key=lambda pair: (abs(pair[0]) + abs(pair[1]), abs(pair[0]), pair))
-    return pairs
+    return tuple(pairs)
 
 
 class DAGToString:

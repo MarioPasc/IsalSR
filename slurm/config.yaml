@@ -27,6 +27,8 @@ experiments:
     mem_gb: 16
 
   # --- Random Search: WITH canonicalization ---
+  # Array job: each task runs 1 of 30 independent runs.
+  # Time limit is PER TASK (single run), not total.
   random_search_canon:
     enabled: true
     n_iterations: 5000
@@ -34,7 +36,7 @@ experiments:
     n_runs: 30
     seed_base: 42
     use_canonical: true
-    time_limit: "04:00:00"
+    time_limit: "02:00:00"    # per task (was 04:00:00 for 30 sequential)
     cpus: 1
     mem_gb: 8
 
@@ -46,7 +48,7 @@ experiments:
     n_runs: 30
     seed_base: 42
     use_canonical: false
-    time_limit: "02:00:00"
+    time_limit: "01:00:00"    # per task (was 02:00:00 for 30 sequential)
     cpus: 1
     mem_gb: 8
 
@@ -58,7 +60,7 @@ experiments:
     max_tokens: 30
     n_runs: 30
     seed_base: 42
-    time_limit: "08:00:00"
+    time_limit: "02:00:00"    # per task (was 08:00:00 for 30 sequential)
     cpus: 1
     mem_gb: 8
 
@@ -70,7 +72,7 @@ experiments:
     max_tokens: 30
     n_runs: 30
     seed_base: 42
-    time_limit: "04:00:00"
+    time_limit: "01:00:00"    # per task (was 04:00:00 for 30 sequential)
     cpus: 1
     mem_gb: 8
 
@@ -84,7 +86,7 @@ experiments:
     crossover_rate: 0.7
     n_runs: 30
     seed_base: 42
-    time_limit: "12:00:00"
+    time_limit: "04:00:00"    # per task (was 12:00:00 for 30 sequential)
     cpus: 1
     mem_gb: 16
 
@@ -98,7 +100,7 @@ experiments:
     crossover_rate: 0.7
     n_runs: 30
     seed_base: 42
-    time_limit: "06:00:00"
+    time_limit: "02:00:00"    # per task (was 06:00:00 for 30 sequential)
     cpus: 1
     mem_gb: 16
 

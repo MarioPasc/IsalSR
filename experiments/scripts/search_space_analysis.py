@@ -29,10 +29,13 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS  # noqa: E402
-from isalsr.core.canonical import canonical_string  # noqa: E402
+from isalsr.core.canonical import CanonicalTimeoutError, pruned_canonical_string  # noqa: E402
 from isalsr.core.node_types import LABEL_CHAR_MAP, OperationSet  # noqa: E402
 from isalsr.core.string_to_dag import StringToDAG  # noqa: E402
 from isalsr.search.random_search import random_isalsr_string  # noqa: E402
+
+# Default timeout (seconds) per canonicalization call.
+_CANON_TIMEOUT: float = 5.0
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -53,6 +56,7 @@ def analyze_benchmark(
 
     canonical_set: set[str] = set()
     total_valid = 0
+    n_timeouts = 0
     node_counts: list[int] = []
 
     for _ in range(n_strings):
@@ -62,9 +66,12 @@ def analyze_benchmark(
             if dag.node_count <= nv:
                 continue
             total_valid += 1
-            canon = canonical_string(dag)
+            canon = pruned_canonical_string(dag, timeout=_CANON_TIMEOUT)
             canonical_set.add(canon)
             node_counts.append(dag.node_count - nv)
+        except CanonicalTimeoutError:
+            n_timeouts += 1
+            continue
         except Exception:  # noqa: BLE001
             continue
 
@@ -72,6 +79,9 @@ def analyze_benchmark(
     avg_k = float(np.mean(node_counts)) if node_counts else 0.0
     reduction = total_valid / max(n_unique, 1)
     theoretical = math.factorial(max(1, round(avg_k)))
+
+    if n_timeouts > 0:
+        log.warning("%s: %d canonicalization timeouts", benchmark["name"], n_timeouts)
 
     log.info(
         "%s: %d valid / %d unique = %.1fx (k=%.1f, k!=%.0f)",

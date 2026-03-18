@@ -109,6 +109,10 @@ submit_experiment() {
     cpus=$(echo "$exp_config" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['cpus'])")
     mem_gb=$(echo "$exp_config" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['mem_gb'])")
 
+    # Check if this experiment uses array jobs (has n_runs).
+    local n_runs
+    n_runs=$(echo "$exp_config" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin).get('n_runs', 0))")
+
     local out_dir="${RESULTS_DIR}/${exp_name}"
     local worker_script="${SCRIPT_DIR}/workers/${exp_name}_slurm.sh"
 
@@ -122,10 +126,22 @@ submit_experiment() {
         mkdir -p "${out_dir}"
     fi
 
+    # Build sbatch command. Use --array for multi-run experiments.
+    local array_flag=""
+    local output_pattern error_pattern
+    if [[ "$n_runs" -gt 0 ]]; then
+        array_flag="--array=1-${n_runs}"
+        output_pattern="${out_dir}/slurm_%A_%a.out"
+        error_pattern="${out_dir}/slurm_%A_%a.err"
+    else
+        output_pattern="${out_dir}/slurm_%j.out"
+        error_pattern="${out_dir}/slurm_%j.err"
+    fi
+
     local sbatch_cmd="sbatch \
         --job-name=isalsr_${exp_name} \
-        --output=${out_dir}/slurm_%j.out \
-        --error=${out_dir}/slurm_%j.err \
+        --output=${output_pattern} \
+        --error=${error_pattern} \
         --time=${time_limit} \
         --cpus-per-task=${cpus} \
         --mem=${mem_gb}G \
@@ -133,12 +149,16 @@ submit_experiment() {
         --account=${ACCOUNT} \
         --chdir=${REPO_DIR} \
         --export=ALL,ISALSR_REPO_DIR=${REPO_DIR} \
+        ${array_flag} \
         ${worker_script}"
 
     echo "[${exp_name}]"
     echo "  Time:  ${time_limit}"
     echo "  CPUs:  ${cpus}"
     echo "  Mem:   ${mem_gb}G"
+    if [[ "$n_runs" -gt 0 ]]; then
+        echo "  Array: 1-${n_runs} (${n_runs} parallel tasks)"
+    fi
     echo "  Out:   ${out_dir}"
 
     if [[ "$DRY_RUN" == "true" ]]; then

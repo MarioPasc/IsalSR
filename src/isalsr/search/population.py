@@ -14,12 +14,15 @@ from typing import Any
 
 import numpy as np
 
-from isalsr.core.canonical import canonical_string
+from isalsr.core.canonical import CanonicalTimeoutError, pruned_canonical_string
 from isalsr.core.node_types import OperationSet
 from isalsr.core.string_to_dag import StringToDAG
 from isalsr.evaluation.fitness import evaluate_expression
 from isalsr.search.operators import one_point_crossover, point_mutation
 from isalsr.search.random_search import random_isalsr_string
+
+# Default timeout (seconds) per canonicalization call.
+_CANON_TIMEOUT: float = 5.0
 
 log = logging.getLogger(__name__)
 
@@ -63,11 +66,11 @@ class Population:
                 dag = StringToDAG(raw, self._num_variables, self._allowed_ops).run()
                 if dag.node_count <= self._num_variables:
                     continue
-                canon = canonical_string(dag)  # MANDATORY
+                canon = pruned_canonical_string(dag, timeout=_CANON_TIMEOUT)  # MANDATORY
                 metrics = evaluate_expression(dag, x_data, y_true)
                 self._individuals.append(canon)
                 self._fitness.append(metrics["r2"])
-            except Exception:  # noqa: BLE001
+            except (CanonicalTimeoutError, Exception):  # noqa: BLE001
                 continue
 
     def select_parents(
@@ -143,7 +146,7 @@ class Population:
                         if dag.node_count <= self._num_variables:
                             continue
                         if use_canonical:
-                            canon = canonical_string(dag)
+                            canon = pruned_canonical_string(dag, timeout=_CANON_TIMEOUT)
                         else:
                             from isalsr.core.dag_to_string import DAGToString
 
@@ -152,6 +155,8 @@ class Population:
                         metrics = evaluate_expression(dag2, x_data, y_true)
                         new_individuals.append(canon)
                         new_fitness.append(metrics["r2"])
+                    except CanonicalTimeoutError:
+                        continue  # Skip expensive canonicalizations.
                     except Exception:  # noqa: BLE001
                         continue
 

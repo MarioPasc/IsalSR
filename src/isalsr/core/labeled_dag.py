@@ -110,10 +110,26 @@ class LabeledDAG:
         self._validate_node(node)
         return frozenset(self._out_adj[node])
 
+    def out_neighbors_raw(self, node: int) -> set[int]:
+        """Return the underlying out-adjacency set for *node* (read-only use).
+
+        Skips frozenset copy. Callers MUST NOT mutate the returned set.
+        For performance-critical internal use (canonical backtracking).
+        """
+        return self._out_adj[node]
+
     def in_neighbors(self, node: int) -> frozenset[int]:
         """Return nodes that have edges into *node* (source -> node)."""
         self._validate_node(node)
         return frozenset(self._in_adj[node])
+
+    def in_neighbors_raw(self, node: int) -> set[int]:
+        """Return the underlying in-adjacency set for *node* (read-only use).
+
+        Skips frozenset copy. Callers MUST NOT mutate the returned set.
+        For performance-critical internal use (canonical backtracking).
+        """
+        return self._in_adj[node]
 
     def out_degree(self, node: int) -> int:
         """Return the number of outgoing edges from *node*."""
@@ -150,6 +166,27 @@ class LabeledDAG:
         """
         self._validate_node(node)
         return list(self._input_order[node])
+
+    def has_edge_unchecked(self, source: int, target: int) -> bool:
+        """Return whether edge source -> target exists (no bounds check).
+
+        For performance-critical internal use where node IDs are guaranteed valid.
+        """
+        return target in self._out_adj[source]
+
+    def node_label_unchecked(self, node: int) -> NodeType:
+        """Return node label without bounds check.
+
+        For performance-critical internal use where node ID is guaranteed valid.
+        """
+        return self._labels[node]  # type: ignore[return-value]
+
+    def node_data_unchecked(self, node: int) -> dict[str, int | float]:
+        """Return per-node metadata without bounds check.
+
+        For performance-critical internal use where node ID is guaranteed valid.
+        """
+        return self._node_data[node]
 
     # ------------------------------------------------------------------
     # Mutation
@@ -216,6 +253,25 @@ class LabeledDAG:
         self._input_order[target].append(source)
         self._edge_count += 1
         return True
+
+    def add_edge_unchecked(self, source: int, target: int) -> None:
+        """Add directed edge source -> target WITHOUT cycle or duplicate checks.
+
+        Use ONLY when acyclicity is guaranteed by construction, e.g., when
+        *target* is a freshly created node with no outgoing edges (V/v in
+        canonical backtracking). Skips BFS reachability check for O(1)
+        insertion instead of O(V+E).
+
+        IMPORTANT: Still tracks _input_order for operand ordering (B9).
+
+        Args:
+            source: Source node ID.
+            target: Target node ID.
+        """
+        self._out_adj[source].add(target)
+        self._in_adj[target].add(source)
+        self._input_order[target].append(source)
+        self._edge_count += 1
 
     def remove_edge(self, source: int, target: int) -> bool:
         """Remove directed edge source -> target.

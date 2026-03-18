@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# SLURM compute worker: gp_nocanon
-# Runs 30 independent experiments (seeds 42..71) across all Nguyen benchmarks.
+# SLURM compute worker: gp_nocanon (ARRAY JOB)
+# Each array task runs ONE independent experiment.
+# Submit with: sbatch --array=1-30 gp_nocanon_slurm.sh
 set -euo pipefail
 
-echo "=== gp_nocanon: SLURM Worker ==="
+echo "=== gp_nocanon: SLURM Array Task ==="
 echo "Job ID: ${SLURM_JOB_ID:-local}"
+echo "Array Task ID: ${SLURM_ARRAY_TASK_ID:-1}"
 echo "Node:   $(hostname)"
 echo "Start:  $(date)"
 
@@ -19,27 +21,23 @@ cd "$REPO_DIR"
 RESULTS_DIR=$($PYTHON -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['results_dir'])")
 BENCH_CFG=$($PYTHON -c "import yaml,json; json.dump(yaml.safe_load(open('${CONFIG}'))['experiments']['gp_nocanon'], __import__('sys').stdout)")
 
-N_RUNS=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('n_runs', 30))")
 SEED_BASE=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('seed_base', 42))")
 OUT_DIR="${RESULTS_DIR}/gp_nocanon"
 
 mkdir -p "$OUT_DIR"
-echo "Config: n_runs=$N_RUNS, seed_base=$SEED_BASE"
+
+RUN_ID="${SLURM_ARRAY_TASK_ID:-1}"
+SEED=$((SEED_BASE + RUN_ID - 1))
+
+echo "Run ${RUN_ID} (seed=${SEED})"
 echo "Output: $OUT_DIR"
 
-# Run 30 independent experiments sequentially within this job
-for RUN_ID in $(seq 1 $N_RUNS); do
-    SEED=$((SEED_BASE + RUN_ID - 1))
-    echo ""
-    echo "--- Run ${RUN_ID}/${N_RUNS} (seed=${SEED}) ---"
-    python experiments/scripts/run_gp.py \
-        --pop-size 100 --n-generations 50 --max-tokens 30 \
-        --seed "$SEED" \
-        --run-id "$RUN_ID" \
-        --output-dir "$OUT_DIR" \
-        --no-canon \
-        || echo "WARNING: Run $RUN_ID failed (seed=$SEED)"
-done
+python experiments/scripts/run_gp.py \
+    --pop-size 100 --n-generations 50 --max-tokens 30 \
+    --seed "$SEED" \
+    --run-id "$RUN_ID" \
+    --output-dir "$OUT_DIR" \
+    --no-canon
 
 echo ""
-echo "=== All runs complete: $(date) ==="
+echo "=== Run ${RUN_ID} complete: $(date) ==="
