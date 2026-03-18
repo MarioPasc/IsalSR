@@ -382,11 +382,13 @@ def _draw_pointer_arrow(
 
 
 def _compute_dag_layout(dag: LabeledDAG) -> dict[int, tuple[float, float]]:
-    """Compute a layered layout for a DAG using topological sort.
+    """Compute a layered layout for a DAG with barycentric edge-crossing reduction.
 
-    Uses a top-down layered approach: sources (VAR nodes) at the bottom,
-    output node at the top. Nodes are assigned layers by longest path from
-    any source, then spread horizontally within each layer.
+    Uses a Sugiyama-style layered approach:
+    1. Assign layers by longest path from sources (VAR nodes at bottom).
+    2. Order nodes within each layer by the **barycenter** (mean x-position
+       of parent nodes), which minimizes edge crossings.
+    3. Apply 2 top-down + 2 bottom-up ordering sweeps for refinement.
 
     Args:
         dag: The DAG to lay out.
@@ -397,7 +399,6 @@ def _compute_dag_layout(dag: LabeledDAG) -> dict[int, tuple[float, float]]:
     if dag.node_count == 0:
         return {}
 
-    # Compute layer (longest path from any node with in_degree 0)
     n = dag.node_count
     layer: list[int] = [0] * n
     order = dag.topological_sort()
@@ -406,19 +407,57 @@ def _compute_dag_layout(dag: LabeledDAG) -> dict[int, tuple[float, float]]:
             if neighbor < n:
                 layer[neighbor] = max(layer[neighbor], layer[node] + 1)
 
-    # Group nodes by layer
     max_layer = max(layer) if layer else 0
     layers: dict[int, list[int]] = {lv: [] for lv in range(max_layer + 1)}
     for node in range(n):
         layers[layer[node]].append(node)
 
-    # Assign positions: y = layer (bottom to top), x = spread within layer
+    # Initial ordering: sort by node ID within each layer (stable baseline).
+    for lv in layers:
+        layers[lv] = sorted(layers[lv])
+
+    # Assign initial x-positions (evenly spaced).
+    pos_x: dict[int, float] = {}
+    for lv, nodes in layers.items():
+        for i, node in enumerate(nodes):
+            pos_x[node] = float(i)
+
+    # Barycentric ordering sweeps to minimize edge crossings.
+    # 2 top-down passes (order by parent x-means) + 2 bottom-up passes.
+    for _sweep in range(2):
+        # Top-down: order layer lv by mean x of parents (in layer lv-1).
+        for lv in range(1, max_layer + 1):
+            bary: dict[int, float] = {}
+            for node in layers[lv]:
+                parents = [p for p in dag.in_neighbors(node) if layer[p] == lv - 1]
+                if parents:
+                    bary[node] = sum(pos_x[p] for p in parents) / len(parents)
+                else:
+                    bary[node] = pos_x[node]
+            layers[lv] = sorted(layers[lv], key=lambda nd: bary[nd])
+            for i, node in enumerate(layers[lv]):
+                pos_x[node] = float(i)
+
+        # Bottom-up: order layer lv by mean x of children (in layer lv+1).
+        for lv in range(max_layer - 1, -1, -1):
+            bary = {}
+            for node in layers[lv]:
+                children = [c for c in dag.out_neighbors(node) if layer[c] == lv + 1]
+                if children:
+                    bary[node] = sum(pos_x[c] for c in children) / len(children)
+                else:
+                    bary[node] = pos_x[node]
+            layers[lv] = sorted(layers[lv], key=lambda nd: bary[nd])
+            for i, node in enumerate(layers[lv]):
+                pos_x[node] = float(i)
+
+    # Final positions: center each layer horizontally.
     pos: dict[int, tuple[float, float]] = {}
     for lv, nodes in layers.items():
         width = len(nodes)
-        for i, node in enumerate(sorted(nodes)):
-            x = (i - (width - 1) / 2.0) * 1.2
-            y = lv * 1.0
+        for i, node in enumerate(nodes):
+            x = (i - (width - 1) / 2.0) * 1.6
+            y = lv * 1.4
             pos[node] = (x, y)
 
     return pos
@@ -431,7 +470,7 @@ def draw_dag(
     pos: dict[int, tuple[float, float]] | None = None,
     ghost_nodes: set[int] | None = None,
     ghost_edges: set[tuple[int, int]] | None = None,
-    node_size: float = 0.20,
+    node_size: float = 0.38,
 ) -> dict[int, tuple[float, float]]:
     """Draw a labeled DAG with optional ghost rendering for D2S.
 
@@ -494,9 +533,9 @@ def draw_dag(
             xytext=(sx, sy),
             arrowprops={
                 "arrowstyle": "-|>",
-                "color": "0.75" if is_ghost else "0.35",
-                "linewidth": 0.5 if is_ghost else 0.8,
-                "linestyle": "dashed" if is_ghost else "solid",
+                "color": "0.82" if is_ghost else "0.25",
+                "linewidth": 0.4 if is_ghost else 1.0,
+                "linestyle": (0, (3, 3)) if is_ghost else "solid",
                 "shrinkA": 0,
                 "shrinkB": 0,
                 "mutation_scale": 8,
@@ -541,7 +580,7 @@ def draw_dag(
             display_label,
             ha="center",
             va="center",
-            fontsize=5,
+            fontsize=5.5,
             fontweight="bold",
             color=text_color,
             zorder=4,
@@ -647,7 +686,12 @@ def compute_d2s_ghost_state(
     """Determine which nodes and edges in the full DAG are ghosts (not yet encoded).
 
     The D2S output_dag contains the nodes and edges encoded so far. Nodes in
-    the full DAG that have no corresponding node in the output DAG are ghosts.
+    the full_dag that have no corresponding node in the output_dag are ghosts.
+
+    Note: This comparison uses raw node IDs, which is correct when the D2S
+    operates on a canonical-derived DAG (where the i2o mapping is identity
+    because S2D and D2S traverse nodes in the same order). For DAGs with
+    non-identity i2o mappings, a mapping-aware version would be needed.
 
     Args:
         full_dag: The complete target DAG.
@@ -656,13 +700,11 @@ def compute_d2s_ghost_state(
     Returns:
         (ghost_nodes, ghost_edges) -- sets of IDs/edge tuples that are not yet encoded.
     """
-    # Nodes in full_dag with ID >= output_dag.node_count are ghosts
     ghost_nodes: set[int] = set()
     for i in range(full_dag.node_count):
         if i >= output_dag.node_count:
             ghost_nodes.add(i)
 
-    # Edges in full_dag not present in output_dag are ghosts
     ghost_edges: set[tuple[int, int]] = set()
     for src in range(full_dag.node_count):
         for tgt in full_dag.out_neighbors(src):
@@ -724,8 +766,12 @@ def generate_algorithm_overview(
     logger.info("S2D snapshot indices: %s (of %d)", s2d_indices, len(s2d_trace))
     logger.info("D2S snapshot indices: %s (of %d)", d2s_indices, len(d2s_trace))
 
-    # Compute fixed layouts
-    full_dag_pos = _compute_dag_layout(full_dag)
+    # Compute fixed layouts.
+    # D2S operates on s2d_dag (the DAG from S2D), NOT the original full_dag.
+    # Using full_dag for ghost comparison would produce wrong results because
+    # node IDs may differ (e.g., SIN=node2 in full_dag vs COS=node2 in s2d_dag).
+    d2s_target_dag = s2d_dag  # The DAG that D2S actually operates on.
+    d2s_target_pos = _compute_dag_layout(d2s_target_dag)
     s2d_final_dag = s2d_trace[-1][0]
     s2d_dag_pos = _compute_dag_layout(s2d_final_dag)
 
@@ -840,13 +886,14 @@ def generate_algorithm_overview(
             current_token_idx,
         )
 
-        # Row 2: Full DAG with ghost rendering
-        # The full_dag is the target; output_dag_snap shows what D2S has encoded
-        ghost_nodes, ghost_edges = compute_d2s_ghost_state(full_dag, output_dag_snap)
+        # Row 2: Target DAG with ghost rendering.
+        # Use d2s_target_dag (the DAG D2S operates on), NOT full_dag,
+        # because D2S builds output with d2s_target_dag's node IDs.
+        ghost_nodes, ghost_edges = compute_d2s_ghost_state(d2s_target_dag, output_dag_snap)
         draw_dag(
             d2s_graph_axes[col],
-            full_dag,
-            pos=full_dag_pos,
+            d2s_target_dag,
+            pos=d2s_target_pos,
             ghost_nodes=ghost_nodes,
             ghost_edges=ghost_edges,
         )
