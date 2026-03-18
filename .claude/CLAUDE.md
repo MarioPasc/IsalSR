@@ -131,6 +131,7 @@ src/isalsr/search/                   String mutation/crossover, search algorithm
 2. **`insert_after(cdll_node, graph_node)`** -- first arg is CDLL index, second is payload.
 3. **`LabeledDAG.add_edge(source, target)`** -- both args are graph node indices.
    Edge semantics: source provides input to target (data flows source → target).
+   **`_input_order`** tracks insertion order per node (critical for binary ops).
 4. **Pointer immobility on V/v.** The pointer does NOT advance after V/v insertion.
 5. **`generate_pairs_sorted_by_sum`** must sort by `|a|+|b|` (total displacement cost),
    not `a+b` (algebraic sum). The number of movement instructions emitted is `|a|+|b|`.
@@ -138,6 +139,16 @@ src/isalsr/search/                   String mutation/crossover, search algorithm
    If yes, the instruction is silently skipped (no-op). V/v never creates cycles.
 7. **Variables are pre-inserted.** The m input variables exist before any instructions
    execute. They are NOT created by V/v instructions. They have fixed, known labels.
+8. **Operand order for binary ops (B9).** For SUB, DIV, POW: the first `add_edge` call
+   sets the first operand. V/v creates the first edge; C/c creates the second.
+   Evaluator uses `ordered_inputs()`, NOT `sorted(in_neighbors())`.
+   D2S/canonical only create binary ops via V/v from the FIRST operand.
+9. **CONST creation edge normalization.** CONST nodes ignore in-edges (evaluation-neutral)
+   but need a "creation edge" for D2S reachability. `normalize_const_creation()` moves
+   all CONST creation edges to x_1 (node 0). Applied in canonical, is_isomorphic, from_sympy.
+10. **Label-aware pruning (B13).** The 6-tuple pruning must partition candidates BY LABEL
+    before taking max-τ. Cross-label pruning is invalid (automorphisms preserve labels).
+    Implemented in canonical.py for both V (primary) and v (secondary) sections.
 
 ### Edge Direction Convention
 

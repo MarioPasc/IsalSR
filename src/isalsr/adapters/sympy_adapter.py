@@ -50,7 +50,14 @@ class SympyAdapter(DAGAdapter[sympy.Expr]):
         for node in order:
             label = dag.node_label(node)
             data = dag.node_data(node)
-            in_nodes = sorted(dag.in_neighbors(node))
+            # BUG FIX B9: Use ordered_inputs for binary ops to preserve
+            # operand order (SUB, DIV, POW are non-commutative).
+            from isalsr.core.node_types import BINARY_OPS as _BIN_OPS
+
+            if label in _BIN_OPS:
+                in_nodes = dag.ordered_inputs(node)
+            else:
+                in_nodes = sorted(dag.in_neighbors(node))
 
             if label == NodeType.VAR:
                 var_idx = int(data.get("var_index", 0))
@@ -124,6 +131,15 @@ class SympyAdapter(DAGAdapter[sympy.Expr]):
             dag.add_node(NodeType.VAR, var_index=i)
 
         _build_dag(expr, dag, var_map, memo)
+
+        # Add creation edges for CONST nodes (required for D2S reachability).
+        # CONST nodes are evaluation-neutral leaves that ignore in-edges,
+        # but D2S needs them reachable from VAR nodes via outgoing edges.
+        # Normalize: always create from x_1 (node 0).
+        for i in range(dag.node_count):
+            if dag.node_label(i) == NodeType.CONST and dag.in_degree(i) == 0:
+                dag.add_edge(0, i)
+
         return dag
 
     def from_external(self, obj: sympy.Expr) -> LabeledDAG:

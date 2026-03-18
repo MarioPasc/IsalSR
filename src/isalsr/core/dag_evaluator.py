@@ -72,7 +72,7 @@ def evaluate_dag(dag: LabeledDAG, inputs: dict[int, float]) -> float:
             values[node] = _apply_unary(label, values[in_nodes[0]])
 
         elif label in BINARY_OPS:
-            in_nodes = sorted(dag.in_neighbors(node))
+            in_nodes = dag.ordered_inputs(node)
             if len(in_nodes) != 2:
                 raise EvaluationError(
                     f"Binary op {label.name} (node {node}) expects 2 inputs, got {len(in_nodes)}"
@@ -127,7 +127,7 @@ def _apply_unary(label: NodeType, x: float) -> float:
 def _apply_binary(label: NodeType, x: float, y: float) -> float:
     """Apply a binary operation with numerical protection.
 
-    Input order: x has lower node ID, y has higher node ID (sorted).
+    Input order: x = first operand, y = second operand (from ordered_inputs).
     For SUB: result = x - y. For DIV: result = x / y. For POW: result = x ^ y.
     """
     if label == NodeType.SUB:

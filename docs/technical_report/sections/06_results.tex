@@ -193,23 +193,28 @@ such that $\text{eval}(D, \mathbf{x}) \neq \text{eval}(\text{S2D}(w^*_D, m), \ma
 Filter to finite values only (protected operations may produce extreme values
 that are clamped identically in both evaluations).
 
-\textbf{Result}: 345 valid evaluation points. The Bland--Altman plot
-(Figure~\ref{fig:p4}, center) shows the difference $v_{\text{orig}} - v_{\text{canon}}$
-is concentrated at zero. The error distribution (right panel) confirms the
-vast majority of differences are below machine epsilon ($10^{-8}$).
+\textbf{Result}: All valid evaluation points (single-output DAGs only; multi-sink
+DAGs are rejected as malformed expressions) show evaluation differences at or
+below machine epsilon. The Bland--Altman plot (Figure~\ref{fig:p4}, center)
+is flat at $y = 0$, and the error distribution (right panel) confirms all
+differences are below $10^{-8}$.
 
-The non-zero maximum error ($\approx 6.3$) arises in a small number of cases
-where floating-point non-associativity in variadic operations (addition of
-3+ terms) causes different evaluation order after canonicalization. This is
-a known limitation of floating-point arithmetic, not an IsalSR bug.
+\textbf{Note on operand order preservation (Bug Fix B9)}: For non-commutative
+binary operations (SUB, DIV, POW), the canonical string must encode operand
+order. The V/v instruction always creates the first operand's edge; C/c
+creates the second. The \texttt{LabeledDAG} tracks insertion order via
+\texttt{\_input\_order}, and the evaluator uses this rather than sorted
+node~IDs. The D2S and canonical algorithms are constrained to emit V/v only
+from the first operand of binary nodes, ensuring the round-trip preserves
+evaluation semantics.
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=\textwidth]{figures/P4_evaluation_preservation.png}
-\caption{Property~4: Evaluation preservation ($N = 345$ points). Original vs.\
-canonical evaluations fall on the identity line (left). The Bland--Altman plot
-(center) is flat at $y = 0$. Error distribution (right) shows nearly all
-differences are below $10^{-8}$.}
+\caption{Property~4: Evaluation preservation. Original vs.\ canonical evaluations
+fall exactly on the identity line (left). The Bland--Altman plot (center) is
+flat at $y = 0$. All errors are below $10^{-8}$ (right). Multi-sink DAGs
+(malformed expressions with ambiguous output) are excluded.}
 \label{fig:p4}
 \end{figure}
 
@@ -296,3 +301,94 @@ significant at $\alpha = 0.05$. Combined with the formal proofs in
 Section~\ref{sec:algorithms}, these results establish IsalSR's canonical string
 as a correct and complete labeled-DAG invariant, supporting the paper's central
 claim of $O(k!)$ search space reduction.
+
+\subsection{CONST Creation Edge Normalization}
+
+An additional source of search space redundancy arises from \textsc{Const} nodes.
+In IsalSR, every non-\textsc{Var} node must be reachable from a variable node via
+outgoing edges (a structural requirement of the V/v instruction). For \textsc{Const}
+nodes --- which are evaluation-neutral leaves (they return \texttt{const\_value}
+directly, ignoring all in-edges) --- this creates a ``phantom'' creation edge from
+the V/v instruction's pointer position. The choice of creation source is semantically
+irrelevant but produces different canonical strings.
+
+\textbf{Example}: For the expression $y^k$ (where $k$ is a learned constant), the
+\textsc{Const} node can be created from $x_1$ or $x_2$, producing two structurally
+distinct DAGs with identical evaluation. Without normalization, these receive different
+canonical strings, wasting $O(p^c)$ search space where $p$ is the average number of
+valid creation sources and $c$ is the number of \textsc{Const} nodes.
+
+\textbf{Normalization rule}: All \textsc{Const} creation edges are moved to $x_1$
+(node~0) before canonical string computation. This is always valid ($x_1$ has no
+incoming edges, so no cycles are created) and fully deterministic. The normalization
+is applied transparently in \texttt{canonical\_string()},
+\texttt{pruned\_canonical\_string()}, and \texttt{is\_isomorphic()}.
+
+\textbf{Properties preserved}:
+\[
+  \text{eval}(D, \mathbf{x}) = \text{eval}(\text{normalize}(D), \mathbf{x})
+  \quad \text{for all inputs } \mathbf{x}
+\]
+
+The total search space reduction factor increases from $O(k!)$ (node relabeling)
+to $O(k! \cdot \prod_{i=1}^{c} |R(C_i)|)$, where $R(C_i)$ is the set of valid
+creation sources for each \textsc{Const} node $C_i$.
+
+\subsection{Label-Aware Pruning: From Bug Discovery to Optimality Proof}
+
+During the implementation of \textsc{Const} normalization, we observed that the
+pruned canonical string was \textbf{longer} than the exhaustive canonical for
+certain DAGs (e.g., $\exp(x)/(\exp(x)+k)$: 15 vs.\ 14 characters). This initiated
+a systematic investigation.
+
+\subsubsection{Investigation Protocol}
+
+\textbf{Step 1: Hypothesis (CONST bias)}. Initial hypothesis: the normalization
+adds edges $x_1 \to \textsc{Const}$, inflating $x_1$'s out-degree and biasing the
+structural tuples $\tau$.
+
+\textbf{Step 2: Experiment}. Modified the BFS in $\tau$ computation to skip edges
+whose target is a \textsc{Const} node (``unbiased tuples''). Result: \textbf{no change}
+--- all 5 differing DAGs still produced longer pruned strings.
+
+\textbf{Step 3: Root cause analysis}. Examined the actual candidate tuples at the
+first $V\ell$ branch point of the sigmoid DAG:
+\[
+  \tau(\textsc{Exp}) = (1,2,0,0,0,0), \quad \tau(\textsc{Const}) = (1,1,0,1,0,0)
+\]
+The na\"ive pruning kept only \textsc{Exp} (higher $\tau$) and discarded
+\textsc{Const}. But \textsc{Exp} and \textsc{Const} have \textbf{different labels}
+--- they can \textit{never} be automorphism-equivalent, since isomorphisms preserve
+labels (Def.~\ref{def:isomorphism}). Discarding one in favour of the other is
+mathematically invalid.
+
+\textbf{Step 4: Fix}. Partition candidates by label before applying the max-$\tau$
+filter. Within each label group, keep max-$\tau$ candidates; across groups, explore
+\textbf{all}. This is the label-aware pruning of Proposition~\ref{prop:pruning}.
+
+\textbf{Step 5: Verification}. After the fix, $w^* = w^{*\text{pru}}$ for all 19
+benchmark DAGs. The improvement is largest for DAGs with heterogeneous candidate sets
+(different operation types competing at the same branch point):
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Expression & $|w^*|$ & $|w^{*\text{pru}}|$ (before) & $|w^{*\text{pru}}|$ (after) \\
+\midrule
+$\exp(x)/(\exp(x)+k)$ & 14 & 15 & 14 \\
+$\sin(x) + \sin(y^k)$ & 19 & 20 & 19 \\
+Nguyen-5              & 26 & 27 & 26 \\
+Nguyen-7              & 35 & 38 & 35 \\
+Nguyen-12             & 46 & 52 & 46 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Lesson}
+
+The 6-component structural tuple $\tau$ is an \emph{intra-label} discriminant: it
+distinguishes nodes of the same type that occupy structurally different positions.
+Applying it \emph{across labels} conflates two independent axes of variation (type
+and position), leading to incorrect pruning. The label-aware partition restores the
+correct semantics and achieves optimal string length while preserving the exponential
+speedup of pruned search over exhaustive backtracking.

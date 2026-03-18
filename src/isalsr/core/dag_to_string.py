@@ -24,7 +24,7 @@ from copy import deepcopy
 
 from isalsr.core.cdll import CircularDoublyLinkedList
 from isalsr.core.labeled_dag import LabeledDAG
-from isalsr.core.node_types import NODE_TYPE_TO_LABEL, NodeType
+from isalsr.core.node_types import BINARY_OPS, NODE_TYPE_TO_LABEL, NodeType
 
 log = logging.getLogger(__name__)
 
@@ -281,12 +281,24 @@ class DAGToString:
         BUG FIX B8: checks ``not in _i2o`` (node not yet created),
         not whether a specific edge exists in the output.
 
+        BUG FIX B9 (operand order): For non-commutative binary ops (SUB,
+        DIV, POW), only returns the neighbor if *input_node* is the first
+        operand (ordered_inputs[0]). This ensures V/v creates the edge
+        from the correct operand, preserving evaluation semantics through
+        the round-trip. The second operand is added later via C/c.
+
         Returns:
             An input-DAG node ID, or ``None`` if all outgoing neighbors
-            are already in the output.
+            are already in the output (or none are valid for V/v).
         """
         for neighbor in self._input_dag.out_neighbors(input_node):
             if neighbor not in self._i2o:
+                # For binary ops, V/v must come from the first operand.
+                label = self._input_dag.node_label(neighbor)
+                if label in BINARY_OPS:
+                    ordered = self._input_dag.ordered_inputs(neighbor)
+                    if ordered and ordered[0] != input_node:
+                        continue
                 return neighbor
         return None
 

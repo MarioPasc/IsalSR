@@ -397,6 +397,10 @@ def property_evaluation_preservation() -> None:
             if dag1.node_count <= 1:
                 continue
 
+            # Skip multi-sink DAGs: they are malformed expressions with
+            # ambiguous output node selection (not valid SR expressions).
+            dag1.output_node()  # Raises ValueError if multi-sink.
+
             # Evaluate at 5 random input points
             for _ in range(5):
                 x_val = float(rng.uniform(-2, 2))

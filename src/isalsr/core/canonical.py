@@ -29,7 +29,7 @@ from collections import deque
 from isalsr.core.cdll import CircularDoublyLinkedList
 from isalsr.core.dag_to_string import generate_pairs_sorted_by_sum
 from isalsr.core.labeled_dag import LabeledDAG
-from isalsr.core.node_types import NODE_TYPE_TO_LABEL, NodeType
+from isalsr.core.node_types import BINARY_OPS, NODE_TYPE_TO_LABEL, NodeType
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +59,10 @@ def canonical_string(dag: LabeledDAG) -> str:
     num_vars = len(dag.var_nodes())
     if dag.node_count == num_vars and dag.edge_count == 0:
         return ""
-    return _canonical_d2s(dag, pruned=False)
+    # Normalize CONST creation edges to x_1 before canonical computation.
+    # This eliminates redundancy from arbitrary CONST creation sources.
+    normalized = dag.normalize_const_creation() if dag._has_const_nodes() else dag
+    return _canonical_d2s(normalized, pruned=False)
 
 
 def pruned_canonical_string(dag: LabeledDAG) -> str:
@@ -80,7 +83,9 @@ def pruned_canonical_string(dag: LabeledDAG) -> str:
     num_vars = len(dag.var_nodes())
     if dag.node_count == num_vars and dag.edge_count == 0:
         return ""
-    return _canonical_d2s(dag, pruned=True)
+    # Normalize CONST creation edges to x_1 before canonical computation.
+    normalized = dag.normalize_const_creation() if dag._has_const_nodes() else dag
+    return _canonical_d2s(normalized, pruned=True)
 
 
 def compute_structural_tuples(
@@ -327,11 +332,28 @@ def _step(
         # -- V: primary has uninserted outgoing neighbor --
         if nleft > 0:
             cands = [n for n in ig.out_neighbors(tp_in) if n not in i2o]
+            # BUG FIX B9: For binary ops, V must come from the first operand.
+            cands = [
+                c
+                for c in cands
+                if ig.node_label(c) not in BINARY_OPS
+                or not ig.ordered_inputs(c)
+                or ig.ordered_inputs(c)[0] == tp_in
+            ]
             if cands:
-                # Pruning: only keep max-tuple candidates.
+                # Pruning: group by label, keep max-tuple WITHIN each group.
+                # Candidates with different labels are never automorphism-
+                # equivalent (automorphisms preserve labels), so cross-label
+                # pruning is invalid. Only same-label candidates compete.
                 if tuples is not None:
-                    max_tup = max(tuples[c] for c in cands)
-                    cands = [c for c in cands if tuples[c] == max_tup]
+                    label_groups: dict[NodeType, list[int]] = {}
+                    for c in cands:
+                        label_groups.setdefault(ig.node_label(c), []).append(c)
+                    pruned: list[int] = []
+                    for group in label_groups.values():
+                        max_tup = max(tuples[c] for c in group)
+                        pruned.extend(c for c in group if tuples[c] == max_tup)
+                    cands = pruned
 
                 mov = _primary_moves(a)
                 best: str | None = None
@@ -384,10 +406,25 @@ def _step(
         # -- v: secondary has uninserted outgoing neighbor --
         if nleft > 0:
             cands = [n for n in ig.out_neighbors(ts_in) if n not in i2o]
+            # BUG FIX B9: For binary ops, v must come from the first operand.
+            cands = [
+                c
+                for c in cands
+                if ig.node_label(c) not in BINARY_OPS
+                or not ig.ordered_inputs(c)
+                or ig.ordered_inputs(c)[0] == ts_in
+            ]
             if cands:
+                # Same label-aware pruning as for V (primary).
                 if tuples is not None:
-                    max_tup = max(tuples[c] for c in cands)
-                    cands = [c for c in cands if tuples[c] == max_tup]
+                    sec_groups: dict[NodeType, list[int]] = {}
+                    for c in cands:
+                        sec_groups.setdefault(ig.node_label(c), []).append(c)
+                    sec_pruned: list[int] = []
+                    for group in sec_groups.values():
+                        max_tup = max(tuples[c] for c in group)
+                        sec_pruned.extend(c for c in group if tuples[c] == max_tup)
+                    cands = sec_pruned
 
                 mov = _secondary_moves(b)
                 best = None

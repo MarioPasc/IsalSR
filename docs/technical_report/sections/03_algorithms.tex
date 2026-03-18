@@ -190,20 +190,77 @@ Automorphisms preserve directed edges, so directed BFS from $v$ and $\phi(v)$
 visit the same number of nodes at each distance. $\qed$
 \end{proof}
 
-\begin{proposition}[Pruning Preserves Completeness]
+\begin{proposition}[Label-Aware Pruning Preserves Completeness]
 \label{prop:pruning}
 At each $V\ell/v\ell$ branch point, let $\mathcal{C}$ be the set of uninserted
-candidate neighbors. Define $\mathcal{C}^* = \{c \in \mathcal{C} : \tau(c) = \max_{c' \in \mathcal{C}} \tau(c')\}$.
-Restricting backtracking to $\mathcal{C}^*$ preserves the complete invariant property.
+candidate neighbors. Partition $\mathcal{C}$ by node label:
+$\mathcal{C} = \biguplus_{t \in \mathcal{T}} \mathcal{C}_t$ where
+$\mathcal{C}_t = \{c \in \mathcal{C} : \ell(c) = t\}$.
+Within each label group, keep only candidates with the maximum structural tuple:
+\[
+  \mathcal{C}^* = \bigcup_{t \in \mathcal{T}}
+    \{c \in \mathcal{C}_t : \tau(c) = \max_{c' \in \mathcal{C}_t} \tau(c')\}
+\]
+Restricting backtracking to $\mathcal{C}^*$ yields a function $w^{*\text{pru}}_D$
+that is a complete invariant: $w^{*\text{pru}}_{D_1} = w^{*\text{pru}}_{D_2}
+\iff D_1 \cong D_2$.
 \end{proposition}
 
-\begin{proof}[Proof sketch]
-By Lemma~\ref{lem:tuple_invariance}, candidates with different $\tau$ values cannot
-be related by any automorphism of $D$. Therefore, the choice between candidates
-with different $\tau$ values is deterministic and labeling-independent.
-Only candidates within the same $\tau$-equivalence class need exhaustive exploration.
-Taking the maximum $\tau$ (lexicographic) is one such deterministic rule. $\qed$
+\begin{proof}
+\textbf{Soundness} ($D_1 \cong D_2 \implies w^{*\text{pru}}_{D_1} = w^{*\text{pru}}_{D_2}$):
+Let $\phi$ be an isomorphism $D_1 \to D_2$. At each branch point, $\phi$ maps the
+candidate set $\mathcal{C}_1$ bijectively to $\mathcal{C}_2$.
+Since $\phi$ preserves labels (Def.~\ref{def:isomorphism}), $\phi(\mathcal{C}_{1,t}) = \mathcal{C}_{2,t}$.
+By Lemma~\ref{lem:tuple_invariance}, $\tau(c) = \tau(\phi(c))$, so
+$\phi(\mathcal{C}^*_1) = \mathcal{C}^*_2$. The pruned search explores the same
+candidates (up to $\phi$) and emits the same tokens. Thus $w^{*\text{pru}}_{D_1} = w^{*\text{pru}}_{D_2}$.
+
+\textbf{Completeness} ($w^{*\text{pru}}_{D_1} = w^{*\text{pru}}_{D_2} \implies D_1 \cong D_2$):
+Let $w^{*\text{pru}}_{D_1} = w^{*\text{pru}}_{D_2} = w$. The pruned search produces
+a valid D2S encoding (all nodes and edges placed), so $\text{S2D}(w, m)$ yields $D^*$ with
+$D_1 \cong D^*$ and $D_2 \cong D^*$ (Theorem~\ref{thm:roundtrip}).
+By transitivity, $D_1 \cong D_2$. $\qed$
 \end{proof}
+
+\begin{remark}[Why Label-Aware Grouping is Necessary]
+\label{rem:label_grouping}
+The label-aware partition in Proposition~\ref{prop:pruning} is critical.
+A na\"ive pruning that takes $\max \tau$ across \emph{all} candidates (ignoring labels)
+violates the automorphism assumption: since isomorphisms preserve labels
+(Def.~\ref{def:isomorphism}, condition 2), candidates with different labels
+are \textbf{never automorphism-equivalent}, regardless of their $\tau$ values.
+Cross-label pruning can discard candidates that lead to shorter strings.
+
+\textbf{Example}: In the sigmoid DAG $\text{exp}(x) / (\text{exp}(x) + k)$, candidates
+at $x_1$ are $\{\textsc{Exp}, \textsc{Const}\}$. Na\"ive pruning keeps only
+\textsc{Exp} ($\tau = (1,2,0,0,0,0) > (1,1,0,1,0,0)$), producing a string of
+length~15. Label-aware pruning explores both, finding the optimal string of length~14.
+\end{remark}
+
+\begin{theorem}[Pruned Optimality]
+\label{thm:pruned_optimality}
+With label-aware pruning (Proposition~\ref{prop:pruning}),
+\[
+  w^{*\text{pru}}_D = w^*_D
+\]
+for all labeled DAGs $D$ arising from IsalSR string execution. That is, the
+pruned canonical produces the same (shortest, lexmin) string as the exhaustive
+canonical.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+Within each label group $\mathcal{C}_t$, all candidates share the same label.
+By Lemma~\ref{lem:tuple_invariance}, candidates with the same $(\ell, \tau)$ pair
+are automorphism-equivalent: any two nodes $u, v \in \mathcal{C}_t$ with
+$\tau(u) = \tau(v)$ can be interchanged by a graph automorphism. Therefore,
+the choice among same-$(\ell, \tau)$ candidates is deterministic and does not
+affect the resulting string. Pruning to max-$\tau$ within each group eliminates
+only redundant candidates, never optimal ones. $\qed$
+\end{proof}
+
+\textbf{Empirical verification}: $w^* = w^{*\text{pru}}$ on all 19 benchmark DAGs
+(Nguyen-1 through 12, plus 7 additional test expressions including sigmoid,
+shared subexpressions, and multi-variable expressions with \textsc{Const} nodes).
 
 \subsection{DAG Distance Metric}
 

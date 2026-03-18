@@ -38,6 +38,7 @@ class LabeledDAG:
     __slots__ = (
         "_out_adj",
         "_in_adj",
+        "_input_order",
         "_labels",
         "_node_data",
         "_node_count",
@@ -49,6 +50,11 @@ class LabeledDAG:
         self._max_nodes: int = max_nodes
         self._out_adj: list[set[int]] = [set() for _ in range(max_nodes)]
         self._in_adj: list[set[int]] = [set() for _ in range(max_nodes)]
+        # Ordered input lists: tracks the order in which in-edges were added.
+        # Critical for non-commutative binary ops (SUB, DIV, POW) where
+        # operand order determines semantics. V/v creates the first edge,
+        # C/c creates subsequent edges.
+        self._input_order: list[list[int]] = [[] for _ in range(max_nodes)]
         self._labels: list[NodeType | None] = [None] * max_nodes
         self._node_data: list[dict[str, int | float]] = [{} for _ in range(max_nodes)]
         self._node_count: int = 0
@@ -125,6 +131,26 @@ class LabeledDAG:
         self._validate_node(target)
         return target in self._out_adj[source]
 
+    def ordered_inputs(self, node: int) -> list[int]:
+        """Return the ordered list of input source nodes for *node*.
+
+        For non-commutative binary ops (SUB, DIV, POW), the order determines
+        evaluation semantics: first element = first operand, second = second.
+        The order is set by edge insertion order: V/v creates the first edge,
+        C/c creates subsequent edges.
+
+        For commutative ops (ADD, MUL) and unary ops, order is irrelevant
+        but tracked for consistency.
+
+        Args:
+            node: The target node ID.
+
+        Returns:
+            List of source node IDs in insertion order.
+        """
+        self._validate_node(node)
+        return list(self._input_order[node])
+
     # ------------------------------------------------------------------
     # Mutation
     # ------------------------------------------------------------------
@@ -187,6 +213,7 @@ class LabeledDAG:
 
         self._out_adj[source].add(target)
         self._in_adj[target].add(source)
+        self._input_order[target].append(source)
         self._edge_count += 1
         return True
 
@@ -205,6 +232,8 @@ class LabeledDAG:
 
         self._out_adj[source].discard(target)
         self._in_adj[target].discard(source)
+        if source in self._input_order[target]:
+            self._input_order[target].remove(source)
         self._edge_count -= 1
         return True
 
@@ -222,6 +251,8 @@ class LabeledDAG:
         # Remove all outgoing edges.
         for target in list(self._out_adj[node_id]):
             self._in_adj[target].discard(node_id)
+            if node_id in self._input_order[target]:
+                self._input_order[target].remove(node_id)
             self._edge_count -= 1
         self._out_adj[node_id].clear()
 
@@ -233,6 +264,7 @@ class LabeledDAG:
 
         self._labels[node_id] = None
         self._node_data[node_id] = {}
+        self._input_order[node_id] = []
         self._node_count -= 1
 
     # ------------------------------------------------------------------
@@ -306,7 +338,8 @@ class LabeledDAG:
         is the expression's result.
 
         Raises:
-            ValueError: If there is no unique non-VAR sink node.
+            ValueError: If there is no unique non-VAR sink node, or if
+                there are multiple non-VAR sinks (ambiguous output).
         """
         sinks: list[int] = []
         for i in range(self._node_count):
@@ -316,14 +349,12 @@ class LabeledDAG:
         if len(sinks) == 1:
             return sinks[0]
         if len(sinks) == 0:
-            # All non-VAR nodes have outgoing edges, or there are only VAR nodes.
-            # Return the last-added non-VAR node as fallback.
-            for i in range(self._node_count - 1, -1, -1):
-                if self._labels[i] != NodeType.VAR:
-                    return i
-            raise ValueError("No non-VAR nodes in graph")
-        # Multiple sinks: return the last-created one.
-        return sinks[-1]
+            raise ValueError("No non-VAR sink nodes in graph")
+        raise ValueError(
+            f"Ambiguous output: {len(sinks)} non-VAR sink nodes "
+            f"(IDs: {sinks}). A valid expression DAG must have "
+            f"exactly one output node."
+        )
 
     # ------------------------------------------------------------------
     # Isomorphism (label-aware backtracking)
@@ -334,19 +365,34 @@ class LabeledDAG:
 
         Two labeled DAGs are isomorphic iff there exists a bijection between
         their node sets that preserves: (a) all directed edges, (b) all node
-        labels. Variable nodes (VAR) are matched by their var_index, ensuring
+        labels, (c) operand order for non-commutative binary ops (SUB, DIV,
+        POW). Variable nodes (VAR) are matched by their var_index, ensuring
         x_1 maps to x_1, x_2 maps to x_2, etc. (variables are distinguishable).
+
+        Condition (c) is necessary because sin(x)-cos(x) and cos(x)-sin(x)
+        have the same graph structure but different evaluation semantics.
+        The canonical string encodes operand order (Bug Fix B9), so the
+        isomorphism check must be consistent.
         """
         if not isinstance(other, LabeledDAG):
             return False
-        if self._node_count != other._node_count:
+
+        # Normalize CONST creation edges before comparison so that DAGs
+        # differing only in where CONST was created are considered isomorphic.
+        self_dag = self.normalize_const_creation() if self._has_const_nodes() else self
+        other_dag = other.normalize_const_creation() if other._has_const_nodes() else other
+
+        if self_dag._node_count != other_dag._node_count:
             return False
-        if self._edge_count != other._edge_count:
+        if self_dag._edge_count != other_dag._edge_count:
             return False
 
-        n = self._node_count
+        n = self_dag._node_count
         if n == 0:
             return True
+
+        # From here, use self_dag/other_dag (CONST-normalized if needed).
+        sd, od = self_dag, other_dag
 
         # Check label multisets match (use .value for sorting since Enum lacks <).
         def _label_key(
@@ -355,12 +401,8 @@ class LabeledDAG:
             lbl = labels[i]
             return (lbl.value if lbl is not None else "", len(adj_out[i]), len(adj_in[i]))
 
-        self_labels = sorted(
-            _label_key(self._labels, self._out_adj, self._in_adj, i) for i in range(n)
-        )
-        other_labels = sorted(
-            _label_key(other._labels, other._out_adj, other._in_adj, i) for i in range(n)
-        )
+        self_labels = sorted(_label_key(sd._labels, sd._out_adj, sd._in_adj, i) for i in range(n))
+        other_labels = sorted(_label_key(od._labels, od._out_adj, od._in_adj, i) for i in range(n))
         if self_labels != other_labels:
             return False
 
@@ -370,14 +412,14 @@ class LabeledDAG:
 
         # Map VAR nodes by var_index (they are distinguishable).
         self_vars = {
-            self._node_data[i].get("var_index", -1): i
+            sd._node_data[i].get("var_index", -1): i
             for i in range(n)
-            if self._labels[i] == NodeType.VAR
+            if sd._labels[i] == NodeType.VAR
         }
         other_vars = {
-            other._node_data[i].get("var_index", -1): i
+            od._node_data[i].get("var_index", -1): i
             for i in range(n)
-            if other._labels[i] == NodeType.VAR
+            if od._labels[i] == NodeType.VAR
         }
 
         if self_vars.keys() != other_vars.keys():
@@ -393,9 +435,9 @@ class LabeledDAG:
         remaining = [i for i in range(n) if i not in mapping]
         remaining.sort(
             key=lambda u: (
-                str(self._labels[u]),
-                len(self._out_adj[u]),
-                len(self._in_adj[u]),
+                str(sd._labels[u]),
+                len(sd._out_adj[u]),
+                len(sd._in_adj[u]),
             ),
             reverse=True,
         )
@@ -403,37 +445,54 @@ class LabeledDAG:
         other_remaining = [i for i in range(n) if i not in used]
         other_remaining.sort(
             key=lambda u: (
-                str(other._labels[u]),
-                len(other._out_adj[u]),
-                len(other._in_adj[u]),
+                str(od._labels[u]),
+                len(od._out_adj[u]),
+                len(od._in_adj[u]),
             ),
             reverse=True,
         )
 
+        def _check_operand_order() -> bool:
+            """Verify operand order for non-commutative binary ops."""
+            from isalsr.core.node_types import BINARY_OPS
+
+            for u, v in mapping.items():
+                label = sd._labels[u]
+                if label not in BINARY_OPS:
+                    continue
+                self_inputs = sd._input_order[u]
+                other_inputs = od._input_order[v]
+                if len(self_inputs) != len(other_inputs):
+                    return False
+                for si, oi in zip(self_inputs, other_inputs, strict=True):
+                    if si in mapping and mapping[si] != oi:
+                        return False
+            return True
+
         def _backtrack(idx: int) -> bool:
             if idx == len(remaining):
-                return True
+                return _check_operand_order()
             u = remaining[idx]
             for v in other_remaining:
                 if v in used:
                     continue
                 # Labels must match.
-                if self._labels[u] != other._labels[v]:
+                if sd._labels[u] != od._labels[v]:
                     continue
                 # Degree must match.
-                if len(self._out_adj[u]) != len(other._out_adj[v]):
+                if len(sd._out_adj[u]) != len(od._out_adj[v]):
                     continue
-                if len(self._in_adj[u]) != len(other._in_adj[v]):
+                if len(sd._in_adj[u]) != len(od._in_adj[v]):
                     continue
                 # Check edge consistency with already-mapped nodes.
                 ok = True
                 for u2, v2 in mapping.items():
                     # Check outgoing edges.
-                    if (u2 in self._out_adj[u]) != (v2 in other._out_adj[v]):
+                    if (u2 in sd._out_adj[u]) != (v2 in od._out_adj[v]):
                         ok = False
                         break
                     # Check incoming edges.
-                    if (u in self._out_adj[u2]) != (v in other._out_adj[v2]):
+                    if (u in sd._out_adj[u2]) != (v in od._out_adj[v2]):
                         ok = False
                         break
                 if not ok:
@@ -448,6 +507,65 @@ class LabeledDAG:
             return False
 
         return _backtrack(0)
+
+    # ------------------------------------------------------------------
+    # CONST creation edge normalization
+    # ------------------------------------------------------------------
+
+    def normalize_const_creation(self) -> LabeledDAG:
+        """Return a new DAG with all CONST creation edges moved to x_1 (node 0).
+
+        CONST nodes are evaluation-neutral leaves: they ignore in-edges and
+        return ``const_value`` directly. But D2S requires every node to be
+        reachable from a VAR via outgoing edges, so V/v creates a "creation
+        edge" pointer → CONST. The choice of creation source is semantically
+        irrelevant but produces different canonical strings.
+
+        This normalization eliminates that redundancy by standardizing all
+        CONST creation edges to come from node 0 (x_1). This is always valid
+        because x_1 has no incoming edges (no cycle risk).
+
+        The normalized DAG:
+        - Computes the same function: eval(D) == eval(normalize(D))
+        - Has deterministic CONST creation edges
+        - Produces a unique canonical string for each equivalence class
+
+        Returns:
+            A new LabeledDAG with normalized CONST creation edges.
+        """
+        new = LabeledDAG(self._max_nodes)
+
+        # Copy all nodes.
+        const_nodes: set[int] = set()
+        for i in range(self._node_count):
+            label = self._labels[i]
+            if label is None:
+                continue
+            data = self._node_data[i]
+            new.add_node(
+                label,
+                var_index=int(data["var_index"]) if "var_index" in data else None,
+                const_value=float(data["const_value"]) if "const_value" in data else None,
+            )
+            if label == NodeType.CONST:
+                const_nodes.add(i)
+
+        # Copy all edges EXCEPT creation edges (edges TO CONST nodes).
+        for src in range(self._node_count):
+            for tgt in self._out_adj[src]:
+                if tgt in const_nodes:
+                    continue  # Skip creation edges; will re-add from x_1.
+                new.add_edge(src, tgt)
+
+        # Add normalized creation edges: x_1 (node 0) -> each CONST.
+        for c in sorted(const_nodes):
+            new.add_edge(0, c)
+
+        return new
+
+    def _has_const_nodes(self) -> bool:
+        """Return True if the DAG contains any CONST nodes."""
+        return any(self._labels[i] == NodeType.CONST for i in range(self._node_count))
 
     # ------------------------------------------------------------------
     # Helpers
