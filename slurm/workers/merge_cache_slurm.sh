@@ -24,10 +24,15 @@ RESULTS_DIR=$($PYTHON -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['
 EXPERIMENT="${CACHE_EXPERIMENT_NAME:?ERROR: CACHE_EXPERIMENT_NAME not set}"
 NUM_VARS="${CACHE_NUM_VARS:?ERROR: CACHE_NUM_VARS not set}"
 
-SHARD_DIR="${RESULTS_DIR}/precomputed_cache/${EXPERIMENT}"
+# Derive the generate experiment name from the merge name:
+#   merge_cache_nguyen_2var -> generate_cache_nguyen_2var
+GEN_EXPERIMENT="${EXPERIMENT/merge_cache/generate_cache}"
+
+SHARD_DIR="${RESULTS_DIR}/precomputed_cache/${GEN_EXPERIMENT}"
 OUTPUT="${SHARD_DIR}/cache_merged.h5"
 
 echo "Experiment: ${EXPERIMENT}"
+echo "Generate:   ${GEN_EXPERIMENT}"
 echo "Shard dir:  ${SHARD_DIR}"
 echo "Output:     ${OUTPUT}"
 
