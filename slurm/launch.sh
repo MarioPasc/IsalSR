@@ -169,6 +169,10 @@ submit_experiment() {
         extra_exports="${extra_exports},CACHE_EXPERIMENT_NAME=${exp_name},CACHE_NUM_VARS=${num_vars}"
     fi
 
+    # Optional dependency flag (set externally for merge-after-generate chains).
+    # MUST come BEFORE the worker script in the sbatch command.
+    local dep_flag="${DEPENDENCY_FLAG:-}"
+
     local sbatch_cmd="sbatch \
         --job-name=isalsr_${exp_name} \
         --output=${output_pattern} \
@@ -181,6 +185,7 @@ submit_experiment() {
         --chdir=${REPO_DIR} \
         --export=ALL,${extra_exports} \
         ${array_flag} \
+        ${dep_flag} \
         ${worker_script}"
 
     # All status info goes to stderr so that $(submit_experiment ...) captures
@@ -193,11 +198,7 @@ submit_experiment() {
         echo "  Array: 1-${array_size} (${array_size} parallel tasks)" >&2
     fi
     echo "  Out:   ${out_dir}" >&2
-
-    # Optional dependency flag (set externally for merge-after-generate chains).
-    local dep_flag="${DEPENDENCY_FLAG:-}"
     if [[ -n "$dep_flag" ]]; then
-        sbatch_cmd="${sbatch_cmd} ${dep_flag}"
         echo "  Dependency: ${dep_flag}" >&2
     fi
 
