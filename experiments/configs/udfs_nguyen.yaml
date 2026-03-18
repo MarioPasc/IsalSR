@@ -1,0 +1,30 @@
+# UDFS experiment on Nguyen benchmarks
+# Reference: isalsr_experimental_design.md
+experiment:
+  name: udfs_nguyen
+  method: udfs
+  n_seeds: 30
+
+benchmarks:
+  nguyen:
+    problems: all
+    train_size: 20
+    test_size: 100
+
+udfs:
+  n_calc_nodes: 5
+  max_orders: 200000
+  max_time: 3600
+  processes: 1
+  mode: hierarchical
+  k: 2
+  stop_thresh: 1.0e-10
+  use_tan: false
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log"]
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_pruned: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

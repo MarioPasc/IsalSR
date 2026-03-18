@@ -43,6 +43,8 @@ for symbolic regression with isomorphism-invariant string representations.
 | `python -m ruff format src/ tests/` | Format |
 | `python -m mypy src/isalsr/` | Type checking (strict) |
 | `python -m pip install -e ".[dev]"` | Install in dev mode |
+| `python -m pip install -e ".[experiments]"` | Install with experiment deps (bingo, statsmodels, etc.) |
+| `python -m experiments.models.orchestrator --config <yaml> --seeds 1 --problems Nguyen-1` | Run experiment |
 
 ---
 
@@ -127,6 +129,39 @@ src/isalsr/adapters/                 NetworkX, SymPy bridges
 src/isalsr/evaluation/               Fitness metrics, constant optimization
 src/isalsr/search/                   String mutation/crossover, search algorithms
 ```
+
+### Experimental Framework (`experiments/models/`)
+
+Three-layer architecture for paired comparison experiments (baseline vs IsalSR):
+
+```
+experiments/models/
+    base_runner.py                   ModelRunner ABC (fit → RawRunResult)
+    base_translator.py               ResultTranslator ABC (RawRunResult → RunLog)
+    schemas.py                       Unified schemas (RunLog, TrajectoryRow, PairedStats)
+    io_utils.py                      I/O helpers (JSON/CSV, folder structure)
+    hardware_info.py                 CPU/RAM/Python version capture
+    orchestrator.py                  CLI entry point: iterates (method, problem, seed, variant)
+    analyzer/
+        statistical_tests.py         Paired t/Wilcoxon, Holm-Bonferroni, Friedman+Nemenyi, McNemar
+        effect_sizes.py              Cohen's d + bootstrap CI
+        aggregation.py               Seed aggregation, paired stats pipeline
+        metrics.py                   R², NRMSE, solution recovery, Jaccard index
+        cross_method.py              Cross-method Friedman/Nemenyi on (method × variant) matrix
+    udfs/                            UDFS integration (vendored, MIT)
+        adapter.py                   CompGraph ↔ LabeledDAG (handles sub_l/sub_r/div_l/div_r)
+        runner.py                    Baseline: DAGRegressor wrapper
+        isalsr_runner.py             IsalSR: monkey-patches evaluate_cgraph()
+        vendor/DAG_search/           Vendored source (unmodified)
+    bingo/                           Bingo-NASA integration (pip: bingo-nasa, Apache 2.0)
+        adapter.py                   AGraph command_array ↔ LabeledDAG
+        runner.py                    Baseline: manual pipeline (matches SymbolicRegressor)
+        isalsr_runner.py             IsalSR: subclasses Evaluation._serial_eval()
+```
+
+**Adding new models**: Implement adapter, config, runner(s), translator. Register in
+`orchestrator.py` factories (`create_runner`, `create_translator`). The analyzer is
+model-agnostic — it consumes unified RunLog/TrajectoryRow schemas.
 
 ---
 
@@ -318,10 +353,23 @@ These constraints MUST be enforced at all times. The `proposal-guard` agent chec
 - Petersen et al. (2021). DSR. NeurIPS.
 - You et al. (2018). GraphRNN. ICML.
 - Fey & Lenssen (2019). PyTorch Geometric. ICLR Workshop.
+- Kahlmeyer et al. (2024). UDFS. IJCAI. DOI:10.24963/ijcai.2024/471.
+- Randall et al. (2022). Bingo. GECCO. NASA open-source.
 
 ## Detailed Specifications
 
 - @src/isalsr/core/README.md -- Full math, architecture, instruction semantics
-- @docs/DEVELOPMENT.md -- Development workflow, testing, commands
+- @docs/DEVELOPMENT.md -- Development workflow, testing, experiment commands
 - @docs/ISALSR_AGENT_CONTEXT.md -- Full agent context document
+- @docs/design/experimental_design/isalsr_experimental_design.md -- Three-axis comparison framework
+- @docs/design/experimental_design/experimental_design_amendments.md -- Cache integration amendments
 - Save every output in `/media/mpascual/Sandisk2TB/research/isalsr`
+
+## Preliminary Experimental Findings (Smoke Tests, 2026-03-18)
+
+| Method | Redundancy Rate | Reduction Factor | Justification |
+|--------|----------------|------------------|---------------|
+| UDFS   | 6.15%          | 1.07 (k=3)      | Systematic enumeration: few cross-skeleton isomorphisms |
+| Bingo  | **41.6%**      | **1.71**         | Stochastic GP: mutation/crossover rediscovers same structures |
+
+Full report: `/media/mpascual/Sandisk2TB/research/isalsr/results/experimental_framework_report_2026-03-18.md`

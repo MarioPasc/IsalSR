@@ -41,7 +41,18 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.0",
 ]
-all = ["isalsr[networkx,sympy,eval,search,viz,bench,dev]"]
+experiments = [
+    "isalsr[bench]",
+    "bingo-nasa",
+    "stopit",
+    "zss",
+    "tqdm",
+    "statsmodels>=0.14",
+    "scikit-posthocs>=0.9",
+    "seaborn>=0.12",
+    "torch",
+]
+all = ["isalsr[networkx,sympy,eval,search,viz,bench,dev,experiments]"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -73,6 +84,17 @@ module = [
     "sklearn", "sklearn.*",
     "yaml", "yaml.*",
     "h5py", "h5py.*",
+    "stopit", "stopit.*",
+    "zss", "zss.*",
+    "tqdm", "tqdm.*",
+    "statsmodels", "statsmodels.*",
+    "scikit_posthocs", "scikit_posthocs.*",
+    "seaborn", "seaborn.*",
+    "DAG_search", "DAG_search.*",
+    "bingo", "bingo.*",
+    "mpi4py", "mpi4py.*",
+    "dill", "dill.*",
+    "smcpy", "smcpy.*",
 ]
 ignore_missing_imports = true
 
