@@ -137,10 +137,29 @@ def _merge_shards(args: argparse.Namespace) -> None:
 
     log.info("Merging %d shards from %s", len(shards), input_dir)
 
-    # We need a manager to load into. Use the metadata from the first shard.
-    ops = _build_ops(args.ops)
+    # Auto-detect num_variables and operator_set from the first shard.
+    import h5py
+
+    with h5py.File(shards[0], "r") as f:
+        shard_num_vars = int(f.attrs["num_variables"])
+        shard_ops_json = f.attrs.get("operator_set", "[]")
+        if isinstance(shard_ops_json, bytes):
+            shard_ops_json = shard_ops_json.decode()
+
+    num_variables = shard_num_vars
+    log.info("  Auto-detected num_variables=%d from first shard", num_variables)
+
+    # Build ops from shard metadata or CLI arg.
+    if args.ops is not None:
+        ops = _build_ops(args.ops)
+    else:
+        import json as _json
+
+        shard_op_labels = _json.loads(str(shard_ops_json))
+        ops = _build_ops(",".join(shard_op_labels)) if shard_op_labels else _build_ops(None)
+
     manager = CacheManager(
-        num_variables=args.num_variables,
+        num_variables=num_variables,
         operator_set=ops,
     )
 
@@ -167,7 +186,7 @@ def _merge_shards(args: argparse.Namespace) -> None:
         # Rebuild manager with deduped entries
         all_entries = manager.entries
         manager = CacheManager(
-            num_variables=args.num_variables,
+            num_variables=num_variables,
             operator_set=ops,
         )
         for idx in deduped:
