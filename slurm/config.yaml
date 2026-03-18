@@ -110,3 +110,116 @@ experiments:
     time_limit: "01:00:00"
     cpus: 1
     mem_gb: 8
+
+  # =================================================================
+  # Precomputed Canonical String Cache (Phase 2: sampled generation)
+  # =================================================================
+  # Each array task generates one shard of random IsalSR strings,
+  # computes all 4 D2S algorithms + timing + correctness, and saves
+  # to an HDF5 file. A follow-up merge job combines shards.
+  #
+  # Usage:
+  #   bash slurm/launch.sh --experiment generate_cache_nguyen_1var
+  #   # After array completes:
+  #   bash slurm/launch.sh --experiment merge_cache_nguyen_1var
+
+  # --- Nguyen 1-variable cache ---
+  generate_cache_nguyen_1var:
+    enabled: true
+    num_variables: 1
+    ops: "+,*,-,/,s,c,e,l"         # 8 core Nguyen ops
+    n_strings_per_task: 50000
+    max_tokens: 30
+    n_shards: 20                   # array size
+    seed_base: 42
+    exhaustive_timeout: 60
+    time_limit: "08:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  # --- Nguyen 2-variable cache ---
+  generate_cache_nguyen_2var:
+    enabled: true
+    num_variables: 2
+    ops: "+,*,-,/,s,c,e,l"
+    n_strings_per_task: 50000
+    max_tokens: 30
+    n_shards: 20
+    seed_base: 42
+    exhaustive_timeout: 60
+    time_limit: "08:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  # --- Feynman 1-variable cache ---
+  generate_cache_feynman_1var:
+    enabled: true
+    num_variables: 1
+    ops: "+,*,-,/,s,c,e,l,r,^"    # 10 Feynman ops (adds sqrt, pow)
+    n_strings_per_task: 25000
+    max_tokens: 30
+    n_shards: 20
+    seed_base: 42
+    exhaustive_timeout: 60
+    time_limit: "08:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  # --- Feynman 2-variable cache ---
+  generate_cache_feynman_2var:
+    enabled: true
+    num_variables: 2
+    ops: "+,*,-,/,s,c,e,l,r,^"
+    n_strings_per_task: 25000
+    max_tokens: 30
+    n_shards: 20
+    seed_base: 42
+    exhaustive_timeout: 60
+    time_limit: "08:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  # --- Feynman 3-variable cache ---
+  generate_cache_feynman_3var:
+    enabled: true
+    num_variables: 3
+    ops: "+,*,-,/,s,c,e,l,r,^"
+    n_strings_per_task: 25000
+    max_tokens: 30
+    n_shards: 20
+    seed_base: 42
+    exhaustive_timeout: 60
+    time_limit: "08:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  # --- Merge jobs (run AFTER the corresponding generate_cache array) ---
+  merge_cache_nguyen_1var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  merge_cache_nguyen_2var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  merge_cache_feynman_1var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  merge_cache_feynman_2var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  merge_cache_feynman_3var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32

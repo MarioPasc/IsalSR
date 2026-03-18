@@ -1,0 +1,147 @@
+\section{Precomputed Canonical String Cache}
+\label{sec:precomputed}
+
+\subsection{Motivation}
+
+The canonicalization step (especially \texttt{exhaustive} and \texttt{pruned-exhaustive})
+is the single most CPU-intensive operation in IsalSR. Its output is a \textbf{pure function}
+of the DAG structure --- it depends on no random seed, no training data, and no SR method.
+Therefore, for a given configuration $(m, \mathcal{O}, k_{\max})$ (number of variables,
+operator set, maximum internal nodes), the mapping
+\[
+  D \;\mapsto\; \bigl\{\,\text{algorithm} : w_D^{\text{algo}}\,\bigr\}
+\]
+is deterministic and reusable. Precomputing this mapping eliminates redundant computation
+across seeds ($O(30)$), SR methods ($O(3)$), and experiment reruns, yielding an estimated
+$90\times$ total CPU time reduction.
+
+\subsection{Cache Data Structure}
+
+The cache is stored as HDF5 files (via \texttt{h5py}) with a JSON sidecar for
+human-readable metadata. Each file covers one $(m, \mathcal{O})$ configuration.
+
+\subsubsection{HDF5 Schema}
+
+\begin{verbatim}
+cache_{benchmark}_{m}vars_{ops_hash}.h5
+|-- attrs/                 (metadata)
+|   |-- num_variables      int
+|   |-- operator_set       JSON string
+|   |-- creation_timestamp ISO 8601
+|   |-- git_hash           str
+|   `-- total_entries      int
+|-- strings/               (all D2S outputs)
+|   |-- raw                [N] vlen-str
+|   |-- greedy_single      [N] vlen-str
+|   |-- greedy_min         [N] vlen-str
+|   |-- pruned             [N] vlen-str
+|   |-- exhaustive         [N] vlen-str
+|   `-- is_canonical       [N] bool
+|-- dag_properties/
+|   |-- n_nodes            [N] int32
+|   |-- n_internal         [N] int32
+|   |-- n_edges            [N] int32
+|   |-- depth              [N] int32
+|   `-- n_var_nodes        [N] int32
+|-- timings/               (wall-clock seconds)
+|   |-- greedy_single      [N] float64
+|   |-- greedy_min         [N] float64
+|   |-- pruned             [N] float64
+|   `-- exhaustive         [N] float64
+|-- correctness/           (cross-validation)
+|   |-- exhaustive_timed_out       [N] bool
+|   |-- exhaustive_eq_pruned       [N] bool
+|   |-- greedy_single_eq_exhaustive [N] bool
+|   `-- greedy_min_eq_exhaustive    [N] bool
+`-- canonical_index/       (deduplication)
+    |-- unique_canonical_pruned    [U] vlen-str
+    |-- canonical_to_first         [U] int64
+    `-- multiplicity               [U] int64
+\end{verbatim}
+
+Where $N$ = total cache entries, $U$ = unique canonical strings ($U \leq N$).
+
+\subsubsection{Fields Stored for Downstream Analysis}
+
+\begin{enumerate}[nosep]
+  \item \textbf{Algorithm comparison} (\texttt{strings/}): All four D2S outputs
+    stored side-by-side enable offline verification that the exhaustive and pruned
+    canonicals agree (Theorem~\ref{thm:pruned_optimality}) and measurement of
+    how often greedy variants coincide with the canonical.
+
+  \item \textbf{Timing profiles} (\texttt{timings/}): Per-algorithm wall-clock
+    seconds enable cost modeling for the pruning speedup and identification of
+    pathological DAGs that trigger exponential backtracking.
+
+  \item \textbf{Search space reduction} (\texttt{canonical\_index/multiplicity}):
+    The multiplicity of each unique canonical directly measures the $O(k!)$
+    reduction factor --- the ratio $N/U$ is the empirical mean reduction factor.
+
+  \item \textbf{DAG complexity distribution} (\texttt{dag\_properties/}):
+    Node count, edge count, and depth characterize the DAG population, enabling
+    stratified analysis by expression complexity.
+
+  \item \textbf{Correctness audit} (\texttt{correctness/}): Boolean flags for
+    cross-algorithm agreement serve as regression tests: any entry with
+    \texttt{exhaustive\_eq\_pruned = False} after the label-aware pruning fix
+    (Section~\ref{sec:results}) would indicate a bug.
+\end{enumerate}
+
+\subsection{Generation Strategy}
+
+\subsubsection{Sampled Mode (Phase 2)}
+
+For each configuration, generate $N$ random IsalSR strings via
+\texttt{random\_isalsr\_string()}, decode each via S2D, and compute all four
+D2S algorithms with timing. Invalid strings (VAR-only DAGs, multi-sink DAGs)
+are silently skipped. The exhaustive canonical is computed with a 60-second
+timeout; if exceeded, the pruned canonical is used as fallback.
+
+Generation is parallelized via SLURM array jobs: each task produces a
+\emph{shard} (\texttt{cache\_shard\_\{run\_id\}.h5}), and a follow-up
+merge job combines shards with deduplication by raw string.
+
+\subsubsection{CONST Normalization}
+
+All canonical string computations are performed \emph{after} CONST creation
+edge normalization (Section~\ref{sec:results}). This ensures that the cache
+entries reflect the reduced search space where CONST creation source is
+canonicalized to $x_1$.
+
+\subsection{Picasso HPC Deployment}
+
+The cache generation is configured in \texttt{slurm/config.yaml}:
+
+\begin{center}
+\begin{tabular}{lccccr}
+\toprule
+Config & $m$ & $|\mathcal{O}|$ & Strings/task & Shards & Total strings \\
+\midrule
+Nguyen 1-var & 1 & 8 & 50{,}000 & 20 & 1{,}000{,}000 \\
+Nguyen 2-var & 2 & 8 & 50{,}000 & 20 & 1{,}000{,}000 \\
+Feynman 1-var & 1 & 10 & 25{,}000 & 20 & 500{,}000 \\
+Feynman 2-var & 2 & 10 & 25{,}000 & 20 & 500{,}000 \\
+Feynman 3-var & 3 & 10 & 25{,}000 & 20 & 500{,}000 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each shard runs independently with 16\,GB RAM and an 8-hour time limit.
+The merge step runs as a single job with 32\,GB RAM.
+
+\subsection{Usage in Experiments}
+
+During SR experiments, the \texttt{CacheManager} provides $O(1)$ lookup
+of canonical strings for previously encountered DAGs:
+
+\begin{verbatim}
+cache = CacheManager(num_variables, operator_set)
+cache.load_hdf5("precomputed/nguyen/nguyen_1var.h5")
+
+entry = cache.lookup(raw_string)  # O(1) dict lookup
+if entry is not None:
+    canonical = entry.pruned      # or entry.exhaustive
+\end{verbatim}
+
+The \texttt{cache.stats} property provides hit/miss statistics and an
+estimate of total CPU time saved by precomputation.

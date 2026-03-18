@@ -71,8 +71,16 @@ module = [
     "pandas", "pandas.*",
     "sklearn", "sklearn.*",
     "yaml", "yaml.*",
+    "h5py", "h5py.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "isalsr.precomputed",
+    "isalsr.precomputed.*",
+]
+disable_error_code = "import-untyped"
 
 [tool.ruff]
 target-version = "py311"
