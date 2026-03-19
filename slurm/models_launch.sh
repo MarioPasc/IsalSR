@@ -105,6 +105,7 @@ print(exp.get('${field}', ''))
 # Returns: job ID on stdout. All status messages go to stderr.
 submit_experiment() {
     local exp_name="$1"
+    local dep_flag="${2:-}"  # optional --dependency=afterok:JOBID
 
     local enabled
     enabled=$(get_exp_field "$exp_name" "enabled")
@@ -136,6 +137,9 @@ submit_experiment() {
     echo "  CPUs:      ${cpus}" >&2
     echo "  Mem:       ${mem_gb}G" >&2
     echo "  Out:       ${out_dir}" >&2
+    if [[ -n "$dep_flag" ]]; then
+        echo "  Depends:   ${dep_flag}" >&2
+    fi
 
     local sbatch_cmd="sbatch \
         --job-name=isalsr_${exp_name} \
@@ -147,7 +151,8 @@ submit_experiment() {
         --constraint=${CONSTRAINT} \
         --account=${ACCOUNT} \
         --chdir=${REPO_DIR} \
-        --array=1-${array_size} \
+        --array=1-${array_size}%50 \
+        ${dep_flag} \
         --export=ALL,ISALSR_REPO_DIR=${REPO_DIR},MODELS_METHOD=${method},MODELS_BENCHMARK=${benchmark},MODELS_VARIANT=${variant},MODELS_EXPERIMENT_CONFIG=${REPO_DIR}/${config_file},MODELS_N_SEEDS=${n_seeds},MODELS_RESULTS_DIR=${RESULTS_DIR} \
         ${WORKER_SCRIPT}"
 
@@ -297,24 +302,56 @@ elif [[ -n "$SINGLE_EXP" ]]; then
         submit_experiment "$SINGLE_EXP"
     fi
 else
-    echo "=== Submitting all experiment groups + analysis ==="
+    # =========================================================================
+    # Phased submission to avoid overloading the cluster.
+    #
+    # Phase 1: UDFS (baseline + isalsr, Nguyen + Feynman) — 4 arrays, ~1320 tasks
+    # Phase 2: Bingo (afterok Phase 1)                     — 4 arrays, ~1320 tasks
+    # Phase 3: Analysis (afterok Phase 2)                   — 1 task
+    #
+    # Each array is throttled to %50 concurrent tasks (set in --array flag).
+    # Max concurrent tasks: 4 arrays × 50 = 200 at any time.
+    # Max queued jobs: ~1320 (one phase at a time).
+    # =========================================================================
+    echo "=== Phased submission: UDFS → Bingo → Analysis ==="
     echo ""
 
-    ALL_JOB_IDS=()
-    for exp in "${EXPERIMENT_GROUPS[@]}"; do
+    # Phase 1: UDFS (no dependencies)
+    echo "--- Phase 1: UDFS experiments ---"
+    PHASE1_IDS=()
+    for exp in udfs_nguyen_baseline udfs_nguyen_isalsr udfs_feynman_baseline udfs_feynman_isalsr; do
         job_id=$(submit_experiment "$exp")
         if [[ -n "$job_id" && "$job_id" != "0" ]]; then
-            ALL_JOB_IDS+=("$job_id")
+            PHASE1_IDS+=("$job_id")
         fi
     done
 
-    # Submit analysis with afterok dependency on ALL experiment jobs
-    if [[ ${#ALL_JOB_IDS[@]} -gt 0 ]]; then
-        DEP_STRING=$(IFS=:; echo "${ALL_JOB_IDS[*]}")
-        echo "=== Submitting analysis job ==="
-        echo "  Depends on ${#ALL_JOB_IDS[@]} experiment jobs: ${DEP_STRING}"
+    # Phase 2: Bingo (depends on all UDFS completing)
+    echo "--- Phase 2: Bingo experiments (after UDFS) ---"
+    PHASE2_IDS=()
+    if [[ ${#PHASE1_IDS[@]} -gt 0 ]]; then
+        P1_DEP=$(IFS=:; echo "${PHASE1_IDS[*]}")
+        BINGO_DEP="--dependency=afterany:${P1_DEP}"
+        echo "  Bingo depends on UDFS jobs: ${P1_DEP}"
         echo ""
-        submit_analysis "--dependency=afterok:${DEP_STRING}"
+    else
+        BINGO_DEP=""
+    fi
+    for exp in bingo_nguyen_baseline bingo_nguyen_isalsr bingo_feynman_baseline bingo_feynman_isalsr; do
+        job_id=$(submit_experiment "$exp" "$BINGO_DEP")
+        if [[ -n "$job_id" && "$job_id" != "0" ]]; then
+            PHASE2_IDS+=("$job_id")
+        fi
+    done
+
+    # Phase 3: Analysis (depends on all experiments)
+    ALL_JOB_IDS=("${PHASE1_IDS[@]}" "${PHASE2_IDS[@]}")
+    if [[ ${#ALL_JOB_IDS[@]} -gt 0 ]]; then
+        ALL_DEP=$(IFS=:; echo "${ALL_JOB_IDS[*]}")
+        echo "--- Phase 3: Analysis (after all experiments) ---"
+        echo "  Depends on ${#ALL_JOB_IDS[@]} experiment jobs"
+        echo ""
+        submit_analysis "--dependency=afterok:${ALL_DEP}"
     else
         echo ""
         echo "[WARN] No experiment jobs submitted. Skipping analysis."
