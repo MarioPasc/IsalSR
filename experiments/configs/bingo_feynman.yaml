@@ -1,0 +1,34 @@
+# Bingo experiment on Feynman physics benchmarks
+# Reference: isalsr_experimental_design.md
+# Feynman data: Liu2025 Table 2 (200 samples, 80/20 train/test split)
+experiment:
+  name: bingo_feynman
+  method: bingo
+  n_seeds: 30
+
+benchmarks:
+  feynman:
+    problems: all
+    train_size: 160
+    test_size: 40
+
+bingo:
+  population_size: 500
+  stack_size: 32
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  metric: mse
+  clo_alg: lm
+  generations: 10000000
+  fitness_threshold: 1.0e-16
+  max_time: 1800
+  max_evals: 10000000
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_pruned: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

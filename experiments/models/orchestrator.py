@@ -24,7 +24,10 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS, generate_data  # noqa: E402
+from benchmarks.datasets.feynman import FEYNMAN_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.feynman import generate_data as feynman_generate_data  # noqa: E402
+from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.nguyen import generate_data as nguyen_generate_data  # noqa: E402
 from experiments.models.analyzer.aggregation import (  # noqa: E402
     aggregate_all_metrics,
     apply_holm_correction,
@@ -42,16 +45,18 @@ from experiments.models.io_utils import (  # noqa: E402
     seed_dir,
 )
 from experiments.models.schemas import RunMetadata  # noqa: E402
-from experiments.models.udfs.config import UDFSConfig  # noqa: E402
-from experiments.models.udfs.isalsr_runner import IsalSRUDFSRunner  # noqa: E402
-from experiments.models.udfs.runner import UDFSBaselineRunner  # noqa: E402
-from experiments.models.udfs.translator import UDFSTranslator  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger(__name__)
+
+# Benchmark registries: name -> (problem_list, generate_data_fn)
+_BENCHMARK_REGISTRY: dict[str, tuple[list[dict[str, Any]], Any]] = {
+    "nguyen": (NGUYEN_BENCHMARKS, nguyen_generate_data),
+    "feynman": (FEYNMAN_BENCHMARKS, feynman_generate_data),
+}
 
 
 def parse_seeds(s: str) -> list[int]:
@@ -67,10 +72,12 @@ def get_benchmarks(
     problem_filter: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get benchmark problem list."""
-    if benchmark_name == "nguyen":
-        benchmarks = NGUYEN_BENCHMARKS
-    else:
-        raise ValueError(f"Unknown benchmark: {benchmark_name}")
+    if benchmark_name not in _BENCHMARK_REGISTRY:
+        raise ValueError(
+            f"Unknown benchmark: {benchmark_name}. Available: {list(_BENCHMARK_REGISTRY.keys())}"
+        )
+
+    benchmarks = list(_BENCHMARK_REGISTRY[benchmark_name][0])
 
     if problem_filter and problem_filter != "all":
         names = [n.strip() for n in problem_filter.split(",")]
@@ -81,9 +88,50 @@ def get_benchmarks(
     return benchmarks
 
 
+def _generate_benchmark_data(
+    bench_name: str,
+    bench: dict[str, Any],
+    train_size: int,
+    test_size: int,
+    seed: int,
+) -> tuple[Any, Any, Any, Any]:
+    """Dispatch to the correct generate_data function for the benchmark.
+
+    Nguyen signature: generate_data(bench, n_train, n_test, seed)
+    Feynman signature: generate_data(bench, n_samples, train_ratio, seed)
+    """
+    if bench_name == "nguyen":
+        return nguyen_generate_data(
+            bench,
+            n_train=train_size,
+            n_test=test_size,
+            seed=seed,
+        )
+    elif bench_name == "feynman":
+        n_samples = train_size + test_size
+        train_ratio = train_size / n_samples
+        return feynman_generate_data(
+            bench,
+            n_samples=n_samples,
+            train_ratio=train_ratio,
+            seed=seed,
+        )
+    else:
+        raise ValueError(f"Cannot generate data for benchmark: {bench_name}")
+
+
 def create_runner(method: str, variant: str, config: dict[str, Any]):
-    """Factory for model runners."""
+    """Factory for model runners.
+
+    Runner imports are lazy: UDFS requires torch (vendored), Bingo requires
+    mpi4py. These are only available on HPC or when the full [experiments]
+    extras are installed.
+    """
     if method == "udfs":
+        from experiments.models.udfs.config import UDFSConfig
+        from experiments.models.udfs.isalsr_runner import IsalSRUDFSRunner
+        from experiments.models.udfs.runner import UDFSBaselineRunner
+
         cfg = UDFSConfig.from_dict(config.get("udfs", {}))
         if variant == "baseline":
             return UDFSBaselineRunner(config=cfg)
@@ -92,6 +140,10 @@ def create_runner(method: str, variant: str, config: dict[str, Any]):
         else:
             raise ValueError(f"Unknown variant: {variant}")
     elif method == "bingo":
+        from experiments.models.bingo.config import BingoConfig
+        from experiments.models.bingo.isalsr_runner import IsalSRBingoRunner
+        from experiments.models.bingo.runner import BingoBaselineRunner
+
         cfg = BingoConfig.from_dict(config.get("bingo", {}))
         if variant == "baseline":
             return BingoBaselineRunner(config=cfg)
@@ -104,8 +156,13 @@ def create_runner(method: str, variant: str, config: dict[str, Any]):
 
 
 def create_translator(method, y_train, y_test, gt_expr, gt_vars):
-    """Factory for result translators."""
+    """Factory for result translators.
+
+    Translator imports are lazy for the same reason as runners.
+    """
     if method == "udfs":
+        from experiments.models.udfs.translator import UDFSTranslator
+
         return UDFSTranslator(
             y_train=y_train,
             y_test=y_test,
@@ -113,6 +170,8 @@ def create_translator(method, y_train, y_test, gt_expr, gt_vars):
             ground_truth_variables=gt_vars,
         )
     elif method == "bingo":
+        from experiments.models.bingo.translator import BingoTranslator
+
         return BingoTranslator(
             y_train=y_train,
             y_test=y_test,
@@ -176,11 +235,12 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
 
                     log.info("  Running %s", run_key)
 
-                    x_train, y_train, x_test, y_test = generate_data(
+                    x_train, y_train, x_test, y_test = _generate_benchmark_data(
+                        bench_name,
                         bench,
-                        n_train=train_size,
-                        n_test=test_size,
-                        seed=seed,
+                        train_size,
+                        test_size,
+                        seed,
                     )
 
                     runner = create_runner(method, variant, config)
@@ -255,7 +315,12 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
 
 
 def _get_ground_truth_sympy(bench: dict[str, Any]):
-    """Get ground truth as SymPy expression."""
+    """Get ground truth as SymPy expression.
+
+    NOTE: Currently only handles Nguyen-style benchmarks with 1-2 variables
+    named x, y. For Feynman benchmarks (physics variable names, up to 3 vars),
+    returns None gracefully. Solution recovery will report False for these.
+    """
     try:
         import sympy
 
@@ -266,13 +331,14 @@ def _get_ground_truth_sympy(bench: dict[str, Any]):
         # Create symbols
         nv = bench["num_variables"]
         if nv == 1:
-            x = sympy.Symbol("x_0")
+            sympy.Symbol("x_0")
             expr_str = expr_str.replace("x", "x_0")
         elif nv == 2:
-            x = sympy.Symbol("x_0")
-            y = sympy.Symbol("x_1")
+            sympy.Symbol("x_0")
+            sympy.Symbol("x_1")
             expr_str = expr_str.replace("x", "x_0").replace("y", "x_1")
         else:
+            # Feynman 3-variable problems: variable names don't match x/y pattern
             return None
 
         return sympy.sympify(expr_str)
