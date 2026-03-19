@@ -44,12 +44,24 @@ def load_run_log(path: Path) -> RunLog:
 
 
 def load_all_run_logs(directory: Path) -> list[RunLog]:
-    """Load all run_log.json files from seed subdirectories."""
+    """Load all run_log.json files from seed subdirectories.
+
+    Skips corrupt or empty files with a warning (common on shared
+    HPC filesystems where write-flush races can produce 0-byte files).
+    """
     logs = []
-    for seed_dir in sorted(directory.iterdir()):
-        run_log_path = seed_dir / "run_log.json"
+    for seed_dir_path in sorted(directory.iterdir()):
+        run_log_path = seed_dir_path / "run_log.json"
         if run_log_path.exists():
-            logs.append(RunLog.load_json(run_log_path))
+            try:
+                logs.append(RunLog.load_json(run_log_path))
+            except (json.JSONDecodeError, KeyError, TypeError) as exc:
+                log.warning(
+                    "Skipping corrupt run_log: %s (%s: %s)",
+                    run_log_path,
+                    type(exc).__name__,
+                    exc,
+                )
     return logs
 
 

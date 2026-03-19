@@ -136,9 +136,18 @@ class RunLog:
         )
 
     def save_json(self, path: Path) -> None:
+        """Atomic write: write to temp file then rename to prevent 0-byte races."""
+        import tempfile
+
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(self.to_dict(), f, indent=2, default=str)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        try:
+            with open(fd, "w") as f:
+                json.dump(self.to_dict(), f, indent=2, default=str)
+            Path(tmp).replace(path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
     @classmethod
     def load_json(cls, path: Path) -> RunLog:

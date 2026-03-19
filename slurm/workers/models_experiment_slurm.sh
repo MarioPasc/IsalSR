@@ -28,8 +28,9 @@ echo "Method:    ${MODELS_METHOD}"
 echo "Benchmark: ${MODELS_BENCHMARK}"
 echo "Variant:   ${MODELS_VARIANT}"
 
-# Load MPI module (required by bingo-nasa via mpi4py on Picasso)
-for mod in openmpi_gcc/5.0.2_gcc7.5.0 openmpi_gcc/5.0.9_gcc15 openmpi_gcc/4.1.5_gcc9.5.0_2024; do
+# Load MPI 5.0.9 module (required by bingo-nasa via mpi4py on Picasso)
+# Error "Please use mpi 5.0.9" occurs if wrong version loaded.
+for mod in openmpi_gcc/5.0.9_gcc7 openmpi_gcc/5.0.9_gcc15 openmpi_gcc/5.0.9_gcc14; do
     module load "$mod" 2>/dev/null && break
 done
 
