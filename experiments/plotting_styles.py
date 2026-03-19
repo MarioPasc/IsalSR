@@ -582,7 +582,7 @@ def bootstrap_ci(
 def save_figure(
     fig: object,
     path: str,
-    formats: tuple[str, ...] = ("pdf", "png"),
+    formats: tuple[str, ...] = ("pdf", "png", "svg"),
 ) -> list[str]:
     """Save figure in multiple formats at publication DPI.
 

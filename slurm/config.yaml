@@ -13,133 +13,94 @@ conda_env: isalsr
 constraint: cpu           # Any CPU node (Picasso recommended default)
 account: tic_163_uma
 
-# Per-experiment configuration
-# Each experiment runs 30 independent runs (seeds 42..71) across 12 Nguyen benchmarks.
-# Canon vs nocanon are separate jobs for paired comparison.
+# =================================================================
+# arXiv Experiments (active)
+# =================================================================
+# These experiments validate the canonical string representation
+# without comparing against other SR methods.
+
 experiments:
+  # --- Experiment 4: Search Space Reduction (enhanced) ---
+  # Single job. Generates random strings, canonicalizes, measures O(k!) reduction.
   search_space_analysis:
+    enabled: true
+    n_strings: 10000
+    max_tokens_list: "10,15,20,25,30"
+    include_feynman: true
+    seed: 42
+    time_limit: "12:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  # --- Experiment 3: Canonicalization Time vs Nodes ---
+  # Array job: one task per n_internal value (1..max_nodes).
+  # Each task runs all num_vars={1,2,3} for that n_internal.
+  exp3_canonicalization_time:
+    enabled: true
+    min_nodes: 1
+    max_nodes: 15
+    samples_per_node: 200
+    timeout: 120
+    seed: 42
+    time_limit: "08:00:00"    # per array task
+    cpus: 1
+    mem_gb: 8
+    n_runs: 15                # array size = max_nodes
+
+  # --- Experiment 5: Pruning Accuracy ---
+  # Array job: one task per n_internal value (1..max_nodes).
+  # Compares exhaustive vs pruned canonicalization.
+  exp5_pruning_accuracy:
+    enabled: true
+    min_nodes: 1
+    max_nodes: 12
+    samples_per_node: 500
+    timeout: 60
+    seed: 42
+    time_limit: "12:00:00"    # per array task (exhaustive is slow for large k)
+    cpus: 1
+    mem_gb: 8
+    n_runs: 12                # array size = max_nodes
+
+  # --- Experiment 6: String Compression ---
+  # Single job. Measures string length before/after canonicalization.
+  exp6_string_compression:
     enabled: true
     n_strings: 10000
     max_tokens: 30
     seed: 42
-    time_limit: "08:00:00"
-    cpus: 1
-    mem_gb: 16
-
-  # --- Random Search: WITH canonicalization ---
-  # Array job: each task runs 1 of 30 independent runs.
-  # Time limit is PER TASK (single run), not total.
-  random_search_canon:
-    enabled: true
-    n_iterations: 5000
-    max_tokens: 30
-    n_runs: 30
-    seed_base: 42
-    use_canonical: true
-    time_limit: "02:00:00"    # per task (was 04:00:00 for 30 sequential)
+    time_limit: "04:00:00"
     cpus: 1
     mem_gb: 8
 
-  # --- Random Search: WITHOUT canonicalization (baseline) ---
-  random_search_nocanon:
-    enabled: true
-    n_iterations: 5000
-    max_tokens: 30
-    n_runs: 30
-    seed_base: 42
-    use_canonical: false
-    time_limit: "01:00:00"    # per task (was 02:00:00 for 30 sequential)
-    cpus: 1
-    mem_gb: 8
-
-  # --- Hill Climbing: WITH canonicalization ---
-  hill_climbing_canon:
-    enabled: true
-    n_iterations: 1000
-    n_restarts: 10
-    max_tokens: 30
-    n_runs: 30
-    seed_base: 42
-    time_limit: "02:00:00"    # per task (was 08:00:00 for 30 sequential)
-    cpus: 1
-    mem_gb: 8
-
-  # --- Hill Climbing: WITHOUT canonicalization ---
-  hill_climbing_nocanon:
-    enabled: true
-    n_iterations: 1000
-    n_restarts: 10
-    max_tokens: 30
-    n_runs: 30
-    seed_base: 42
-    time_limit: "01:00:00"    # per task (was 04:00:00 for 30 sequential)
-    cpus: 1
-    mem_gb: 8
-
-  # --- Evolutionary (GP): WITH canonicalization ---
-  gp_canon:
-    enabled: true
-    pop_size: 100
-    n_generations: 50
-    max_tokens: 30
-    mutation_rate: 0.3
-    crossover_rate: 0.7
-    n_runs: 30
-    seed_base: 42
-    time_limit: "04:00:00"    # per task (was 12:00:00 for 30 sequential)
-    cpus: 1
-    mem_gb: 16
-
-  # --- Evolutionary (GP): WITHOUT canonicalization ---
-  gp_nocanon:
-    enabled: true
-    pop_size: 100
-    n_generations: 50
-    max_tokens: 30
-    mutation_rate: 0.3
-    crossover_rate: 0.7
-    n_runs: 30
-    seed_base: 42
-    time_limit: "02:00:00"    # per task (was 06:00:00 for 30 sequential)
-    cpus: 1
-    mem_gb: 16
-
-  # --- Post-processing: aggregate all results ---
-  aggregate_results:
+  # --- Post-processing: aggregate arXiv results ---
+  analyze_arxiv:
     enabled: true
     time_limit: "01:00:00"
     cpus: 1
-    mem_gb: 8
+    mem_gb: 16
 
   # =================================================================
-  # Precomputed Canonical String Cache (Phase 2: sampled generation)
+  # Precomputed Canonical String Cache (DISABLED for arXiv)
   # =================================================================
-  # Each array task generates one shard of random IsalSR strings,
-  # computes all 4 D2S algorithms + timing + correctness, and saves
-  # to an HDF5 file. A follow-up merge job combines shards.
-  #
-  # Usage:
-  #   bash slurm/launch.sh --experiment generate_cache_nguyen_1var
-  #   # After array completes:
-  #   bash slurm/launch.sh --experiment merge_cache_nguyen_1var
+  # These are used for model-based experiments (UDFS, Bingo).
+  # Re-enable when running comparative experiments via models_launch.sh.
 
-  # --- Nguyen 1-variable cache ---
   generate_cache_nguyen_1var:
-    enabled: true
+    enabled: false
     num_variables: 1
-    ops: "+,*,-,/,s,c,e,l"         # 8 core Nguyen ops
+    ops: "+,*,-,/,s,c,e,l"
     n_strings_per_task: 50000
     max_tokens: 30
-    n_shards: 20                   # array size
+    n_shards: 20
     seed_base: 42
     exhaustive_timeout: 60
     time_limit: "08:00:00"
     cpus: 1
     mem_gb: 16
 
-  # --- Nguyen 2-variable cache ---
   generate_cache_nguyen_2var:
-    enabled: true
+    enabled: false
     num_variables: 2
     ops: "+,*,-,/,s,c,e,l"
     n_strings_per_task: 50000
@@ -151,11 +112,10 @@ experiments:
     cpus: 1
     mem_gb: 16
 
-  # --- Feynman 1-variable cache ---
   generate_cache_feynman_1var:
-    enabled: true
+    enabled: false
     num_variables: 1
-    ops: "+,*,-,/,s,c,e,l,r,^"    # 10 Feynman ops (adds sqrt, pow)
+    ops: "+,*,-,/,s,c,e,l,r,^"
     n_strings_per_task: 25000
     max_tokens: 30
     n_shards: 20
@@ -165,9 +125,8 @@ experiments:
     cpus: 1
     mem_gb: 16
 
-  # --- Feynman 2-variable cache ---
   generate_cache_feynman_2var:
-    enabled: true
+    enabled: false
     num_variables: 2
     ops: "+,*,-,/,s,c,e,l,r,^"
     n_strings_per_task: 25000
@@ -179,9 +138,8 @@ experiments:
     cpus: 1
     mem_gb: 16
 
-  # --- Feynman 3-variable cache ---
   generate_cache_feynman_3var:
-    enabled: true
+    enabled: false
     num_variables: 3
     ops: "+,*,-,/,s,c,e,l,r,^"
     n_strings_per_task: 25000
@@ -193,33 +151,32 @@ experiments:
     cpus: 1
     mem_gb: 16
 
-  # --- Merge jobs (run AFTER the corresponding generate_cache array) ---
   merge_cache_nguyen_1var:
-    enabled: true
+    enabled: false
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32
 
   merge_cache_nguyen_2var:
-    enabled: true
+    enabled: false
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32
 
   merge_cache_feynman_1var:
-    enabled: true
+    enabled: false
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32
 
   merge_cache_feynman_2var:
-    enabled: true
+    enabled: false
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32
 
   merge_cache_feynman_3var:
-    enabled: true
+    enabled: false
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32

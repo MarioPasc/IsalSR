@@ -265,13 +265,10 @@ submit_cache_pipeline() {
 # ---------------------------------------------------------------------------
 EXPERIMENTS=(
     "search_space_analysis"
-    "random_search_canon"
-    "random_search_nocanon"
-    "hill_climbing_canon"
-    "hill_climbing_nocanon"
-    "gp_canon"
-    "gp_nocanon"
-    "aggregate_results"
+    "exp3_canonicalization_time"
+    "exp5_pruning_accuracy"
+    "exp6_string_compression"
+    "analyze_arxiv"
 )
 
 # Cache generation pipelines (generate -> merge with afterok dependency).

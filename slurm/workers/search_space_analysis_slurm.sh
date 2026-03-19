@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SLURM compute worker: Search Space Reduction Analysis (THE KEY EXPERIMENT)
+# SLURM compute worker: Search Space Reduction Analysis (Experiment 4, enhanced)
 set -euo pipefail
 
 echo "=== Search Space Analysis: SLURM Worker ==="
@@ -18,19 +18,28 @@ cd "$REPO_DIR"
 RESULTS_DIR=$($PYTHON -c "import yaml; print(yaml.safe_load(open('${CONFIG}'))['results_dir'])")
 BENCH_CFG=$($PYTHON -c "import yaml,json; json.dump(yaml.safe_load(open('${CONFIG}'))['experiments']['search_space_analysis'], __import__('sys').stdout)")
 
-N_STRINGS=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('n_strings', 10000))")
-MAX_TOKENS=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('max_tokens', 30))")
-SEED=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('seed', 42))")
-OUT_DIR="${RESULTS_DIR}/search_space_analysis"
+N_STRINGS=$(     echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('n_strings', 10000))")
+MAX_TOKENS_LIST=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('max_tokens_list', '15,20,25,30'))")
+INCLUDE_FEYNMAN=$(echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('include_feynman', True))")
+SEED=$(           echo "$BENCH_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('seed', 42))")
 
+OUT_DIR="${RESULTS_DIR}/search_space_analysis"
 mkdir -p "$OUT_DIR"
-echo "Config: n_strings=$N_STRINGS, max_tokens=$MAX_TOKENS, seed=$SEED"
+
+echo "Config: n_strings=$N_STRINGS, max_tokens_list=$MAX_TOKENS_LIST, seed=$SEED, include_feynman=$INCLUDE_FEYNMAN"
 echo "Output: $OUT_DIR"
+
+FEYNMAN_FLAG=""
+if [[ "$INCLUDE_FEYNMAN" == "True" ]]; then
+    FEYNMAN_FLAG="--include-feynman"
+fi
 
 python experiments/scripts/search_space_analysis.py \
     --n-strings "$N_STRINGS" \
-    --max-tokens "$MAX_TOKENS" \
+    --max-tokens-list "$MAX_TOKENS_LIST" \
     --seed "$SEED" \
-    --output "${OUT_DIR}/search_space_analysis.csv"
+    --output "${OUT_DIR}/search_space_analysis.csv" \
+    --plot \
+    $FEYNMAN_FLAG
 
 echo "Finished: $(date)"
