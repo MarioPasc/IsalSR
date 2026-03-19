@@ -127,6 +127,17 @@ experiments:
     mem_gb: 8
 
   # =========================================================
+  # Debug: sequential test of all (method, benchmark) combos
+  # =========================================================
+  # Runs 1 seed x 1 problem x 2 variants for each of 4 (method, benchmark)
+  # combinations. Use to verify the pipeline works before full submission.
+  models_debug:
+    enabled: true
+    time_limit: "04:00:00"    # enough for 8 sequential runs
+    cpus: 1
+    mem_gb: 8
+
+  # =========================================================
   # Analysis (runs after ALL experiments complete)
   # =========================================================
   models_analyze:

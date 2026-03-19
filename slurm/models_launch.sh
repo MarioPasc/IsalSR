@@ -261,6 +261,38 @@ if [[ "$ANALYZE_ONLY" == "true" ]]; then
 elif [[ -n "$SINGLE_EXP" ]]; then
     if [[ "$SINGLE_EXP" == "models_analyze" ]]; then
         submit_analysis ""
+    elif [[ "$SINGLE_EXP" == "models_debug" ]]; then
+        # Debug job: sequential, no array, single task
+        DEBUG_TIME=$(get_exp_field "models_debug" "time_limit")
+        DEBUG_CPUS=$(get_exp_field "models_debug" "cpus")
+        DEBUG_MEM=$(get_exp_field "models_debug" "mem_gb")
+        DEBUG_OUT="${RESULTS_DIR}/slurm_logs/models_debug"
+
+        echo "[models_debug] Sequential pipeline test"
+        echo "  Time: ${DEBUG_TIME}, CPUs: ${DEBUG_CPUS}, Mem: ${DEBUG_MEM}G"
+        echo "  Out:  ${DEBUG_OUT}"
+
+        DEBUG_CMD="sbatch \
+            --job-name=isalsr_models_debug \
+            --output=${DEBUG_OUT}/slurm_%j.out \
+            --error=${DEBUG_OUT}/slurm_%j.err \
+            --time=${DEBUG_TIME} \
+            --cpus-per-task=${DEBUG_CPUS} \
+            --mem=${DEBUG_MEM}G \
+            --constraint=${CONSTRAINT} \
+            --account=${ACCOUNT} \
+            --chdir=${REPO_DIR} \
+            --export=ALL,ISALSR_REPO_DIR=${REPO_DIR},MODELS_RESULTS_DIR=${RESULTS_DIR}/debug \
+            ${SCRIPT_DIR}/workers/models_debug_slurm.sh"
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo "  [DRY RUN] Would execute:"
+            echo "    ${DEBUG_CMD}"
+        else
+            mkdir -p "${DEBUG_OUT}"
+            echo "  Submitting..."
+            eval "${DEBUG_CMD}"
+        fi
     else
         submit_experiment "$SINGLE_EXP"
     fi

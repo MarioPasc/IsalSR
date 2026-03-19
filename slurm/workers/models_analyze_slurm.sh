@@ -19,6 +19,9 @@ echo "Job ID: ${SLURM_JOB_ID:-local}"
 echo "Node:   $(hostname)"
 echo "Start:  $(date)"
 
+# Load MPI module (required by bingo-nasa via mpi4py on Picasso)
+module load openmpi 2>/dev/null || module load mpi 2>/dev/null || true
+
 # Activate conda environment
 eval "$(conda shell.bash hook 2>/dev/null)" || true
 conda activate isalsr 2>/dev/null || true

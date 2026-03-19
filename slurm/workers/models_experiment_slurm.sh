@@ -28,6 +28,9 @@ echo "Method:    ${MODELS_METHOD}"
 echo "Benchmark: ${MODELS_BENCHMARK}"
 echo "Variant:   ${MODELS_VARIANT}"
 
+# Load MPI module (required by bingo-nasa via mpi4py on Picasso)
+module load openmpi 2>/dev/null || module load mpi 2>/dev/null || true
+
 # Activate conda environment
 eval "$(conda shell.bash hook 2>/dev/null)" || true
 conda activate isalsr 2>/dev/null || true
