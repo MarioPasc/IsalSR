@@ -1,0 +1,29 @@
+# UDFS Feynman debug config: fast smoke test (60s max per problem)
+experiment:
+  name: debug_udfs_feynman
+  method: udfs
+  n_seeds: 1
+
+benchmarks:
+  feynman:
+    problems: all
+    train_size: 160
+    test_size: 40
+
+udfs:
+  n_calc_nodes: 3
+  max_orders: 1000
+  max_time: 60
+  processes: 1
+  mode: hierarchical
+  k: 2
+  stop_thresh: 1.0e-10
+  use_tan: false
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log"]
+
+isalsr:
+  canonicalization_timeout: 10.0
+  use_pruned: true
+
+output:
+  base_dir: /tmp/isalsr_debug

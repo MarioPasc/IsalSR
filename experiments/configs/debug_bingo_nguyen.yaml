@@ -1,0 +1,32 @@
+# Bingo debug config: fast smoke test (60s max per problem)
+experiment:
+  name: debug_bingo_nguyen
+  method: bingo
+  n_seeds: 1
+
+benchmarks:
+  nguyen:
+    problems: all
+    train_size: 20
+    test_size: 100
+
+bingo:
+  population_size: 32
+  stack_size: 12
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  metric: mse
+  clo_alg: lm
+  generations: 100
+  fitness_threshold: 1.0e-16
+  max_time: 60
+  max_evals: 5000
+
+isalsr:
+  canonicalization_timeout: 10.0
+  use_pruned: true
+
+output:
+  base_dir: /tmp/isalsr_debug

@@ -29,11 +29,17 @@ echo "Benchmark: ${MODELS_BENCHMARK}"
 echo "Variant:   ${MODELS_VARIANT}"
 
 # Load MPI module (required by bingo-nasa via mpi4py on Picasso)
-module load openmpi 2>/dev/null || module load mpi 2>/dev/null || true
+for mod in openmpi_gcc/5.0.2_gcc7.5.0 openmpi_gcc/5.0.9_gcc15 openmpi_gcc/4.1.5_gcc9.5.0_2024; do
+    module load "$mod" 2>/dev/null && break
+done
 
 # Activate conda environment
 eval "$(conda shell.bash hook 2>/dev/null)" || true
 conda activate isalsr 2>/dev/null || true
+
+# Ensure conda lib is in LD_LIBRARY_PATH (for conda-installed openmpi)
+CONDA_PREFIX="${CONDA_PREFIX:-$(conda info --base)/envs/isalsr}"
+export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 
 REPO_DIR="${ISALSR_REPO_DIR:?ERROR: ISALSR_REPO_DIR not set}"
 cd "$REPO_DIR"
