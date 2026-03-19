@@ -79,7 +79,9 @@ def agraph_to_labeled_dag(
 
     if const_values is None:
         try:
-            const_values = agraph.constants
+            cv = agraph.constants
+            # Bingo stores constants as (n,1) or (n,) ndarray; flatten to 1D
+            const_values = tuple(float(np.asarray(v).flat[0]) for v in cv)
         except (AttributeError, TypeError):
             const_values = ()
 
@@ -192,7 +194,7 @@ def labeled_dag_to_agraph(dag: LabeledDAG) -> Any:
     """
     from bingo.symbolic_regression.agraph.agraph import AGraph
 
-    ISALSR_TO_BINGO: dict[NodeType, int] = {v: k for k, v in BINGO_OP_TO_ISALSR.items()}
+    isalsr_to_bingo: dict[NodeType, int] = {v: k for k, v in BINGO_OP_TO_ISALSR.items()}
 
     order = dag.topological_sort()
     isalsr_to_row: dict[int, int] = {}
@@ -216,7 +218,7 @@ def labeled_dag_to_agraph(dag: LabeledDAG) -> Any:
             const_count += 1
 
         else:
-            op_code = ISALSR_TO_BINGO.get(label)
+            op_code = isalsr_to_bingo.get(label)
             if op_code is None:
                 raise ValueError(f"Cannot map IsalSR {label} to Bingo op")
 
