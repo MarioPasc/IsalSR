@@ -5,6 +5,7 @@ Converts UDFSRawResult to the unified RunLog and TrajectoryRow schemas.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any
 
@@ -30,6 +31,8 @@ from experiments.models.schemas import (
     TrajectoryRow,
 )
 from experiments.models.udfs.runner import UDFSRawResult
+
+log = logging.getLogger(__name__)
 
 
 class UDFSTranslator(ResultTranslator):
@@ -90,6 +93,10 @@ class UDFSTranslator(ResultTranslator):
             model_complexity=complexity,
         )
 
+        # Time-to-threshold: conservative upper bound from final R²
+        time_to_099 = r.wall_clock_s if r2_test >= 0.99 else None
+        time_to_0999 = r.wall_clock_s if r2_test >= 0.999 else None
+
         # Time metrics
         time_results = TimeResults(
             wall_clock_total_s=r.wall_clock_s,
@@ -100,8 +107,8 @@ class UDFSTranslator(ResultTranslator):
             cache_hits=0,
             cache_misses=0,
             estimated_time_saved_s=0.0,
-            time_to_r2_099_s=None,  # would need trajectory data
-            time_to_r2_0999_s=None,
+            time_to_r2_099_s=time_to_099,
+            time_to_r2_0999_s=time_to_0999,
             evaluation_time_s=r.search_only_time_s,
             overhead_time_s=r.canonicalization_time_s,
         )
@@ -128,12 +135,14 @@ class UDFSTranslator(ResultTranslator):
             redundancy_rate=redundancy,
         )
 
-        # Best expression
+        # Best expression with IsalSR/canonical strings
         expr_str = str(r.best_sympy) if r.best_sympy is not None else ""
+        isalsr_str, canonical_str = _compute_isalsr_strings(r.best_sympy, metadata)
+
         best_expr = BestExpression(
             symbolic_form=expr_str,
-            isalsr_string="",  # UDFS doesn't produce IsalSR strings
-            canonical_string="",
+            isalsr_string=isalsr_str,
+            canonical_string=canonical_str,
             n_nodes=complexity,
             n_edges=max(complexity - 1, 0),
         )
@@ -182,6 +191,34 @@ class UDFSTranslator(ResultTranslator):
         r = raw
         assert isinstance(r, UDFSRawResult)
         return r.best_sympy
+
+
+def _compute_isalsr_strings(
+    best_sympy: Any,
+    metadata: RunMetadata,
+) -> tuple[str, str]:
+    """Compute IsalSR and canonical strings for the best SymPy expression.
+
+    Only attempted for IsalSR variants. Returns ("", "") on failure or
+    for baseline variants.
+    """
+    if metadata.representation != "isalsr" or best_sympy is None:
+        return "", ""
+
+    try:
+        from isalsr.adapters.sympy_adapter import SymPyAdapter
+        from isalsr.core.canonical import pruned_canonical_string
+        from isalsr.core.dag_to_string import DAGToString
+
+        adapter = SymPyAdapter()
+        dag = adapter.from_external(best_sympy)
+        converter = DAGToString(dag, start_node=0)
+        isalsr_str = converter.convert()
+        canonical_str = pruned_canonical_string(dag, timeout=10.0)
+        return isalsr_str, canonical_str
+    except Exception as e:  # noqa: BLE001
+        log.debug("Failed to compute IsalSR strings for best SymPy expr: %s", e)
+        return "", ""
 
 
 def _count_sympy_nodes(expr: Any) -> int:

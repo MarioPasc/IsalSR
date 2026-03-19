@@ -5,6 +5,7 @@ Converts BingoRawResult to the unified RunLog and TrajectoryRow schemas.
 
 from __future__ import annotations
 
+import contextlib
 import math
 from typing import Any
 
@@ -146,10 +147,8 @@ class BingoTranslator(ResultTranslator):
         expr_str = str(r.best_sympy) if r.best_sympy is not None else ""
         complexity = 0
         if r.best_agraph is not None:
-            try:
+            with contextlib.suppress(Exception):
                 complexity = r.best_agraph.get_complexity()
-            except Exception:  # noqa: BLE001
-                pass
         cache_rate = r.n_skipped / r.n_total_dags if r.n_total_dags > 0 else 0.0
 
         return [

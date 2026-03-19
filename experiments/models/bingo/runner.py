@@ -119,21 +119,87 @@ def build_bingo_pipeline(
 
 
 def extract_sympy(agraph: Any) -> Any:
-    """Extract SymPy expression from an AGraph."""
+    """Extract SymPy expression from an AGraph.
+
+    Tries multiple approaches:
+    1. get_formatted_string("sympy") → sympify
+    2. String substitution for Bingo-specific syntax (e.g., |.| for abs)
+    3. Falls back to None with a warning if all methods fail.
+    """
+    if agraph is None:
+        return None
+
+    # Attempt 1: standard sympy format
     try:
         sympy_str = agraph.get_formatted_string("sympy")
-        # Bingo uses X_0, X_1, ...; remap to x_0, x_1, ...
         expr = sympy.sympify(sympy_str)
-        subs = {}
-        for sym in expr.free_symbols:
-            name = str(sym)
-            if name.startswith("X_"):
-                idx = name[2:]
-                subs[sym] = sympy.Symbol(f"x_{idx}")
-        return expr.subs(subs)
+        return _remap_bingo_symbols(expr)
     except Exception:  # noqa: BLE001
-        log.debug("Failed to extract SymPy from AGraph", exc_info=True)
-        return None
+        pass
+
+    # Attempt 2: clean up common issues in Bingo's sympy string output
+    try:
+        sympy_str = agraph.get_formatted_string("sympy")
+        # Replace |x| with Abs(x) for SymPy
+        cleaned = sympy_str.replace("|", "")
+        if cleaned != sympy_str:
+            cleaned = f"Abs({cleaned})"
+        expr = sympy.sympify(cleaned, locals={"Abs": sympy.Abs})
+        return _remap_bingo_symbols(expr)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Attempt 3: try console format → sympify as last resort
+    try:
+        console_str = agraph.get_formatted_string("console")
+        # Console format is more human-readable; may need cleanup
+        cleaned = console_str.replace(")(", ")*(")
+        expr = sympy.sympify(cleaned)
+        return _remap_bingo_symbols(expr)
+    except Exception:  # noqa: BLE001
+        pass
+
+    log.warning(
+        "Failed to extract SymPy from AGraph (all methods). Console repr: %s",
+        _safe_agraph_str(agraph),
+    )
+    return None
+
+
+def _remap_bingo_symbols(expr: Any) -> Any:
+    """Remap Bingo's X_0, X_1, ... to IsalSR's x_0, x_1, ..."""
+    subs = {}
+    for sym in expr.free_symbols:
+        name = str(sym)
+        if name.startswith("X_"):
+            idx = name[2:]
+            subs[sym] = sympy.Symbol(f"x_{idx}")
+    return expr.subs(subs) if subs else expr
+
+
+def _safe_agraph_str(agraph: Any) -> str:
+    """Get a string representation of an AGraph without crashing."""
+    try:
+        return agraph.get_formatted_string("console")
+    except Exception:  # noqa: BLE001
+        try:
+            return str(agraph)
+        except Exception:  # noqa: BLE001
+            return "<unrepresentable>"
+
+
+def get_symbolic_form(agraph: Any, best_sympy: Any = None) -> str:
+    """Get a human-readable symbolic form string.
+
+    Returns SymPy string if available, else tries console format from AGraph.
+    """
+    if best_sympy is not None:
+        return str(best_sympy)
+
+    if agraph is None:
+        return ""
+
+    return _safe_agraph_str(agraph)
 
 
 class BingoBaselineRunner(ModelRunner):

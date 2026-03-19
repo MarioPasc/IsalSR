@@ -68,6 +68,13 @@ REPO_DIR="${ISALSR_REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$REPO_DIR"
 
 RESULTS_DIR="${MODELS_RESULTS_DIR:-/mnt/home/users/tic_163_uma/mpascual/execs/isalsr/models/debug}"
+
+# Clean previous debug results so new translator code is exercised
+# (orchestrator skips existing run_log.json files)
+if [[ -d "$RESULTS_DIR" ]]; then
+    echo "Cleaning previous debug results..."
+    rm -rf "$RESULTS_DIR"
+fi
 mkdir -p "$RESULTS_DIR"
 
 echo "Repo:    ${REPO_DIR}"
