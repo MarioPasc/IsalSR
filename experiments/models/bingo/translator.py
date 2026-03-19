@@ -6,6 +6,7 @@ Converts BingoRawResult to the unified RunLog and TrajectoryRow schemas.
 from __future__ import annotations
 
 import contextlib
+import logging
 import math
 from typing import Any
 
@@ -21,7 +22,7 @@ from experiments.models.analyzer.metrics import (
 )
 from experiments.models.base_runner import RawRunResult
 from experiments.models.base_translator import ResultTranslator
-from experiments.models.bingo.runner import BingoRawResult
+from experiments.models.bingo.runner import BingoRawResult, get_symbolic_form
 from experiments.models.schemas import (
     BestExpression,
     RegressionResults,
@@ -31,6 +32,8 @@ from experiments.models.schemas import (
     TimeResults,
     TrajectoryRow,
 )
+
+log = logging.getLogger(__name__)
 
 
 class BingoTranslator(ResultTranslator):
@@ -89,6 +92,10 @@ class BingoTranslator(ResultTranslator):
             model_complexity=complexity,
         )
 
+        # Time-to-threshold: conservative upper bound from final R²
+        time_to_099 = r.wall_clock_s if r2_test >= 0.99 else None
+        time_to_0999 = r.wall_clock_s if r2_test >= 0.999 else None
+
         time_results = TimeResults(
             wall_clock_total_s=r.wall_clock_s,
             wall_clock_search_only_s=r.search_only_time_s,
@@ -98,8 +105,8 @@ class BingoTranslator(ResultTranslator):
             cache_hits=0,
             cache_misses=0,
             estimated_time_saved_s=0.0,
-            time_to_r2_099_s=None,
-            time_to_r2_0999_s=None,
+            time_to_r2_099_s=time_to_099,
+            time_to_r2_0999_s=time_to_0999,
             evaluation_time_s=r.search_only_time_s,
             overhead_time_s=r.canonicalization_time_s,
         )
@@ -121,11 +128,14 @@ class BingoTranslator(ResultTranslator):
             redundancy_rate=redundancy,
         )
 
-        expr_str = str(r.best_sympy) if r.best_sympy is not None else ""
+        # Best expression: symbolic form + IsalSR/canonical strings
+        sym_form = get_symbolic_form(r.best_agraph, r.best_sympy)
+        isalsr_str, canonical_str = _compute_isalsr_strings(r.best_agraph, metadata)
+
         best_expr = BestExpression(
-            symbolic_form=expr_str,
-            isalsr_string="",
-            canonical_string="",
+            symbolic_form=sym_form,
+            isalsr_string=isalsr_str,
+            canonical_string=canonical_str,
             n_nodes=complexity,
             n_edges=max(complexity - 1, 0),
         )
@@ -144,7 +154,7 @@ class BingoTranslator(ResultTranslator):
 
         r2_test = r_squared(self._y_test, r.y_pred_test)
         nrmse_test = nrmse(self._y_test, r.y_pred_test)
-        expr_str = str(r.best_sympy) if r.best_sympy is not None else ""
+        sym_form = get_symbolic_form(r.best_agraph, r.best_sympy)
         complexity = 0
         if r.best_agraph is not None:
             with contextlib.suppress(Exception):
@@ -159,7 +169,7 @@ class BingoTranslator(ResultTranslator):
                 best_nrmse=nrmse_test,
                 n_dags_explored=r.n_total_dags,
                 n_unique_canonical=r.n_unique_canonical,
-                current_expr=expr_str,
+                current_expr=sym_form,
                 current_complexity=complexity,
                 cache_hit_rate_cumulative=cache_rate,
             ),
@@ -169,6 +179,33 @@ class BingoTranslator(ResultTranslator):
         r = raw
         assert isinstance(r, BingoRawResult)
         return r.best_sympy
+
+
+def _compute_isalsr_strings(
+    agraph: Any,
+    metadata: RunMetadata,
+) -> tuple[str, str]:
+    """Compute IsalSR and canonical strings for the best AGraph.
+
+    Only attempted for IsalSR variants. Returns ("", "") on failure or
+    for baseline variants.
+    """
+    if metadata.representation != "isalsr" or agraph is None:
+        return "", ""
+
+    try:
+        from experiments.models.bingo.adapter import agraph_to_labeled_dag
+        from isalsr.core.canonical import pruned_canonical_string
+        from isalsr.core.dag_to_string import DAGToString
+
+        dag = agraph_to_labeled_dag(agraph)
+        converter = DAGToString(dag, initial_node=0)
+        isalsr_str = converter.run()
+        canonical_str = pruned_canonical_string(dag, timeout=10.0)
+        return isalsr_str, canonical_str
+    except Exception as e:  # noqa: BLE001
+        log.warning("Failed to compute IsalSR strings for best AGraph: %s", e)
+        return "", ""
 
 
 def _count_sympy_nodes(expr: Any) -> int:

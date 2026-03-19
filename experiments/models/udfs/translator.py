@@ -206,18 +206,18 @@ def _compute_isalsr_strings(
         return "", ""
 
     try:
-        from isalsr.adapters.sympy_adapter import SymPyAdapter
+        from isalsr.adapters.sympy_adapter import SympyAdapter
         from isalsr.core.canonical import pruned_canonical_string
         from isalsr.core.dag_to_string import DAGToString
 
-        adapter = SymPyAdapter()
+        adapter = SympyAdapter()
         dag = adapter.from_external(best_sympy)
-        converter = DAGToString(dag, start_node=0)
-        isalsr_str = converter.convert()
+        converter = DAGToString(dag, initial_node=0)
+        isalsr_str = converter.run()
         canonical_str = pruned_canonical_string(dag, timeout=10.0)
         return isalsr_str, canonical_str
     except Exception as e:  # noqa: BLE001
-        log.debug("Failed to compute IsalSR strings for best SymPy expr: %s", e)
+        log.warning("Failed to compute IsalSR strings for best SymPy expr: %s", e)
         return "", ""
 
 
