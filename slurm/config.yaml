@@ -55,11 +55,11 @@ experiments:
   # Timeout reduced 2s→1s to halve time wasted on unavoidable timeouts.
   search_space_analysis:
     enabled: true
-    n_strings: 2000
+    n_strings: 1000
     max_tokens_list: "10,15,20"
     include_feynman: true
     seed: 42
-    time_limit: "02:00:00"    # per array task (one max_tokens value)
+    time_limit: "06:00:00"    # per array task; T=20 needs ~2.6h with 1000 strings
     cpus: 1
     mem_gb: 8
     n_runs: 3                 # array size = number of max_tokens values

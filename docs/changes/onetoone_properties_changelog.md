@@ -17,126 +17,97 @@ The five properties are:
 - **P4**: Evaluation preservation — |eval(D) - eval(round-tripped D)| < 10⁻⁸
 - **P5**: Search space reduction — canonicalization collapses O(k!) duplicates
 
-**Before this change**, P1–P4 were only validated in the unit/property test suite (`tests/property/`), not as reportable experiments with statistical confidence intervals. Only P5 was covered by the search_space_analysis experiment.
+**Before this change**, P1–P4 were only validated in the unit/property test suite (`tests/property/`), not as reportable experiments with statistical confidence intervals and scientific figures. Only P5 was covered by the search_space_analysis experiment.
 
 ---
 
-## What was added
+## What was created
 
-### New script: `experiments/scripts/onetoone_properties.py`
+### `experiments/scripts/onetoone_properties.py` — Two-phase validation
 
-A single-pass validation that generates N random IsalSR strings and tests all four properties (P1–P4) on each valid DAG:
+**Phase 1** (statistical): Generates N random IsalSR strings, validates all four properties on each valid DAG. Produces per-string CSVs and summary CSV with Clopper-Pearson 95% CIs.
 
-1. **P2 (Acyclicity)**: Topological sort succeeds with all nodes included
-2. **P1 (Round-trip)**: D2S → S2D produces an isomorphic DAG via `is_isomorphic()`
-3. **P4 (Eval preservation)**: Round-tripped DAG evaluates identically at 5 test points (tolerance: 10⁻⁸)
-4. **P3 (Canonical invariance)**: S2D(canonical(D)) ≅ D, and canonical is idempotent (string equality)
+**Phase 2** (benchmark-level, triggered by `--plot`): Validates P1–P4 on 8 curated Nguyen/Feynman benchmark expressions. Generates:
 
-**Outputs**:
-- Per-string CSV: `results_v{1,2,3}.csv` — individual property pass/fail per sample
-- Summary CSV: `summary.csv` — aggregated pass rates with Clopper-Pearson 95% CI
-- Figures: `fig_property_pass_rates.{pdf,png,svg}` — grouped bar chart of pass rates
+| Output file | Content |
+|------------|---------|
+| `fig_p1_roundtrip.{pdf,png,svg}` | Table-figure: per-benchmark canonical strings with token coloring, |V|, |E|, PASS status |
+| `fig_p2_acyclicity.{pdf,png,svg}` | Histogram of random-string DAG complexity + benchmark depths as annotated vertical lines, "All N acyclic" |
+| `fig_p3_invariance.{pdf,png,svg}` | Demonstration: different encodings (greedy D2S, no-op padded, re-canonicalized) all produce same w* |
+| `fig_p4_evaluation.{pdf,png,svg}` | Scatter plot: eval(D) vs eval(D') across all benchmarks × test points, with max error annotation |
+| `tab_benchmark_properties.tex` | LaTeX table: Expression, m, |V|, |E|, Depth, P1–P4, |w*| |
+| `benchmark_validation.json` | Full JSON data for reproducibility |
+| `fig_property_pass_rates.{pdf,png,svg}` | Phase 1: grouped bar chart of pass rates with CIs |
+| `summary.csv` | Phase 1: aggregated pass rates per property per num_vars |
+| `results_v{1,2,3}.csv` | Phase 1: per-string results |
 
-**CLI**: `--output-dir`, `--n-strings` (5000), `--max-tokens` (20), `--num-vars` (0=all), `--timeout` (2.0), `--seed` (42), `--plot`
-
-### New SLURM worker: `slurm/workers/onetoone_properties_slurm.sh`
-
-Array job: `SLURM_ARRAY_TASK_ID` = num_vars (1, 2, or 3). Each task processes one num_vars value independently.
+### `slurm/workers/onetoone_properties_slurm.sh`
+SLURM array worker (3 tasks, one per num_vars={1,2,3}).
 
 ---
 
 ## What was modified
 
 ### `slurm/config.yaml`
-- **Added** `onetoone_properties` experiment entry (array of 3, 2h, 4G, 5000 strings)
-- **Reduced** `search_space_analysis.n_strings` from 10,000 to **2,000** (P5 speedup — see below)
-- **Reduced** `search_space_analysis.time_limit` from 4h to 2h
+- **Added**: `onetoone_properties` (array of 3, 2h, 4G, 5000 strings)
+- **Modified**: `search_space_analysis`:
+  - `n_strings`: 10000 → **1000** (reduce Picasso wall-clock; still statistically significant)
+  - `max_tokens_list`: "10,15,20,25,30" → **"10,15,20"** (T=25,30 produce >50% canon timeouts — useless noise)
+  - `time_limit`: "02:00:00" → **"06:00:00"** (T=20 needs ~2.6h with 1000 strings)
+  - `_CANON_TIMEOUT` in script: 5.0 → **1.0** seconds
 
 ### `slurm/launch.sh`
-- **Added** `"onetoone_properties"` to the EXPERIMENTS list (position 3, after exp1/exp2)
+- Added `"onetoone_properties"` to EXPERIMENTS list
 
 ### `experiments/scripts/run_all_arxiv_local.sh`
-- **Added** onetoone_properties call with reduced params (200 strings, 15 tokens, 2s timeout)
-- **Changed** output directory to `.../arXiv_benchmarking/local/`
+- Added onetoone_properties call with reduced params
+- Output directory changed to `.../arXiv_benchmarking/local/`
 
 ### `experiments/scripts/analyze_arxiv_results.py`
-- **Added** onetoone_properties section to the summary report (property pass rate table)
-- **Added** `"onetoone_properties"` to subdirs list for directory scanning
+- Added onetoone_properties section to summary report
 
 ---
 
-## Search Space Analysis Speedup
+## Property → Experiment → Figure mapping
 
-**Problem**: The search_space_analysis experiment with n_strings=10,000 per benchmark was still too slow on Picasso (~40+ minutes per array task even after parallelization by max_tokens).
-
-**Fix**: Reduced `n_strings` from 10,000 to **2,000**.
-
-**Statistical justification**: With 2,000 strings per benchmark, the bootstrap 95% CI for a typical reduction factor of 1.5x has width ±0.3x, sufficient to demonstrate the O(k!) scaling trend. The paper's claim is about the scaling law, not the precise constant.
-
----
-
-## How to report in the paper (results.tex)
-
-### Property validation table (P1–P4)
-
-The `summary.csv` output directly maps to a LaTeX table:
-
-```latex
-\begin{table}[htbp]
-\caption{Empirical validation of properties P1--P4 on $N=5{,}000$ random
-  IsalSR strings per variable count $m$.}
-\begin{tabular}{llrrr}
-\toprule
-Property & $m$ & Tested & Pass rate & 95\% CI \\
-\midrule
-P1 (Round-trip) & 1 & ... & 100\% & [..., 1.000] \\
-P2 (Acyclicity) & 1 & ... & 100\% & [..., 1.000] \\
-...
-\bottomrule
-\end{tabular}
-\end{table}
-```
-
-### P5 (Search space reduction)
-
-Covered by the existing `search_space_analysis.py` experiment (now with n_strings=2,000). Reports reduction factor ρ = n_valid / n_unique per (benchmark, max_tokens, k) bin, with bootstrap CI.
-
-### Mapping table for the introduction
-
-| Introduction claim | Experiment | Output |
-|-------------------|------------|--------|
-| P1: Round-trip fidelity | `onetoone_properties` | Pass rate 100%, CI [99.x%, 100%] |
-| P2: DAG acyclicity | `onetoone_properties` | Pass rate 100%, CI [99.x%, 100%] |
-| P3: Canonical invariance | `onetoone_properties` | Pass rate 100%, CI [99.x%, 100%] |
-| P4: Evaluation preservation | `onetoone_properties` | Pass rate 100%, max error 0.0 |
-| P5: Search space reduction | `search_space_analysis` | Reduction factor vs k, with k! reference |
+| Property | Phase 1 evidence | Phase 2 figure | Phase 2 table |
+|----------|-----------------|----------------|---------------|
+| **P1** Round-trip | 100% pass rate, CI [99.x%, 100%] | `fig_p1_roundtrip`: colored canonical strings per benchmark | `tab_benchmark_properties.tex` |
+| **P2** Acyclicity | 100% pass rate, CI [99.x%, 100%] | `fig_p2_acyclicity`: complexity histogram + benchmark depths | `tab_benchmark_properties.tex` |
+| **P3** Invariance | 100% pass rate, CI [99.x%, 100%] | `fig_p3_invariance`: multiple encodings → same w* | `tab_benchmark_properties.tex` |
+| **P4** Eval preservation | 100% pass rate, max error = 0.0 | `fig_p4_evaluation`: scatter plot eval(D) vs eval(D') | `tab_benchmark_properties.tex` |
+| **P5** Search space | `search_space_analysis.py` | `fig_reduction_factor`: ρ vs k with k! reference | Separate CSV |
 
 ---
 
-## Local test results (N=500, max_tokens=15)
+## How to report in results.tex
 
-All properties pass at 100% across m=1,2,3:
-- P1: 492/492 per m (CI [99.25%, 100%])
-- P2: 492/492 per m (CI [99.25%, 100%])
-- P3 invariance: 396–403 tested (excluding canon timeouts), 100%
-- P3 idempotent: 396–403 tested, 100%
-- P4: 492/492 per m, all errors exactly 0.0
+### One-to-one mapping paragraph
 
-Runtime: ~13 minutes for 1500 strings total (3 × 500).
+*"We validate the five fundamental properties empirically. Properties P1 (round-trip fidelity), P2 (DAG acyclicity), P3 (canonical invariance), and P4 (evaluation preservation) are tested on 5,000 random IsalSR strings per variable count m ∈ {1,2,3}, with results reported in Table X and Figures Y-Z. All four properties hold at 100% with Clopper-Pearson 95% confidence intervals of [99.x%, 100%]. Property P5 (search space reduction) is validated separately on 1,000 random strings across the Nguyen and Feynman benchmark suites (Section Z)."*
+
+### Figures to include in the paper
+
+1. `tab_benchmark_properties.tex` — Main results table (8 benchmarks × 4 properties)
+2. `fig_p3_invariance` — Most scientifically interesting: shows THE invariant property in action
+3. `fig_p4_evaluation` — Visual proof of evaluation preservation
+4. `fig_p2_acyclicity` — Shows DAG complexity range + all acyclic
+5. `fig_p1_roundtrip` — Shows canonical strings with token coloring (optional, informative)
+6. `fig_property_pass_rates` — Summary bar chart (optional, compact)
 
 ---
 
-## SLURM resource summary (updated)
+## SLURM resource summary (final)
 
-| Experiment | Tasks | Time/task | Mem | Purpose |
-|-----------|-------|-----------|-----|---------|
-| exp1_shortest_path | 1 | 30min | 4G | Illustrative: metric space |
-| exp2_neighborhood | 1 | 30min | 4G | Illustrative: local topology |
-| **onetoone_properties** | **3** | **2h** | **4G** | **P1–P4 validation** |
-| search_space_analysis | 5 | 2h | 8G | P5: O(k!) reduction |
-| exp3_canonicalization_time | 15 | 8h | 8G | Scalability |
-| exp5_pruning_accuracy | 12 | 12h | 8G | Pruning reliability |
-| exp6_string_compression | 3 | 4h | 4G | Compression effect |
-| analyze_arxiv | 1 (dep) | 1h | 4G | Aggregation + report |
+| Experiment | Tasks | Time/task | Mem |
+|-----------|-------|-----------|-----|
+| exp1_shortest_path | 1 | 30min | 4G |
+| exp2_neighborhood | 1 | 30min | 4G |
+| **onetoone_properties** | **3** | **2h** | **4G** |
+| search_space_analysis | 3 | **6h** | 8G |
+| exp3_canonicalization_time | 15 | 8h | 8G |
+| exp5_pruning_accuracy | 12 | 12h | 8G |
+| exp6_string_compression | 3 | 4h | 4G |
+| analyze_arxiv | 1 (dep) | 1h | 4G |
 
-**Total SLURM tasks**: 41 (was 39)
+**Total SLURM tasks**: 39

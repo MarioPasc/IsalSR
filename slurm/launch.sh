@@ -263,14 +263,18 @@ submit_cache_pipeline() {
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+# arXiv paper experiments (matches computational_experiments.tex):
+#   X.3  onetoone_properties          P1-P4 correctness validation
+#   X.4  search_space_analysis        P5 central hypothesis (O(k!) reduction)
+#   X.5  exp3_canonicalization_time   Scalability (CPU time vs nodes)
+#   X.6  exp1_shortest_path           Metric space (illustrative)
+#        exp2_neighborhood            Distance-1 neighborhood (illustrative)
 EXPERIMENTS=(
-    "exp1_shortest_path"
-    "exp2_neighborhood"
     "onetoone_properties"
     "search_space_analysis"
     "exp3_canonicalization_time"
-    "exp5_pruning_accuracy"
-    "exp6_string_compression"
+    "exp1_shortest_path"
+    "exp2_neighborhood"
 )
 
 # Cache generation pipelines (generate -> merge with afterok dependency).
