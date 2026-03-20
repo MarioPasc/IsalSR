@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -37,6 +38,7 @@ from experiments.models.hardware_info import collect_hardware_info  # noqa: E402
 from experiments.models.io_utils import (  # noqa: E402
     ensure_output_structure,
     load_all_run_logs,
+    load_run_log,
     save_aggregate,
     save_metadata,
     save_paired_stats,
@@ -227,11 +229,20 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
                 for variant in variants:
                     run_key = f"{problem_name} seed={seed} variant={variant}"
 
-                    # Check if already done
+                    # Check if already done (validate JSON, not just existence)
                     sd = seed_dir(paths[variant], seed)
-                    if (sd / "run_log.json").exists():
-                        log.info("  Skipping %s (already exists)", run_key)
-                        continue
+                    run_log_path = sd / "run_log.json"
+                    if run_log_path.exists():
+                        try:
+                            load_run_log(run_log_path)
+                            log.info("  Skipping %s (already exists)", run_key)
+                            continue
+                        except (json.JSONDecodeError, KeyError, TypeError, OSError):
+                            log.warning(
+                                "  Corrupt run_log detected for %s, re-running",
+                                run_key,
+                            )
+                            run_log_path.unlink(missing_ok=True)
 
                     log.info("  Running %s", run_key)
 

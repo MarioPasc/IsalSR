@@ -264,11 +264,12 @@ submit_cache_pipeline() {
 # Main
 # ---------------------------------------------------------------------------
 EXPERIMENTS=(
+    "exp1_shortest_path"
+    "exp2_neighborhood"
     "search_space_analysis"
     "exp3_canonicalization_time"
     "exp5_pruning_accuracy"
     "exp6_string_compression"
-    "analyze_arxiv"
 )
 
 # Cache generation pipelines (generate -> merge with afterok dependency).
@@ -292,9 +293,26 @@ elif [[ "$CACHE_MODE" == "true" ]]; then
         submit_cache_pipeline "$gen_name" "$merge_name"
     done
 else
+    # Submit all experiment jobs and collect their IDs for dependency chaining.
+    EXPERIMENT_IDS=()
     for exp in "${EXPERIMENTS[@]}"; do
-        submit_experiment "$exp"
+        job_id=$(submit_experiment "$exp")
+        if [[ -n "$job_id" && "$job_id" != "0" ]]; then
+            EXPERIMENT_IDS+=("$job_id")
+        fi
     done
+
+    # Submit analysis with dependency on all experiment jobs.
+    # Uses afterany so analysis runs even if some experiments fail.
+    if [[ ${#EXPERIMENT_IDS[@]} -gt 0 ]]; then
+        ALL_DEP=$(IFS=:; echo "${EXPERIMENT_IDS[*]}")
+        echo "--- Analysis job (after all experiments) ---" >&2
+        echo "  Depends on ${#EXPERIMENT_IDS[@]} experiment jobs: ${ALL_DEP}" >&2
+        echo "" >&2
+        DEPENDENCY_FLAG="--dependency=afterany:${ALL_DEP}" submit_experiment "analyze_arxiv"
+    else
+        echo "[WARN] No experiment jobs submitted. Skipping analysis." >&2
+    fi
 fi
 
 echo "Done."

@@ -56,9 +56,9 @@ experiments:
     config: experiments/configs/bingo_nguyen.yaml
     n_seeds: 30
     n_problems: 12
-    time_limit: "00:45:00"    # ~30min typical
+    time_limit: "01:00:00"    # ~30min evolution + buffer for startup/translation
     cpus: 1
-    mem_gb: 8
+    mem_gb: 12
 
   bingo_nguyen_isalsr:
     enabled: true
@@ -68,9 +68,9 @@ experiments:
     config: experiments/configs/bingo_nguyen.yaml
     n_seeds: 30
     n_problems: 12
-    time_limit: "01:00:00"
+    time_limit: "01:30:00"    # canonicalization overhead + buffer
     cpus: 1
-    mem_gb: 8
+    mem_gb: 12
 
   # =========================================================
   # UDFS on Feynman (10 problems x 30 seeds = 300 tasks/group)
@@ -110,9 +110,9 @@ experiments:
     config: experiments/configs/bingo_feynman.yaml
     n_seeds: 30
     n_problems: 10
-    time_limit: "00:45:00"
+    time_limit: "01:00:00"    # ~30min evolution + buffer for startup/translation
     cpus: 1
-    mem_gb: 8
+    mem_gb: 12
 
   bingo_feynman_isalsr:
     enabled: true
@@ -122,9 +122,9 @@ experiments:
     config: experiments/configs/bingo_feynman.yaml
     n_seeds: 30
     n_problems: 10
-    time_limit: "01:00:00"
+    time_limit: "01:30:00"    # canonicalization overhead + buffer
     cpus: 1
-    mem_gb: 8
+    mem_gb: 12
 
   # =========================================================
   # Debug: sequential test of all (method, benchmark) combos

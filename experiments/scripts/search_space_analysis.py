@@ -42,7 +42,8 @@ from isalsr.core.string_to_dag import StringToDAG  # noqa: E402
 from isalsr.search.random_search import random_isalsr_string  # noqa: E402
 
 # Default timeout (seconds) per canonicalization call.
-_CANON_TIMEOUT: float = 5.0
+# Reduced from 5.0 to 2.0 to avoid excessive wall-clock on HPC (large DAGs).
+_CANON_TIMEOUT: float = 2.0
 
 # Bootstrap defaults.
 _N_BOOTSTRAP: int = 2000
@@ -390,6 +391,14 @@ def main() -> None:
         default=_N_BOOTSTRAP,
         help="Number of bootstrap resamples for CI.",
     )
+    parser.add_argument(
+        "--max-tokens-index",
+        type=int,
+        default=0,
+        help="1-indexed position into max_tokens_list. "
+        "When set, only process that single max_tokens value (for SLURM array dispatch). "
+        "0 = process all values.",
+    )
     args = parser.parse_args()
 
     # Determine max_tokens values.
@@ -397,6 +406,23 @@ def main() -> None:
         max_tokens_values = [int(x.strip()) for x in args.max_tokens_list.split(",")]
     else:
         max_tokens_values = [args.max_tokens]
+
+    # SLURM array dispatch: select a single max_tokens value by index.
+    if args.max_tokens_index > 0:
+        idx = args.max_tokens_index - 1  # convert to 0-indexed
+        if idx >= len(max_tokens_values):
+            log.error(
+                "max-tokens-index %d out of range (list has %d values)",
+                args.max_tokens_index,
+                len(max_tokens_values),
+            )
+            sys.exit(1)
+        max_tokens_values = [max_tokens_values[idx]]
+        log.info(
+            "SLURM array task %d: processing max_tokens=%d",
+            args.max_tokens_index,
+            max_tokens_values[0],
+        )
 
     # Build benchmark list.
     benchmarks: list[dict[str, Any]] = list(NGUYEN_BENCHMARKS)

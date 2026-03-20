@@ -239,6 +239,7 @@ class BingoBaselineRunner(ModelRunner):
                 fitness_threshold=cfg.fitness_threshold,
                 max_fitness_evaluations=cfg.max_evals,
                 convergence_check_frequency=10,
+                max_time=cfg.max_time,
             )
         wall_clock = time.perf_counter() - t0
 

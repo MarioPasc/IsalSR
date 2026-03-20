@@ -38,12 +38,20 @@ log = logging.getLogger(__name__)
 
 
 class _CanonicalDeduplicator:
-    """Tracks canonical strings and deduplication statistics."""
+    """Tracks canonical strings and deduplication statistics.
+
+    Uses hash-based storage (``set[int]``) instead of storing full canonical
+    strings.  This reduces per-entry memory from ~150 bytes (``set[str]``)
+    to ~28 bytes (``set[int]``), preventing OOM on long runs.
+
+    The 64-bit Python hash gives collision probability < 3×10⁻⁶ for 10 M
+    entries (birthday bound n²/2⁶⁵), which is negligible for our use case.
+    """
 
     def __init__(self, use_pruned: bool = True, timeout: float = 60.0):
         self.use_pruned = use_pruned
         self.timeout = timeout
-        self.canonical_seen: set[str] = set()
+        self.canonical_seen: set[int] = set()
         self.n_total = 0
         self.n_unique = 0
         self.n_skipped = 0
@@ -98,7 +106,8 @@ class _CanonicalDeduplicator:
 
             self.canon_time_total += time.perf_counter() - t0
 
-            if canonical in self.canonical_seen:
+            canon_hash = hash(canonical)
+            if canon_hash in self.canonical_seen:
                 self.n_skipped += 1
                 # Return infinite loss to skip this graph.
                 # Use valid-shaped consts array to avoid crashes in
@@ -107,7 +116,7 @@ class _CanonicalDeduplicator:
                 dummy_consts = np.zeros(n_consts) if n_consts > 0 else np.array([])
                 return dummy_consts, np.inf
 
-            self.canonical_seen.add(canonical)
+            self.canonical_seen.add(canon_hash)
             self.n_unique += 1
             return self._original_evaluate(
                 cgraph,

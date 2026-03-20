@@ -163,6 +163,16 @@ experiments/models/
 `orchestrator.py` factories (`create_runner`, `create_translator`). The analyzer is
 model-agnostic — it consumes unified RunLog/TrajectoryRow schemas.
 
+**Operational requirements**:
+- Bingo runners **must** pass `max_time=cfg.max_time` to `evolve_until_convergence()`.
+  Without it, evolution runs until `max_evals` (10M), far exceeding SLURM time limits.
+  Bingo checks `max_time` every `convergence_check_frequency` generations (overshoot bounded).
+- Deduplicators use `set[int]` (hash-based) instead of `set[str]` for `canonical_seen`.
+  Reduces per-entry memory from ~150 bytes to ~28 bytes, preventing OOM on long runs.
+  Collision probability < 3×10⁻⁶ for 10M entries (birthday bound n²/2⁶⁵).
+- Orchestrator resume: validates `run_log.json` content (not just existence) before skipping.
+  Corrupt files from OOM/timeout kills are deleted and re-run on next launch.
+
 ---
 
 ## Critical Invariants

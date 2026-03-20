@@ -32,12 +32,21 @@ log = logging.getLogger(__name__)
 
 
 class _CanonicalDeduplicator:
-    """Tracks canonical strings and deduplication statistics."""
+    """Tracks canonical strings and deduplication statistics.
+
+    Uses hash-based storage (``set[int]``) instead of storing full canonical
+    strings.  This reduces per-entry memory from ~150 bytes (``set[str]``)
+    to ~28 bytes (``set[int]``), preventing OOM on long evolutionary runs
+    with millions of unique individuals.
+
+    The 64-bit Python hash gives collision probability < 3×10⁻⁶ for 10 M
+    entries (birthday bound n²/2⁶⁵), which is negligible for our use case.
+    """
 
     def __init__(self, use_pruned: bool = True, timeout: float = 60.0):
         self.use_pruned = use_pruned
         self.timeout = timeout
-        self.canonical_seen: set[str] = set()
+        self.canonical_seen: set[int] = set()
         self.n_total: int = 0
         self.n_unique: int = 0
         self.n_skipped: int = 0
@@ -94,13 +103,14 @@ class IsalSREvaluation(Evaluation):
 
                 self.dedup.canon_time_total += time.perf_counter() - t0
 
-                # Deduplication check
-                if canonical in self.dedup.canonical_seen:
+                # Deduplication check (hash-based for memory efficiency)
+                canon_hash = hash(canonical)
+                if canon_hash in self.dedup.canonical_seen:
                     self.dedup.n_skipped += 1
                     indv.fitness = np.inf  # Sets fit_set=True, worst fitness
                     continue
 
-                self.dedup.canonical_seen.add(canonical)
+                self.dedup.canonical_seen.add(canon_hash)
                 self.dedup.n_unique += 1
                 indv.fitness = self.fitness_function(indv)
 
@@ -153,6 +163,7 @@ class IsalSRBingoRunner(ModelRunner):
                 fitness_threshold=cfg.fitness_threshold,
                 max_fitness_evaluations=cfg.max_evals,
                 convergence_check_frequency=10,
+                max_time=cfg.max_time,
             )
         wall_clock = time.perf_counter() - t0
 

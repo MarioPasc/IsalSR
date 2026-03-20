@@ -20,17 +20,32 @@ account: tic_163_uma
 # without comparing against other SR methods.
 
 experiments:
+  # --- Experiment 1: Shortest Path (illustrative, fast) ---
+  exp1_shortest_path:
+    enabled: true
+    time_limit: "00:30:00"
+    cpus: 1
+    mem_gb: 4
+
+  # --- Experiment 2: Neighborhood (illustrative, fast) ---
+  exp2_neighborhood:
+    enabled: true
+    time_limit: "00:30:00"
+    cpus: 1
+    mem_gb: 4
+
   # --- Experiment 4: Search Space Reduction (enhanced) ---
-  # Single job. Generates random strings, canonicalizes, measures O(k!) reduction.
+  # Array job: one task per max_tokens value.
   search_space_analysis:
     enabled: true
     n_strings: 10000
     max_tokens_list: "10,15,20,25,30"
     include_feynman: true
     seed: 42
-    time_limit: "12:00:00"
+    time_limit: "04:00:00"    # per array task (one max_tokens value)
     cpus: 1
-    mem_gb: 16
+    mem_gb: 8
+    n_runs: 5                 # array size = number of max_tokens values
 
   # --- Experiment 3: Canonicalization Time vs Nodes ---
   # Array job: one task per n_internal value (1..max_nodes).
@@ -63,22 +78,25 @@ experiments:
     n_runs: 12                # array size = max_nodes
 
   # --- Experiment 6: String Compression ---
-  # Single job. Measures string length before/after canonicalization.
+  # Array job: one task per num_vars={1,2,3}.
   exp6_string_compression:
     enabled: true
     n_strings: 10000
     max_tokens: 30
+    timeout: 2.0              # canonicalization timeout per string (seconds)
     seed: 42
-    time_limit: "04:00:00"
+    time_limit: "04:00:00"    # per array task (one num_vars)
     cpus: 1
-    mem_gb: 8
+    mem_gb: 4
+    n_runs: 3                 # array: 1 task per num_vars={1,2,3}
 
   # --- Post-processing: aggregate arXiv results ---
+  # Submitted with --dependency=afterany on all experiment jobs.
   analyze_arxiv:
     enabled: true
     time_limit: "01:00:00"
     cpus: 1
-    mem_gb: 16
+    mem_gb: 4
 
   # =================================================================
   # Precomputed Canonical String Cache (DISABLED for arXiv)
