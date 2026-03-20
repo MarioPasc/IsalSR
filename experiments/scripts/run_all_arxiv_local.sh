@@ -16,7 +16,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "$REPO_DIR"
 
 PYTHON="${HOME}/.conda/envs/isalsr/bin/python"
-OUT="/media/mpascual/Sandisk2TB/research/isalsr/results/arXiv_benchmarking"
+OUT="/media/mpascual/Sandisk2TB/research/isalsr/results/arXiv_benchmarking/local"
 
 echo "=============================================="
 echo "IsalSR arXiv Experiments - Local Test Runner"
@@ -39,6 +39,16 @@ echo ""
 echo "=== Experiment 2: Distance-1 Neighborhood ==="
 $PYTHON experiments/scripts/exp2_neighborhood.py \
     --output-dir "$OUT/exp2_neighborhood"
+echo ""
+
+# --- One-to-One Property Validation P1-P4 (reduced: 200 strings) ---
+echo "=== One-to-One Properties (P1-P4) ==="
+$PYTHON experiments/scripts/onetoone_properties.py \
+    --output-dir "$OUT/onetoone_properties" \
+    --n-strings 200 \
+    --max-tokens 15 \
+    --timeout 2 \
+    --plot
 echo ""
 
 # --- Experiment 3: Canonicalization Time (reduced: max 6 nodes, 5 samples) ---

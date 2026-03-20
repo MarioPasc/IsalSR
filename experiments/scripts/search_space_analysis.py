@@ -42,8 +42,9 @@ from isalsr.core.string_to_dag import StringToDAG  # noqa: E402
 from isalsr.search.random_search import random_isalsr_string  # noqa: E402
 
 # Default timeout (seconds) per canonicalization call.
-# Reduced from 5.0 to 2.0 to avoid excessive wall-clock on HPC (large DAGs).
-_CANON_TIMEOUT: float = 2.0
+# Reduced from 5.0 to 1.0 to avoid excessive wall-clock on HPC.
+# Strings that timeout are discarded — they don't contribute to reduction factor.
+_CANON_TIMEOUT: float = 1.0
 
 # Bootstrap defaults.
 _N_BOOTSTRAP: int = 2000

@@ -87,7 +87,7 @@ PARAMS: dict = {
     "cdll_edge_color": "0.6",
     # --- Pointers (pi / sigma) ---
     "pointer_arrow_offset": 0.9,  # how far outside the ring the arrow starts
-    "pointer_label_offset": 0.7,  # how far outside the ring the label sits
+    "pointer_label_offset": 0.9,  # how far outside the ring the label sits
     "pointer_arrow_width": 1.4,  # arrow line width
     "pointer_arrow_scale": 10,  # arrowhead mutation scale
     "pointer_fontsize": 12,  # font for pi/sigma labels
@@ -112,7 +112,7 @@ PARAMS: dict = {
     "token_fontsize": 9,  # font inside token cells
     # --- Step titles ---
     "step_title_fontsize": 12,
-    "step_title_pad": 10,
+    "step_title_pad": 13,
     # --- Legend ---
     "legend_fontsize": 12,
     # --- Group box labels (rotated, combined figure only) ---
@@ -384,7 +384,7 @@ def draw_cdll_ring(
         arrow_radius,
         node_radius,
         PRIMARY_COLOR,
-        r"$\pi$",
+        r"$p$", # was r"$\pi$" in IsalGraph, but "p" is more intuitive for S2D
     )
 
     if sec_pos != pri_pos:
@@ -395,7 +395,7 @@ def draw_cdll_ring(
             arrow_radius,
             node_radius,
             SECONDARY_COLOR,
-            r"$\sigma$",
+            r"$q$", # was r"$\sigma$" in IsalGraph, but "q" is more intuitive for D2S
         )
     else:
         # Overlap: offset secondary arrow slightly
@@ -407,7 +407,7 @@ def draw_cdll_ring(
             arrow_radius,
             node_radius,
             SECONDARY_COLOR,
-            r"$\sigma$",
+            r"$q$",
         )
 
     margin = arrow_radius + 0.45

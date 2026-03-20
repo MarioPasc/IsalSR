@@ -266,6 +266,7 @@ submit_cache_pipeline() {
 EXPERIMENTS=(
     "exp1_shortest_path"
     "exp2_neighborhood"
+    "onetoone_properties"
     "search_space_analysis"
     "exp3_canonicalization_time"
     "exp5_pruning_accuracy"

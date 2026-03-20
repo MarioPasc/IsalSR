@@ -34,18 +34,35 @@ experiments:
     cpus: 1
     mem_gb: 4
 
-  # --- Experiment 4: Search Space Reduction (enhanced) ---
+  # --- One-to-One Property Validation (P1-P4) ---
+  # Array job: one task per num_vars={1,2,3}.
+  # Validates round-trip fidelity, acyclicity, canonical invariance,
+  # and evaluation preservation with Clopper-Pearson 95% CIs.
+  onetoone_properties:
+    enabled: true
+    n_strings: 5000
+    max_tokens: 20
+    timeout: 2.0
+    seed: 42
+    time_limit: "02:00:00"    # per array task (one num_vars)
+    cpus: 1
+    mem_gb: 4
+    n_runs: 3                 # array: 1 task per num_vars={1,2,3}
+
+  # --- Experiment 4: Search Space Reduction (P5) ---
   # Array job: one task per max_tokens value.
+  # T=25,30 removed: >50% canon timeouts, wasted wall-clock, no scientific value.
+  # Timeout reduced 2s→1s to halve time wasted on unavoidable timeouts.
   search_space_analysis:
     enabled: true
-    n_strings: 10000
-    max_tokens_list: "10,15,20,25,30"
+    n_strings: 2000
+    max_tokens_list: "10,15,20"
     include_feynman: true
     seed: 42
-    time_limit: "04:00:00"    # per array task (one max_tokens value)
+    time_limit: "02:00:00"    # per array task (one max_tokens value)
     cpus: 1
     mem_gb: 8
-    n_runs: 5                 # array size = number of max_tokens values
+    n_runs: 3                 # array size = number of max_tokens values
 
   # --- Experiment 3: Canonicalization Time vs Nodes ---
   # Array job: one task per n_internal value (1..max_nodes).

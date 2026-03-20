@@ -55,6 +55,21 @@ def generate_summary_report(results_dir: str) -> str:
     lines: list[str] = []
     lines.append("# IsalSR arXiv Experimental Results Summary\n")
 
+    # One-to-One Property Validation (P1-P4)
+    oto_path = os.path.join(results_dir, "onetoone_properties", "summary.csv")
+    oto_rows = _load_csv(oto_path)
+    if oto_rows:
+        lines.append("## One-to-One Property Validation (P1-P4)\n")
+        lines.append("| Property | m | Tested | Passed | Rate | 95% CI |")
+        lines.append("|----------|---|--------|--------|------|--------|")
+        for r in oto_rows:
+            lines.append(
+                f"| {r['property']} | {r['num_vars']} | {r['n_tested']} | "
+                f"{r['n_passed']} | {r['pass_rate']} | "
+                f"[{r['ci_lower']}, {r['ci_upper']}] |"
+            )
+        lines.append("")
+
     # Experiment 1: Shortest Path
     exp1_path = os.path.join(results_dir, "exp1_shortest_path", "shortest_path_examples.json")
     exp1_data = _load_json(exp1_path)
@@ -180,6 +195,7 @@ def main() -> None:
 
     # Check which experiments have results
     subdirs = [
+        "onetoone_properties",
         "exp1_shortest_path",
         "exp2_neighborhood",
         "exp3_canonicalization_time",
