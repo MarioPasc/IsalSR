@@ -73,6 +73,7 @@ experiments:
   search_space_permutation:
     enabled: true
     max_k: 15
+    num_vars_list: "1,2,3"    # dispatch grid: max_k × len(num_vars_list)
     n_dags: 100               # unique DAGs per (k, m)
     n_perms_sample: 100000    # max permutations (exhaustive if k! <= this)
     n_canon_verify: 100       # canonical invariance verification samples
@@ -81,7 +82,7 @@ experiments:
     time_limit: "08:00:00"    # per array task
     cpus: 1
     mem_gb: 8
-    n_runs: 15                # array: tasks 1..15 (k=1..15)
+    n_runs: 45                # array: 15 k-values × 3 m-values = 45 tasks
 
   # --- Experiment 3: Canonicalization Time vs Nodes ---
   # Array job: one task per n_internal value (1..max_nodes).

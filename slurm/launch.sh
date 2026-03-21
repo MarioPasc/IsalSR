@@ -271,12 +271,13 @@ submit_cache_pipeline() {
 #   X.6  exp1_shortest_path           Metric space (illustrative)
 #        exp2_neighborhood            Distance-1 neighborhood (illustrative)
 EXPERIMENTS=(
-    "onetoone_properties"
-    "search_space_analysis"
+    # Other experiments already succeeded on Picasso — commented out.
+    # "onetoone_properties"
+    # "search_space_analysis"
+    # "exp3_canonicalization_time"
+    # "exp1_shortest_path"
+    # "exp2_neighborhood"
     "search_space_permutation"
-    "exp3_canonicalization_time"
-    "exp1_shortest_path"
-    "exp2_neighborhood"
 )
 
 # Cache generation pipelines (generate -> merge with afterok dependency).

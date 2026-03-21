@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # SLURM compute worker: Search Space Permutation Analysis
-# Array job: SLURM_ARRAY_TASK_ID = k value (1..max_k)
+# Array job: SLURM_ARRAY_TASK_ID indexes into (k, m) grid.
+#   task_id = (k-1) * n_vars + var_idx   (0-indexed internally, 1-indexed for SLURM)
+#   Example with max_k=15, num_vars_list="1,2,3":
+#     task  1 → k=1, m=1    task  2 → k=1, m=2    task  3 → k=1, m=3
+#     task  4 → k=2, m=1    task  5 → k=2, m=2    task  6 → k=2, m=3
+#     ...
+#     task 43 → k=15, m=1   task 44 → k=15, m=2   task 45 → k=15, m=3
+#
 # Validates the O(k!) search space reduction claim.
 set -euo pipefail
 
@@ -26,27 +33,36 @@ N_PERMS_SAMPLE=$( echo "$EXP_CFG" | $PYTHON -c "import json,sys; print(json.load
 N_CANON_VERIFY=$( echo "$EXP_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('n_canon_verify', 100))")
 CANON_TIMEOUT=$(  echo "$EXP_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('canon_timeout', 5.0))")
 SEED=$(           echo "$EXP_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('seed', 42))")
+NUM_VARS_LIST=$(  echo "$EXP_CFG" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('num_vars_list', '1,2'))")
 
-K_VALUE=${SLURM_ARRAY_TASK_ID:-1}
+# Parse num_vars_list into array
+IFS=',' read -ra NVARS_ARR <<< "$NUM_VARS_LIST"
+N_VARS_COUNT=${#NVARS_ARR[@]}
+
+# Decode SLURM_ARRAY_TASK_ID into (k, m)
+# task_id is 1-indexed; internally we use 0-indexed
+TASK_ID=${SLURM_ARRAY_TASK_ID:-1}
+TASK_IDX=$((TASK_ID - 1))
+K_VALUE=$(( TASK_IDX / N_VARS_COUNT + 1 ))
+VAR_IDX=$(( TASK_IDX % N_VARS_COUNT ))
+NVARS=${NVARS_ARR[$VAR_IDX]}
+
 OUT_DIR="${RESULTS_DIR}/search_space_permutation"
 mkdir -p "$OUT_DIR"
 
-echo "Config: k=$K_VALUE, n_dags=$N_DAGS, n_perms_sample=$N_PERMS_SAMPLE"
+echo "Config: k=$K_VALUE, m=$NVARS (task $TASK_ID of $((15 * N_VARS_COUNT)))"
+echo "        n_dags=$N_DAGS, n_perms_sample=$N_PERMS_SAMPLE"
 echo "        n_canon_verify=$N_CANON_VERIFY, canon_timeout=$CANON_TIMEOUT, seed=$SEED"
 echo "Output: $OUT_DIR"
 
-# Run for m=1 and m=2
-for NVARS in 1 2; do
-    echo "--- num_vars=$NVARS, k=$K_VALUE ---"
-    python experiments/scripts/search_space_permutation_analysis.py \
-        --output "${OUT_DIR}/perm_m${NVARS}_k${K_VALUE}.csv" \
-        --k-value "$K_VALUE" \
-        --n-dags "$N_DAGS" \
-        --n-perms-sample "$N_PERMS_SAMPLE" \
-        --n-canon-verify "$N_CANON_VERIFY" \
-        --num-vars "$NVARS" \
-        --seed "$SEED" \
-        --canon-timeout "$CANON_TIMEOUT"
-done
+python experiments/scripts/search_space_permutation_analysis.py \
+    --output "${OUT_DIR}/perm_m${NVARS}_k${K_VALUE}.csv" \
+    --k-value "$K_VALUE" \
+    --n-dags "$N_DAGS" \
+    --n-perms-sample "$N_PERMS_SAMPLE" \
+    --n-canon-verify "$N_CANON_VERIFY" \
+    --num-vars "$NVARS" \
+    --seed "$SEED" \
+    --canon-timeout "$CANON_TIMEOUT"
 
 echo "Finished: $(date)"
