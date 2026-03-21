@@ -41,3 +41,24 @@ Record failure modes, corrective patterns, and insights discovered during develo
    (deterministic, same output for isomorphic inputs) but may not satisfy the lexmin-of-shortest
    criterion. **Use `canonical_string()` for all theoretical claims.** Present
    `pruned_canonical_string()` as a fast approximation with 99.97% optimality rate.
+
+### Phase: arXiv Search Space Experiment (2026-03-21)
+
+10. **Random sampling cannot validate equivalence class size claims.** The original
+    experiment sampled 1000 random strings and counted canonical collisions. At k>=4,
+    nearly zero collisions were found because the string space vastly exceeds the
+    equivalence class. The right approach is CONTROLLED PERMUTATION: deliberately
+    construct all k! isomorphic copies by permuting internal node IDs, then verify
+    canonical invariance holds for all of them. This directly measures the claim.
+
+11. **Greedy D2S is not sensitive to node ID permutations.** The greedy DAGToString
+    algorithm makes displacement-cost-based choices that are largely topology-dependent,
+    not ID-dependent. Only 2-8% of k! permutations produce distinct greedy D2S strings.
+    The STRUCTURAL FINGERPRINT (adjacency representation) is the correct metric: it
+    counts k!/|Aut(D)| distinct representations by the Orbit-Stabilizer theorem.
+
+12. **Automorphisms explain sub-k! counts via Orbit-Stabilizer.** Some DAGs have
+    non-trivial symmetry groups (e.g., ADD(sin(x), sin(x)) with two identical subtrees).
+    For these, |Aut(D)| > 1, so only k!/|Aut(D)| permutations produce distinct labeled
+    DAGs. This is mathematically expected, not a limitation. Generic DAGs (no symmetry)
+    achieve the full k!.

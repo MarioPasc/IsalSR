@@ -64,6 +64,25 @@ experiments:
     mem_gb: 8
     n_runs: 3                 # array size = number of max_tokens values
 
+  # --- Experiment 7: Search Space Permutation Analysis (O(k!) validation) ---
+  # Array job: one task per k value (1..max_k).
+  # For each k: generates n_dags unique random DAGs, then creates all k!
+  # (or sampled) permutations of internal node IDs to directly measure the
+  # number of distinct representations per expression. Validates the paper's
+  # central O(k!) search space reduction claim.
+  search_space_permutation:
+    enabled: true
+    max_k: 15
+    n_dags: 100               # unique DAGs per (k, m)
+    n_perms_sample: 100000    # max permutations (exhaustive if k! <= this)
+    n_canon_verify: 100       # canonical invariance verification samples
+    canon_timeout: 5.0        # seconds per canonicalization
+    seed: 42
+    time_limit: "08:00:00"    # per array task
+    cpus: 1
+    mem_gb: 8
+    n_runs: 15                # array: tasks 1..15 (k=1..15)
+
   # --- Experiment 3: Canonicalization Time vs Nodes ---
   # Array job: one task per n_internal value (1..max_nodes).
   # Each task runs all num_vars={1,2,3} for that n_internal.

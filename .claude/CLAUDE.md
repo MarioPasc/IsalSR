@@ -124,6 +124,7 @@ src/isalsr/core/dag_to_string.py     DAGToString converter (D2S)
 src/isalsr/core/canonical.py         Canonical string (from x_1, 6-tuple pruning)
 src/isalsr/core/dag_evaluator.py     Evaluate DAG numerically (topological sort)
 src/isalsr/core/commutative.py       SUB/DIV <-> ADD+NEG/MUL+INV conversion
+src/isalsr/core/permutations.py      Permute internal node IDs (isomorphic copies)
 src/isalsr/core/algorithms/          D2S algorithm variants
 src/isalsr/adapters/                 NetworkX, SymPy bridges
 src/isalsr/evaluation/               Fitness metrics, constant optimization
@@ -374,6 +375,29 @@ These constraints MUST be enforced at all times. The `proposal-guard` agent chec
 - @docs/design/experimental_design/isalsr_experimental_design.md -- Three-axis comparison framework
 - @docs/design/experimental_design/experimental_design_amendments.md -- Cache integration amendments
 - Save every output in `/media/mpascual/Sandisk2TB/research/isalsr`
+
+## arXiv Search Space Experiment: Controlled Permutation Analysis
+
+**Purpose**: Directly validate the O(k!) search space reduction claim.
+Instead of random sampling (which finds ~20% collisions), this experiment
+DELIBERATELY constructs all k! isomorphic copies of each expression DAG
+by permuting internal node IDs, then verifies canonical invariance.
+
+**Key files**:
+- `src/isalsr/core/permutations.py` — `permute_internal_nodes(dag, perm)`: creates isomorphic DAG copy
+- `experiments/scripts/search_space_permutation_analysis.py` — main experiment script
+- `slurm/workers/search_space_permutation_slurm.sh` — SLURM worker (array: 1 task per k)
+- `experiments/scripts/generate_fig_search_space.py` — 2-panel figure (log-scale k! + normalized ratio)
+
+**Metrics**:
+- `n_distinct_representations`: structural fingerprint count = k!/|Aut(D)| (exact)
+- `n_distinct_d2s`: greedy D2S string count (conservative lower bound)
+- `invariant_success_rate`: canonical invariance verification (should be 100%)
+
+**Results** (local test, k=1..8): n_distinct_representations = k! for 64/65 DAGs (one k=8
+DAG has |Aut(D)|=2, giving ratio=0.5). Invariant success rate = 100% across all DAGs.
+
+**Launch**: `bash slurm/launch.sh --experiment search_space_permutation`
 
 ## Preliminary Experimental Findings (Smoke Tests, 2026-03-18)
 

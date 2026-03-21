@@ -265,13 +265,15 @@ submit_cache_pipeline() {
 # ---------------------------------------------------------------------------
 # arXiv paper experiments (matches computational_experiments.tex):
 #   X.3  onetoone_properties          P1-P4 correctness validation
-#   X.4  search_space_analysis        P5 central hypothesis (O(k!) reduction)
-#   X.5  exp3_canonicalization_time   Scalability (CPU time vs nodes)
+#   X.4  search_space_analysis         P5 central hypothesis (random sampling)
+#   X.4b search_space_permutation      P5 central hypothesis (controlled O(k!) validation)
+#   X.5  exp3_canonicalization_time    Scalability (CPU time vs nodes)
 #   X.6  exp1_shortest_path           Metric space (illustrative)
 #        exp2_neighborhood            Distance-1 neighborhood (illustrative)
 EXPERIMENTS=(
     "onetoone_properties"
     "search_space_analysis"
+    "search_space_permutation"
     "exp3_canonicalization_time"
     "exp1_shortest_path"
     "exp2_neighborhood"
