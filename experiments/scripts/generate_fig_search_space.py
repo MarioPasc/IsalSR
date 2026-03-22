@@ -112,11 +112,20 @@ def load_permutation_data(data_dir: str) -> list[dict[str, float | int | str]]:
 # =============================================================================
 
 
+def _is_exhaustive_k(k: int) -> bool:
+    """Return True if k! <= 100,000 (exhaustive enumeration threshold)."""
+    return math.factorial(k) <= 100_000  # k <= 8
+
+
 def plot_panel_a(
     ax: plt.Axes,
     rows: list[dict[str, float | int | str]],
 ) -> None:
-    """Plot distinct representations per expression (log scale) with k! reference."""
+    """Plot distinct representations per expression (log scale) with k! reference.
+
+    Exhaustive runs (k<=8) shown in solid blue; sampled runs (k>8) shown in
+    lighter cyan with a note that they are lower bounds.
+    """
     # Group by k
     k_to_repr: dict[int, list[int]] = {}
     for row in rows:
@@ -127,6 +136,10 @@ def plot_panel_a(
     k_values = sorted(k_to_repr.keys())
     if not k_values:
         return
+
+    # Split into exhaustive and sampled k values
+    k_exhaustive = [k for k in k_values if _is_exhaustive_k(k)]
+    k_sampled = [k for k in k_values if not _is_exhaustive_k(k)]
 
     # k! reference line
     k_range = np.arange(min(k_values), max(k_values) + 1)
@@ -141,27 +154,49 @@ def plot_panel_a(
         zorder=5,
     )
 
-    # Box plots of measured n_distinct_representations
-    box_data = [k_to_repr[k] for k in k_values]
-    bp = ax.boxplot(
-        box_data,
-        positions=k_values,
-        widths=0.5,
-        patch_artist=True,
-        showfliers=True,
-        flierprops={"marker": "o", "markersize": 3, "alpha": 0.5},
-        medianprops={"color": "0.15", "linewidth": 1.2},
-        whiskerprops={"linewidth": 0.8},
-        capprops={"linewidth": 0.8},
-        boxprops={"linewidth": 0.8},
-        zorder=3,
-    )
+    # Box plots — exhaustive (solid blue)
+    if k_exhaustive:
+        box_data_ex = [k_to_repr[k] for k in k_exhaustive]
+        bp_ex = ax.boxplot(
+            box_data_ex,
+            positions=k_exhaustive,
+            widths=0.5,
+            patch_artist=True,
+            showfliers=True,
+            flierprops={"marker": "o", "markersize": 3, "alpha": 0.5},
+            medianprops={"color": "0.15", "linewidth": 1.2},
+            whiskerprops={"linewidth": 0.8},
+            capprops={"linewidth": 0.8},
+            boxprops={"linewidth": 0.8},
+            zorder=3,
+        )
+        for patch in bp_ex["boxes"]:
+            patch.set_facecolor(PAUL_TOL_BRIGHT["blue"])
+            patch.set_alpha(0.6)
+        # Legend proxy for exhaustive boxes
+        bp_ex["boxes"][0].set_label("Exhaustive ($k \\leq 8$)")
 
-    # Color boxes
-    color = PAUL_TOL_BRIGHT["blue"]
-    for patch in bp["boxes"]:
-        patch.set_facecolor(color)
-        patch.set_alpha(0.6)
+    # Box plots — sampled (lighter cyan, lower bounds)
+    if k_sampled:
+        box_data_sm = [k_to_repr[k] for k in k_sampled]
+        bp_sm = ax.boxplot(
+            box_data_sm,
+            positions=k_sampled,
+            widths=0.5,
+            patch_artist=True,
+            showfliers=True,
+            flierprops={"marker": "o", "markersize": 3, "alpha": 0.4},
+            medianprops={"color": "0.3", "linewidth": 1.0},
+            whiskerprops={"linewidth": 0.6, "color": "0.5"},
+            capprops={"linewidth": 0.6, "color": "0.5"},
+            boxprops={"linewidth": 0.6},
+            zorder=3,
+        )
+        for patch in bp_sm["boxes"]:
+            patch.set_facecolor(PAUL_TOL_BRIGHT["cyan"])
+            patch.set_alpha(0.5)
+        # Legend proxy for sampled boxes
+        bp_sm["boxes"][0].set_label("Sampled ($k > 8$)")
 
     # Horizontal line at y=1 ("After canonicalization")
     ax.axhline(
@@ -170,19 +205,8 @@ def plot_panel_a(
         linestyle="-",
         linewidth=PLOT_SETTINGS["line_width"],
         alpha=0.8,
+        label="After canonicalization",
         zorder=4,
-    )
-    ax.annotate(
-        "After\ncanon.",
-        xy=(max(k_values), 1.0),
-        xytext=(-25, -30),
-        textcoords="offset points",
-        fontsize=7,
-        color=PAUL_TOL_BRIGHT["red"],
-        va="top",
-        ha="center",
-        fontstyle="italic",
-        arrowprops={"arrowstyle": "->", "color": PAUL_TOL_BRIGHT["red"], "lw": 0.8},
     )
 
     # Shade the reduction gap (between k! and y=1)
@@ -193,20 +217,6 @@ def plot_panel_a(
         alpha=0.08,
         color=PAUL_TOL_BRIGHT["blue"],
         zorder=1,
-    )
-    # Label inside shaded area
-    mid_k = k_range[len(k_range) // 2]
-    mid_y = math.sqrt(k_factorial[len(k_range) // 2])  # geometric midpoint on log scale
-    ax.text(
-        mid_k,
-        mid_y,
-        r"$O(k!)$ reduction",
-        ha="center",
-        va="center",
-        fontsize=8,
-        color=PAUL_TOL_BRIGHT["blue"],
-        fontstyle="italic",
-        alpha=0.7,
     )
 
     ax.set_yscale("log")
@@ -240,13 +250,25 @@ def plot_panel_b(
     ax: plt.Axes,
     rows: list[dict[str, float | int | str]],
 ) -> None:
-    """Plot normalized ratio (n_distinct / k!) per k."""
-    # Group by k
+    """Plot normalized ratio (n_distinct / k!) for exhaustive k values only.
+
+    Sampled k values (k>8) are excluded from this panel because the ratio
+    reflects sampling coverage, not automorphism structure. Their canonical
+    invariance is noted in an annotation.
+    """
+    # Group by k — only exhaustive runs
     k_to_ratio: dict[int, list[float]] = {}
+    n_sampled_dags = 0
+    n_sampled_invariant = 0
     for row in rows:
         k = int(row["k"])
-        ratio = float(row["normalized_ratio"])
-        k_to_ratio.setdefault(k, []).append(ratio)
+        if _is_exhaustive_k(k):
+            ratio = float(row["normalized_ratio"])
+            k_to_ratio.setdefault(k, []).append(ratio)
+        else:
+            n_sampled_dags += 1
+            if float(row["invariant_success_rate"]) == 1.0:
+                n_sampled_invariant += 1
 
     k_values = sorted(k_to_ratio.keys())
     if not k_values:
@@ -297,24 +319,7 @@ def plot_panel_b(
             zorder=4,
         )
 
-    # Annotate outliers below 1.0 if any exist
-    all_ratios = [r for ratios in k_to_ratio.values() for r in ratios]
-    n_below = sum(1 for r in all_ratios if r < 1.0 - 1e-9)
-    if n_below > 0:
-        ax.text(
-            0.97,
-            0.03,
-            f"{n_below} DAGs with automorphisms\n"
-            r"($|$distinct$| = k!/|$Aut$(D)|$)",
-            transform=ax.transAxes,
-            fontsize=7,
-            ha="right",
-            va="bottom",
-            color="0.4",
-            fontstyle="italic",
-        )
-
-    ax.set_xlabel("Internal nodes $k$")
+    ax.set_xlabel("Internal nodes $k$ (exhaustive)")
     ax.set_ylabel(r"Ratio $|\mathrm{distinct}| \;/\; k!$")
     ax.set_xticks(k_values)
     ax.set_ylim(-0.05, 1.15)

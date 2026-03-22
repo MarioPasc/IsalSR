@@ -68,14 +68,14 @@ NUM_VARS = 1
 EXPRESSION_LATEX = r"x_0^3 + x_0^2 + x_0"
 
 # --- Global visual parameters ---
-NODE_SIZE = 0.40
-TOKEN_CELL_WIDTH = 10.0
-TOKEN_CELL_HEIGHT = 8.0
-MATH_FONTSIZE = 9
+NODE_SIZE = 0.6
+TOKEN_CELL_WIDTH = 11.0
+TOKEN_CELL_HEIGHT = 11.0
+MATH_FONTSIZE = 25
 
 # Figure dimensions
-FIG_WIDTH = 10.0
-FIG_HEIGHT = 8.0
+FIG_WIDTH = 20.0
+FIG_HEIGHT = 13.0
 
 # Row labels and colors
 ROW_CONFIGS = [
@@ -237,7 +237,7 @@ def generate_roundtrip_figure() -> str:
             label,
             ha="center",
             va="bottom",
-            fontsize=7,
+            fontsize=MATH_FONTSIZE,
             fontweight="bold",
             color="0.3",
         )
@@ -340,7 +340,7 @@ def generate_roundtrip_figure() -> str:
                     string_label,
                     ha="center",
                     va="center",
-                    fontsize=10,
+                    fontsize=MATH_FONTSIZE,
                     fontweight="bold",
                     color=cfg["color"],
                     transform=ax_dag.transAxes,
@@ -363,7 +363,7 @@ def generate_roundtrip_figure() -> str:
                     0.12,
                     0.35,
                     "D2S",
-                    fontsize=6,
+                    fontsize=MATH_FONTSIZE,
                     color=PAUL_TOL_BRIGHT["blue"],
                     fontweight="bold",
                     transform=ax_dag.transAxes,
@@ -384,7 +384,7 @@ def generate_roundtrip_figure() -> str:
                     0.78,
                     0.35,
                     "S2D",
-                    fontsize=6,
+                    fontsize=MATH_FONTSIZE,
                     color=PAUL_TOL_BRIGHT["red"],
                     fontweight="bold",
                     transform=ax_dag.transAxes,
@@ -449,18 +449,6 @@ def generate_roundtrip_figure() -> str:
                     fontsize=MATH_FONTSIZE,
                     transform=ax_hm.transAxes,
                 )
-                # Checkmark
-                ax_dag.text(
-                    0.95,
-                    0.95,
-                    r"$\cong$",
-                    ha="right",
-                    va="top",
-                    fontsize=10,
-                    color=PAUL_TOL_BRIGHT["green"],
-                    fontweight="bold",
-                    transform=ax_dag.transAxes,
-                )
 
         # Add row label (rotated)
         fig.text(
@@ -469,7 +457,7 @@ def generate_roundtrip_figure() -> str:
             cfg["label"],
             ha="center",
             va="center",
-            fontsize=8,
+            fontsize=MATH_FONTSIZE,
             fontweight="bold",
             color=cfg["color"],
             rotation=90,
@@ -495,7 +483,7 @@ def generate_roundtrip_figure() -> str:
             "Same string $w^*$ (>99.97% agreement)",
             ha="center",
             va="center",
-            fontsize=7,
+            fontsize=MATH_FONTSIZE,
             fontstyle="italic",
             color="#335588",
             bbox={
@@ -520,7 +508,7 @@ def generate_roundtrip_figure() -> str:
             f"len={greedy_len} vs len={canon_len} (+{pct:.0f}%)",
             ha="center",
             va="bottom",
-            fontsize=6,
+            fontsize=MATH_FONTSIZE,
             color="#CC3355",
             bbox={
                 "facecolor": "white",
