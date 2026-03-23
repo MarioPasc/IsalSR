@@ -32,6 +32,9 @@ class BingoConfig:
     canonicalization_timeout: float = 60.0
     use_pruned: bool = True
 
+    # Trajectory logging
+    snapshot_frequency: int = 10  # snapshot every N generations
+
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> BingoConfig:
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}

@@ -32,7 +32,7 @@ from DAG_search.dag_search import DAGRegressor  # noqa: E402
 from experiments.models.base_runner import ModelRunner
 from experiments.models.udfs.adapter import compgraph_to_labeled_dag
 from experiments.models.udfs.config import UDFSConfig
-from experiments.models.udfs.runner import UDFSRawResult
+from experiments.models.udfs.runner import TrajectorySnapshot, UDFSRawResult
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,13 @@ class _CanonicalDeduplicator:
     entries (birthday bound n²/2⁶⁵), which is negligible for our use case.
     """
 
-    def __init__(self, use_pruned: bool = True, timeout: float = 60.0):
+    def __init__(
+        self,
+        use_pruned: bool = True,
+        timeout: float = 60.0,
+        snapshot_freq: int = 1000,
+        t0: float = 0.0,
+    ):
         self.use_pruned = use_pruned
         self.timeout = timeout
         self.canonical_seen: set[int] = set()
@@ -56,26 +62,46 @@ class _CanonicalDeduplicator:
         self.n_unique = 0
         self.n_skipped = 0
         self.canon_time_total = 0.0
+        self._snapshot_freq = snapshot_freq
+        self._t0 = t0
+        self._best_loss = float("inf")
+        self.snapshots: list[TrajectorySnapshot] = []
         self._original_evaluate: Any = None
+
+    def _maybe_snapshot(self) -> None:
+        """Append a trajectory snapshot if it's time."""
+        if self.n_total % self._snapshot_freq == 0:
+            self.snapshots.append(
+                TrajectorySnapshot(
+                    timestamp_s=time.perf_counter() - self._t0,
+                    total_evals=self.n_total,
+                    best_loss=self._best_loss,
+                )
+            )
 
     def wrap_evaluate_cgraph(self, original_fn: Any) -> Any:
         """Create a wrapper around evaluate_cgraph with canonical dedup."""
         self._original_evaluate = original_fn
 
-        def wrapped(cgraph, X, loss_fkt, opt_mode="grid_zoom", loss_thresh=None):
+        def wrapped(cgraph, X, loss_fkt, opt_mode="grid_zoom", loss_thresh=None):  # noqa: N803
             self.n_total += 1
 
             try:
                 labeled_dag = compgraph_to_labeled_dag(cgraph)
             except Exception:  # noqa: BLE001
                 # If conversion fails, evaluate normally
-                return self._original_evaluate(
+                result = self._original_evaluate(
                     cgraph,
                     X,
                     loss_fkt,
                     opt_mode,
                     loss_thresh,
                 )
+                consts, loss = result
+                if np.isfinite(loss) and loss < self._best_loss:
+                    self._best_loss = loss
+                self._maybe_snapshot()
+                return result
 
             t0 = time.perf_counter()
             try:
@@ -96,13 +122,18 @@ class _CanonicalDeduplicator:
             except Exception:  # noqa: BLE001
                 # Canonicalization failed — evaluate normally
                 self.canon_time_total += time.perf_counter() - t0
-                return self._original_evaluate(
+                result = self._original_evaluate(
                     cgraph,
                     X,
                     loss_fkt,
                     opt_mode,
                     loss_thresh,
                 )
+                consts, loss = result
+                if np.isfinite(loss) and loss < self._best_loss:
+                    self._best_loss = loss
+                self._maybe_snapshot()
+                return result
 
             self.canon_time_total += time.perf_counter() - t0
 
@@ -114,17 +145,23 @@ class _CanonicalDeduplicator:
                 # UDFS's invalid-tracking logic.
                 n_consts = cgraph.n_consts
                 dummy_consts = np.zeros(n_consts) if n_consts > 0 else np.array([])
+                self._maybe_snapshot()
                 return dummy_consts, np.inf
 
             self.canonical_seen.add(canon_hash)
             self.n_unique += 1
-            return self._original_evaluate(
+            result = self._original_evaluate(
                 cgraph,
                 X,
                 loss_fkt,
                 opt_mode,
                 loss_thresh,
             )
+            consts, loss = result
+            if np.isfinite(loss) and loss < self._best_loss:
+                self._best_loss = loss
+            self._maybe_snapshot()
+            return result
 
         return wrapped
 
@@ -170,12 +207,14 @@ class IsalSRUDFSRunner(ModelRunner):
         regressor = DAGRegressor(**kwargs)
         regressor.random_state = seed
 
+        t0 = time.perf_counter()
         dedup = _CanonicalDeduplicator(
             use_pruned=cfg.use_pruned,
             timeout=cfg.canonicalization_timeout,
+            snapshot_freq=cfg.snapshot_frequency,
+            t0=t0,
         )
 
-        t0 = time.perf_counter()
         with _patched_evaluate(dedup), warnings.catch_warnings():
             warnings.simplefilter("ignore")
             regressor.fit(x_train, y_train, verbose=0)
@@ -226,6 +265,7 @@ class IsalSRUDFSRunner(ModelRunner):
             total_evals=total_evals,
             best_loss=best_loss,
             n_top_graphs=n_top,
+            trajectory_snapshots=dedup.snapshots,
             n_total_dags=dedup.n_total,
             n_unique_canonical=dedup.n_unique,
             n_skipped=dedup.n_skipped,

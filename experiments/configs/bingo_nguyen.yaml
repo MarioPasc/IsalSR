@@ -24,6 +24,7 @@ bingo:
   fitness_threshold: 1.0e-16
   max_time: 1800
   max_evals: 10000000
+  snapshot_frequency: 10
 
 isalsr:
   canonicalization_timeout: 60.0

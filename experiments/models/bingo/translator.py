@@ -149,9 +149,38 @@ class BingoTranslator(ResultTranslator):
         )
 
     def to_trajectory(self, raw: RawRunResult) -> list[TrajectoryRow]:
+        """Extract trajectory from raw result.
+
+        Intermediate rows use training R² (converted from MSE fitness).
+        The final row uses actual test R² for consistency with run_log.json.
+        """
         r = raw
         assert isinstance(r, BingoRawResult)
 
+        rows: list[TrajectoryRow] = []
+        var_y = float(np.var(self._y_train))
+        if var_y <= 0:
+            var_y = 1.0
+
+        # Intermediate snapshots (training R²)
+        for snap in r.trajectory_snapshots:
+            r2_train = 1.0 - snap.best_fitness / var_y if np.isfinite(snap.best_fitness) else 0.0
+            dedup_rate = snap.n_skipped / snap.n_total_dags if snap.n_total_dags > 0 else 0.0
+            rows.append(
+                TrajectoryRow(
+                    timestamp_s=snap.timestamp_s,
+                    iteration=snap.generation,
+                    best_r2=r2_train,
+                    best_nrmse=0.0,
+                    n_dags_explored=snap.n_evals,
+                    n_unique_canonical=snap.n_unique_canonical,
+                    current_expr="",
+                    current_complexity=0,
+                    cache_hit_rate_cumulative=dedup_rate,
+                )
+            )
+
+        # Final row with full test metrics
         r2_test = r_squared(self._y_test, r.y_pred_test)
         nrmse_test = nrmse(self._y_test, r.y_pred_test)
         sym_form = get_symbolic_form(r.best_agraph, r.best_sympy)
@@ -161,7 +190,7 @@ class BingoTranslator(ResultTranslator):
                 complexity = r.best_agraph.get_complexity()
         cache_rate = r.n_skipped / r.n_total_dags if r.n_total_dags > 0 else 0.0
 
-        return [
+        rows.append(
             TrajectoryRow(
                 timestamp_s=r.wall_clock_s,
                 iteration=r.n_generations,
@@ -173,7 +202,9 @@ class BingoTranslator(ResultTranslator):
                 current_complexity=complexity,
                 cache_hit_rate_cumulative=cache_rate,
             ),
-        ]
+        )
+
+        return rows
 
     def best_expression_sympy(self, raw: RawRunResult) -> sympy.Expr | None:
         r = raw

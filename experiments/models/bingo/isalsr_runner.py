@@ -24,6 +24,7 @@ from experiments.models.bingo.adapter import agraph_to_labeled_dag
 from experiments.models.bingo.config import BingoConfig
 from experiments.models.bingo.runner import (
     BingoRawResult,
+    BingoTrajectorySnapshot,
     build_bingo_pipeline,
     extract_sympy,
 )
@@ -59,13 +60,54 @@ class IsalSREvaluation(Evaluation):
     Overrides _serial_eval to intercept each individual BEFORE fitness
     evaluation. If the canonical string is already seen, assigns infinite
     fitness (worst possible) and skips the expensive fitness call.
+
+    Also captures periodic trajectory snapshots. AgeFitnessEA extends
+    MuPlusLambda, which calls ``evaluation()`` exactly 2× per generation
+    (parents then offspring). Snapshots are taken every ``snapshot_freq``
+    generations.
     """
 
-    def __init__(self, fitness_function, dedup, **kwargs):
+    def __init__(
+        self,
+        fitness_function: Any,
+        dedup: _CanonicalDeduplicator,
+        snapshot_freq: int = 10,
+        t0: float = 0.0,
+        **kwargs: Any,
+    ):
         super().__init__(fitness_function, **kwargs)
         self.dedup = dedup
+        self._snapshot_freq = snapshot_freq
+        self._t0 = t0
+        self._call_count = 0
+        self._best_fitness = float("inf")
+        self.snapshots: list[BingoTrajectorySnapshot] = []
+        # Set after build_bingo_pipeline returns
+        self._fitness_counter: Any = None
 
-    def _serial_eval(self, population):
+    def __call__(self, population: Any) -> None:
+        super().__call__(population)
+        # MuPlusLambda calls __call__ 2x per generation (parents + offspring)
+        self._call_count += 1
+        if self._call_count % 2 == 0:
+            gen = self._call_count // 2
+            if gen % self._snapshot_freq == 0:
+                n_evals = (
+                    self._fitness_counter.eval_count if self._fitness_counter is not None else 0
+                )
+                self.snapshots.append(
+                    BingoTrajectorySnapshot(
+                        timestamp_s=time.perf_counter() - self._t0,
+                        generation=gen,
+                        best_fitness=self._best_fitness,
+                        n_evals=n_evals,
+                        n_total_dags=self.dedup.n_total,
+                        n_unique_canonical=self.dedup.n_unique,
+                        n_skipped=self.dedup.n_skipped,
+                    )
+                )
+
+    def _serial_eval(self, population):  # type: ignore[override]
         for indv in population:
             if self._redundant or not indv.fit_set:
                 self.dedup.n_total += 1
@@ -76,6 +118,8 @@ class IsalSREvaluation(Evaluation):
                 except Exception:  # noqa: BLE001
                     # Conversion failed: evaluate normally
                     indv.fitness = self.fitness_function(indv)
+                    if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
+                        self._best_fitness = indv.fitness
                     continue
 
                 # Compute canonical string
@@ -99,6 +143,8 @@ class IsalSREvaluation(Evaluation):
                     # Canonicalization failed: evaluate normally
                     self.dedup.canon_time_total += time.perf_counter() - t0
                     indv.fitness = self.fitness_function(indv)
+                    if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
+                        self._best_fitness = indv.fitness
                     continue
 
                 self.dedup.canon_time_total += time.perf_counter() - t0
@@ -113,6 +159,8 @@ class IsalSREvaluation(Evaluation):
                 self.dedup.canonical_seen.add(canon_hash)
                 self.dedup.n_unique += 1
                 indv.fitness = self.fitness_function(indv)
+                if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
+                    self._best_fitness = indv.fitness
 
 
 class IsalSRBingoRunner(ModelRunner):
@@ -147,15 +195,22 @@ class IsalSRBingoRunner(ModelRunner):
             timeout=cfg.canonicalization_timeout,
         )
 
+        t0 = time.perf_counter()
+
         island, fitness_fn, evaluation = build_bingo_pipeline(
             x_train,
             y_train,
             cfg,
             evaluation_cls=IsalSREvaluation,
-            evaluation_kwargs={"dedup": dedup},
+            evaluation_kwargs={
+                "dedup": dedup,
+                "snapshot_freq": cfg.snapshot_frequency,
+                "t0": t0,
+            },
         )
+        # fitness_fn (ExplicitRegression) has eval_count; set after build
+        evaluation._fitness_counter = fitness_fn  # type: ignore[union-attr]
 
-        t0 = time.perf_counter()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             island.evolve_until_convergence(
@@ -186,6 +241,7 @@ class IsalSRBingoRunner(ModelRunner):
             log.debug("Failed to extract Bingo IsalSR results", exc_info=True)
 
         search_only = wall_clock - dedup.canon_time_total
+        snapshots = evaluation.snapshots  # type: ignore[union-attr]
 
         log.info(
             "IsalSR Bingo: total=%d unique=%d skipped=%d canon_time=%.2fs gens=%d",
@@ -206,6 +262,7 @@ class IsalSRBingoRunner(ModelRunner):
             total_evals=total_evals,
             best_fitness=best_fitness,
             n_generations=n_gens,
+            trajectory_snapshots=snapshots,
             n_total_dags=dedup.n_total,
             n_unique_canonical=dedup.n_unique,
             n_skipped=dedup.n_skipped,

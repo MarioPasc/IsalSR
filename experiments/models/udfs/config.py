@@ -29,6 +29,9 @@ class UDFSConfig:
     canonicalization_timeout: float = 60.0
     use_pruned: bool = True
 
+    # Trajectory logging
+    snapshot_frequency: int = 1000  # snapshot every N evaluations
+
     def to_dag_regressor_kwargs(self) -> dict[str, Any]:
         """Convert to DAGRegressor constructor kwargs."""
         return {

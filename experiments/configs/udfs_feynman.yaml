@@ -26,6 +26,7 @@ udfs:
   # hardcoded operators (including sqrt, but NOT pow). This field is not wired
   # to DAGRegressor and has no effect on execution.
   operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log"]
+  snapshot_frequency: 1000
 
 isalsr:
   canonicalization_timeout: 60.0

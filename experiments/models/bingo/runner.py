@@ -33,6 +33,19 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
+class BingoTrajectorySnapshot:
+    """Periodic snapshot during Bingo evolution."""
+
+    timestamp_s: float
+    generation: int
+    best_fitness: float  # best training MSE seen so far
+    n_evals: int
+    n_total_dags: int  # 0 for baseline
+    n_unique_canonical: int  # 0 for baseline
+    n_skipped: int  # 0 for baseline
+
+
+@dataclass
 class BingoRawResult(RawRunResult):
     """Raw result from a Bingo run."""
 
@@ -43,12 +56,67 @@ class BingoRawResult(RawRunResult):
     total_evals: int = 0
     best_fitness: float = float("inf")
     n_generations: int = 0
+    trajectory_snapshots: list[BingoTrajectorySnapshot] = field(default_factory=list)
     # IsalSR-specific (populated by IsalSR runner)
     n_total_dags: int = 0
     n_unique_canonical: int = 0
     n_skipped: int = 0
     canonicalization_time_s: float = 0.0
     search_only_time_s: float = 0.0
+
+
+class _TrajectoryEvaluation(Evaluation):
+    """Evaluation subclass that captures periodic trajectory snapshots.
+
+    AgeFitnessEA extends MuPlusLambda, which calls ``evaluation()``
+    exactly twice per generation (once for parents, once for offspring).
+    We count ``__call__`` invocations and snapshot every
+    ``snapshot_freq`` generations.
+    """
+
+    def __init__(
+        self,
+        fitness_function: Any,
+        snapshot_freq: int = 10,
+        t0: float = 0.0,
+        **kwargs: Any,
+    ):
+        super().__init__(fitness_function, **kwargs)
+        self._snapshot_freq = snapshot_freq
+        self._t0 = t0
+        self._call_count = 0
+        self._best_fitness = float("inf")
+        self.snapshots: list[BingoTrajectorySnapshot] = []
+        # Set after build_bingo_pipeline returns
+        self._fitness_counter: Any = None
+
+    def __call__(self, population: Any) -> None:
+        super().__call__(population)
+        # Track best fitness from evaluated population
+        for indv in population:
+            if hasattr(indv, "fitness") and indv.fit_set:
+                fit = indv.fitness
+                if np.isfinite(fit) and fit < self._best_fitness:
+                    self._best_fitness = fit
+        # MuPlusLambda calls __call__ 2x per generation (parents + offspring)
+        self._call_count += 1
+        if self._call_count % 2 == 0:
+            gen = self._call_count // 2
+            if gen % self._snapshot_freq == 0:
+                n_evals = (
+                    self._fitness_counter.eval_count if self._fitness_counter is not None else 0
+                )
+                self.snapshots.append(
+                    BingoTrajectorySnapshot(
+                        timestamp_s=time.perf_counter() - self._t0,
+                        generation=gen,
+                        best_fitness=self._best_fitness,
+                        n_evals=n_evals,
+                        n_total_dags=0,
+                        n_unique_canonical=0,
+                        n_skipped=0,
+                    )
+                )
 
 
 def build_bingo_pipeline(
@@ -229,9 +297,21 @@ class BingoBaselineRunner(ModelRunner):
 
         np.random.seed(seed)
 
-        island, fitness_fn, evaluation = build_bingo_pipeline(x_train, y_train, cfg)
-
         t0 = time.perf_counter()
+
+        island, fitness_fn, evaluation = build_bingo_pipeline(
+            x_train,
+            y_train,
+            cfg,
+            evaluation_cls=_TrajectoryEvaluation,
+            evaluation_kwargs={
+                "snapshot_freq": cfg.snapshot_frequency,
+                "t0": t0,
+            },
+        )
+        # fitness_fn (ExplicitRegression) has eval_count; set after build
+        evaluation._fitness_counter = fitness_fn  # type: ignore[union-attr]
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             island.evolve_until_convergence(
@@ -261,6 +341,8 @@ class BingoBaselineRunner(ModelRunner):
         except Exception:  # noqa: BLE001
             log.debug("Failed to extract Bingo results", exc_info=True)
 
+        snapshots = evaluation.snapshots  # type: ignore[union-attr]
+
         return BingoRawResult(
             wall_clock_s=wall_clock,
             seed=seed,
@@ -271,6 +353,7 @@ class BingoBaselineRunner(ModelRunner):
             total_evals=total_evals,
             best_fitness=best_fitness,
             n_generations=n_gens,
+            trajectory_snapshots=snapshots,
             n_total_dags=total_evals,
             n_unique_canonical=total_evals,  # baseline: all unique
             n_skipped=0,

@@ -20,6 +20,7 @@ udfs:
   stop_thresh: 1.0e-10
   use_tan: false
   operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log"]
+  snapshot_frequency: 500
 
 isalsr:
   canonicalization_timeout: 10.0

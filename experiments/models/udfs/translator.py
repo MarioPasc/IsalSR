@@ -158,12 +158,40 @@ class UDFSTranslator(ResultTranslator):
     def to_trajectory(self, raw: RawRunResult) -> list[TrajectoryRow]:
         """Extract trajectory from raw result.
 
-        UDFS doesn't natively produce per-iteration trajectories.
-        Returns a single-row trajectory with final state.
+        Intermediate rows use training R² (converted from MSE loss).
+        The final row uses actual test R² for consistency with run_log.json.
         """
         r = raw
         assert isinstance(r, UDFSRawResult)
 
+        rows: list[TrajectoryRow] = []
+        var_y = float(np.var(self._y_train))
+        if var_y <= 0:
+            var_y = 1.0
+
+        # Intermediate snapshots (training R²)
+        for snap in r.trajectory_snapshots:
+            r2_train = 1.0 - snap.best_loss / var_y if np.isfinite(snap.best_loss) else 0.0
+            # For IsalSR: dedup stats come from n_total_dags/n_skipped on the result
+            # For intermediate rows, approximate from eval count ratio
+            dedup_rate = 0.0
+            if r.n_total_dags > 0 and r.n_skipped > 0:
+                dedup_rate = r.n_skipped / r.n_total_dags
+            rows.append(
+                TrajectoryRow(
+                    timestamp_s=snap.timestamp_s,
+                    iteration=snap.total_evals,
+                    best_r2=r2_train,
+                    best_nrmse=0.0,
+                    n_dags_explored=snap.total_evals,
+                    n_unique_canonical=0,
+                    current_expr="",
+                    current_complexity=0,
+                    cache_hit_rate_cumulative=dedup_rate,
+                )
+            )
+
+        # Final row with full test metrics
         r2_test = r_squared(self._y_test, r.y_pred_test)
         nrmse_test = nrmse(self._y_test, r.y_pred_test)
         expr_str = str(r.best_sympy) if r.best_sympy is not None else ""
@@ -172,7 +200,7 @@ class UDFSTranslator(ResultTranslator):
         if r.n_total_dags > 0 and r.n_skipped > 0:
             cache_rate = r.n_skipped / r.n_total_dags
 
-        return [
+        rows.append(
             TrajectoryRow(
                 timestamp_s=r.wall_clock_s,
                 iteration=r.total_evals,
@@ -184,7 +212,9 @@ class UDFSTranslator(ResultTranslator):
                 current_complexity=complexity,
                 cache_hit_rate_cumulative=cache_rate,
             ),
-        ]
+        )
+
+        return rows
 
     def best_expression_sympy(self, raw: RawRunResult) -> sympy.Expr | None:
         """Extract best SymPy expression."""

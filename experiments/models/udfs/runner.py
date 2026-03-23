@@ -10,6 +10,7 @@ import logging
 import sys
 import time
 import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ _vendor_dir = str(Path(__file__).parent / "vendor")
 if _vendor_dir not in sys.path:
     sys.path.insert(0, _vendor_dir)
 
+import DAG_search.dag_search as dag_search_module  # noqa: E402
 from DAG_search.dag_search import DAGRegressor  # noqa: E402
 
 from experiments.models.base_runner import ModelRunner, RawRunResult
@@ -57,6 +59,62 @@ class UDFSRawResult(RawRunResult):
     search_only_time_s: float = 0.0
 
 
+class _TrajectoryTracker:
+    """Lightweight evaluate_cgraph wrapper for trajectory capture.
+
+    Wraps UDFS's module-level evaluate_cgraph to track evaluation count
+    and best training loss over time. No deduplication — purely for
+    baseline trajectory logging.
+    """
+
+    def __init__(self, snapshot_freq: int = 1000, t0: float = 0.0):
+        self.snapshot_freq = snapshot_freq
+        self._t0 = t0
+        self.n_total = 0
+        self._best_loss = float("inf")
+        self.snapshots: list[TrajectorySnapshot] = []
+        self._original_evaluate: Any = None
+
+    def wrap_evaluate_cgraph(self, original_fn: Any) -> Any:
+        """Create a wrapper around evaluate_cgraph with trajectory tracking."""
+        self._original_evaluate = original_fn
+
+        def wrapped(
+            cgraph: Any,
+            X: Any,  # noqa: N803
+            loss_fkt: Any,
+            opt_mode: str = "grid_zoom",
+            loss_thresh: Any = None,
+        ) -> Any:
+            self.n_total += 1
+            result = self._original_evaluate(cgraph, X, loss_fkt, opt_mode, loss_thresh)
+            consts, loss = result
+            if np.isfinite(loss) and loss < self._best_loss:
+                self._best_loss = loss
+            if self.n_total % self.snapshot_freq == 0:
+                self.snapshots.append(
+                    TrajectorySnapshot(
+                        timestamp_s=time.perf_counter() - self._t0,
+                        total_evals=self.n_total,
+                        best_loss=self._best_loss,
+                    )
+                )
+            return result
+
+        return wrapped
+
+
+@contextmanager
+def _patched_trajectory(tracker: _TrajectoryTracker):
+    """Context manager that patches evaluate_cgraph with trajectory wrapper."""
+    original = dag_search_module.evaluate_cgraph
+    dag_search_module.evaluate_cgraph = tracker.wrap_evaluate_cgraph(original)
+    try:
+        yield tracker
+    finally:
+        dag_search_module.evaluate_cgraph = original
+
+
 class UDFSBaselineRunner(ModelRunner):
     """Runs UDFS DAGRegressor without IsalSR canonicalization."""
 
@@ -87,8 +145,13 @@ class UDFSBaselineRunner(ModelRunner):
         regressor = DAGRegressor(**kwargs)
         regressor.random_state = seed
 
+        tracker = _TrajectoryTracker(
+            snapshot_freq=cfg.snapshot_frequency,
+            t0=time.perf_counter(),
+        )
+
         t0 = time.perf_counter()
-        with warnings.catch_warnings():
+        with _patched_trajectory(tracker), warnings.catch_warnings():
             warnings.simplefilter("ignore")
             regressor.fit(x_train, y_train, verbose=0)
         wall_clock = time.perf_counter() - t0
@@ -128,6 +191,7 @@ class UDFSBaselineRunner(ModelRunner):
             total_evals=total_evals,
             best_loss=best_loss,
             n_top_graphs=n_top,
+            trajectory_snapshots=tracker.snapshots,
             n_total_dags=total_evals,
             n_unique_canonical=total_evals,  # baseline: all unique (no dedup)
             n_skipped=0,
