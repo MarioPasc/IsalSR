@@ -142,96 +142,96 @@ experiments:
   # Re-enable when running comparative experiments via models_launch.sh.
 
   generate_cache_nguyen_1var:
-    enabled: false
+    enabled: true
     num_variables: 1
     ops: "+,*,-,/,s,c,e,l"
-    n_strings_per_task: 50000
+    n_strings_per_task: 100000
     max_tokens: 30
-    n_shards: 20
+    n_shards: 50
     seed_base: 42
-    exhaustive_timeout: 60
-    time_limit: "08:00:00"
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
     cpus: 1
     mem_gb: 16
 
   generate_cache_nguyen_2var:
-    enabled: false
+    enabled: true
     num_variables: 2
     ops: "+,*,-,/,s,c,e,l"
-    n_strings_per_task: 50000
+    n_strings_per_task: 100000
     max_tokens: 30
-    n_shards: 20
+    n_shards: 50
     seed_base: 42
-    exhaustive_timeout: 60
-    time_limit: "08:00:00"
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
     cpus: 1
     mem_gb: 16
 
   generate_cache_feynman_1var:
-    enabled: false
+    enabled: true
     num_variables: 1
     ops: "+,*,-,/,s,c,e,l,r,^"
-    n_strings_per_task: 25000
+    n_strings_per_task: 100000
     max_tokens: 30
-    n_shards: 20
+    n_shards: 50
     seed_base: 42
-    exhaustive_timeout: 60
-    time_limit: "08:00:00"
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
     cpus: 1
     mem_gb: 16
 
   generate_cache_feynman_2var:
-    enabled: false
+    enabled: true
     num_variables: 2
     ops: "+,*,-,/,s,c,e,l,r,^"
-    n_strings_per_task: 25000
+    n_strings_per_task: 100000
     max_tokens: 30
-    n_shards: 20
+    n_shards: 50
     seed_base: 42
-    exhaustive_timeout: 60
-    time_limit: "08:00:00"
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
     cpus: 1
     mem_gb: 16
 
   generate_cache_feynman_3var:
-    enabled: false
+    enabled: true
     num_variables: 3
     ops: "+,*,-,/,s,c,e,l,r,^"
-    n_strings_per_task: 25000
+    n_strings_per_task: 100000
     max_tokens: 30
-    n_shards: 20
+    n_shards: 50
     seed_base: 42
-    exhaustive_timeout: 60
-    time_limit: "08:00:00"
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
     cpus: 1
     mem_gb: 16
 
   merge_cache_nguyen_1var:
-    enabled: false
+    enabled: true
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32
 
   merge_cache_nguyen_2var:
-    enabled: false
+    enabled: true
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32
 
   merge_cache_feynman_1var:
-    enabled: false
+    enabled: true
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32
 
   merge_cache_feynman_2var:
-    enabled: false
+    enabled: true
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32
 
   merge_cache_feynman_3var:
-    enabled: false
+    enabled: true
     time_limit: "02:00:00"
     cpus: 1
     mem_gb: 32

@@ -122,12 +122,18 @@ def _generate_benchmark_data(
         raise ValueError(f"Cannot generate data for benchmark: {bench_name}")
 
 
-def create_runner(method: str, variant: str, config: dict[str, Any]):
+def create_runner(method: str, variant: str, config: dict[str, Any], atlas=None):
     """Factory for model runners.
 
     Runner imports are lazy: UDFS requires torch (vendored), Bingo requires
     mpi4py. These are only available on HPC or when the full [experiments]
     extras are installed.
+
+    Args:
+        method: SR method name ("udfs" or "bingo").
+        variant: "baseline" or "isalsr".
+        config: Full YAML config dict.
+        atlas: Optional AtlasLookup for O(1) canonical lookup (isalsr only).
     """
     if method == "udfs":
         from experiments.models.udfs.config import UDFSConfig
@@ -138,7 +144,7 @@ def create_runner(method: str, variant: str, config: dict[str, Any]):
         if variant == "baseline":
             return UDFSBaselineRunner(config=cfg)
         elif variant == "isalsr":
-            return IsalSRUDFSRunner(config=cfg)
+            return IsalSRUDFSRunner(config=cfg, atlas=atlas)
         else:
             raise ValueError(f"Unknown variant: {variant}")
     elif method == "bingo":
@@ -150,7 +156,7 @@ def create_runner(method: str, variant: str, config: dict[str, Any]):
         if variant == "baseline":
             return BingoBaselineRunner(config=cfg)
         elif variant == "isalsr":
-            return IsalSRBingoRunner(config=cfg)
+            return IsalSRBingoRunner(config=cfg, atlas=atlas)
         else:
             raise ValueError(f"Unknown variant: {variant}")
     else:
@@ -182,6 +188,52 @@ def create_translator(method, y_train, y_test, gt_expr, gt_vars):
         )
     else:
         raise ValueError(f"Unknown method for translator: {method}")
+
+
+def _resolve_atlas(atlas_dir: str | None, num_variables: int):
+    """Find and load the atlas for a given num_variables.
+
+    Scans *atlas_dir* subdirectories for ``cache_merged.h5`` files whose
+    HDF5 root attribute ``num_variables`` matches. Returns ``None`` (with
+    a logged warning) if no match is found or *atlas_dir* is ``None``.
+    """
+    if atlas_dir is None:
+        return None
+
+    atlas_path = Path(atlas_dir)
+    if not atlas_path.is_dir():
+        log.warning("Atlas dir does not exist: %s", atlas_dir)
+        return None
+
+    from isalsr.precomputed.atlas_lookup import AtlasLookup  # noqa: PLC0415
+
+    # Scan subdirectories for cache_merged.h5
+    for subdir in sorted(atlas_path.iterdir()):
+        merged = subdir / "cache_merged.h5" if subdir.is_dir() else None
+        if merged is None or not merged.exists():
+            continue
+        try:
+            candidate = AtlasLookup.from_hdf5(merged)
+            if candidate.num_variables == num_variables:
+                return candidate
+        except Exception:  # noqa: BLE001
+            log.warning("Failed to load atlas %s", merged, exc_info=True)
+
+    # Also check atlas_dir itself for .h5 files (flat layout)
+    for h5_file in sorted(atlas_path.glob("*.h5")):
+        try:
+            candidate = AtlasLookup.from_hdf5(h5_file)
+            if candidate.num_variables == num_variables:
+                return candidate
+        except Exception:  # noqa: BLE001
+            log.warning("Failed to load atlas %s", h5_file, exc_info=True)
+
+    log.warning(
+        "No atlas found for num_variables=%d in %s",
+        num_variables,
+        atlas_dir,
+    )
+    return None
 
 
 def run_experiment(config_path: str, args: argparse.Namespace) -> None:
@@ -219,9 +271,18 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
 
         all_paired_stats = []
 
+        # Resolve atlas once per (benchmark, num_variables)
+        atlas_dir = getattr(args, "atlas_dir", None)
+        _atlas_cache: dict[int, object] = {}
+
         for bench in benchmarks:
             problem_name = bench["name"]
             log.info("=== %s / %s ===", bench_name, problem_name)
+
+            nv = bench["num_variables"]
+            if nv not in _atlas_cache:
+                _atlas_cache[nv] = _resolve_atlas(atlas_dir, nv)
+            atlas = _atlas_cache[nv]
 
             paths = ensure_output_structure(output_base, method, bench_name, problem_name)
 
@@ -254,7 +315,7 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
                         seed,
                     )
 
-                    runner = create_runner(method, variant, config)
+                    runner = create_runner(method, variant, config, atlas=atlas)
                     raw = runner.fit(
                         x_train,
                         y_train,
@@ -396,6 +457,13 @@ def main() -> None:
         "--variants",
         default="baseline,isalsr",
         help="Variants to run (e.g., 'baseline,isalsr' or 'baseline')",
+    )
+    parser.add_argument(
+        "--atlas-dir",
+        default=None,
+        help="Directory with precomputed atlas HDF5 files for O(1) "
+        "canonical lookup (isalsr variants only). If not set, "
+        "canonicalization is computed online.",
     )
     args = parser.parse_args()
     run_experiment(args.config, args)

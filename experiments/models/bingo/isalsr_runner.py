@@ -44,14 +44,25 @@ class _CanonicalDeduplicator:
     entries (birthday bound n²/2⁶⁵), which is negligible for our use case.
     """
 
-    def __init__(self, use_pruned: bool = True, timeout: float = 60.0):
+    def __init__(
+        self,
+        use_pruned: bool = True,
+        timeout: float = 60.0,
+        atlas: Any = None,
+    ):
         self.use_pruned = use_pruned
         self.timeout = timeout
+        self.atlas = atlas  # AtlasLookup | None
         self.canonical_seen: set[int] = set()
         self.n_total: int = 0
         self.n_unique: int = 0
         self.n_skipped: int = 0
         self.canon_time_total: float = 0.0
+        # Atlas-specific stats
+        self.atlas_hits: int = 0
+        self.atlas_misses: int = 0
+        self.atlas_lookup_time: float = 0.0
+        self.canon_fallback_time: float = 0.0
 
 
 class IsalSREvaluation(Evaluation):
@@ -122,35 +133,50 @@ class IsalSREvaluation(Evaluation):
                         self._best_fitness = indv.fitness
                     continue
 
-                # Compute canonical string
+                # Resolve canonical hash: atlas fast-path or online fallback
                 t0 = time.perf_counter()
-                try:
-                    if self.dedup.use_pruned:
-                        from isalsr.core.canonical import pruned_canonical_string
+                canon_hash: int | None = None
 
-                        canonical = pruned_canonical_string(
-                            dag,
-                            timeout=self.dedup.timeout,
-                        )
+                if self.dedup.atlas is not None:
+                    canon_hash, was_hit = self.dedup.atlas.lookup_dag(dag)
+                    dt = time.perf_counter() - t0
+                    self.dedup.atlas_lookup_time += dt
+                    if was_hit:
+                        self.dedup.atlas_hits += 1
                     else:
-                        from isalsr.core.canonical import canonical_string
+                        self.dedup.atlas_misses += 1
 
-                        canonical = canonical_string(
-                            dag,
-                            timeout=self.dedup.timeout,
-                        )
-                except Exception:  # noqa: BLE001
-                    # Canonicalization failed: evaluate normally
-                    self.dedup.canon_time_total += time.perf_counter() - t0
-                    indv.fitness = self.fitness_function(indv)
-                    if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
-                        self._best_fitness = indv.fitness
-                    continue
+                if canon_hash is None:
+                    # No atlas or atlas miss: compute canonical string
+                    t0_canon = time.perf_counter()
+                    try:
+                        if self.dedup.use_pruned:
+                            from isalsr.core.canonical import pruned_canonical_string
+
+                            canonical = pruned_canonical_string(
+                                dag,
+                                timeout=self.dedup.timeout,
+                            )
+                        else:
+                            from isalsr.core.canonical import canonical_string
+
+                            canonical = canonical_string(
+                                dag,
+                                timeout=self.dedup.timeout,
+                            )
+                    except Exception:  # noqa: BLE001
+                        self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
+                        self.dedup.canon_time_total += time.perf_counter() - t0
+                        indv.fitness = self.fitness_function(indv)
+                        if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
+                            self._best_fitness = indv.fitness
+                        continue
+                    self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
+                    canon_hash = hash(canonical)
 
                 self.dedup.canon_time_total += time.perf_counter() - t0
 
                 # Deduplication check (hash-based for memory efficiency)
-                canon_hash = hash(canonical)
                 if canon_hash in self.dedup.canonical_seen:
                     self.dedup.n_skipped += 1
                     indv.fitness = np.inf  # Sets fit_set=True, worst fitness
@@ -166,8 +192,9 @@ class IsalSREvaluation(Evaluation):
 class IsalSRBingoRunner(ModelRunner):
     """Runs Bingo with IsalSR canonical deduplication."""
 
-    def __init__(self, config: BingoConfig | None = None):
+    def __init__(self, config: BingoConfig | None = None, atlas: Any = None):
         self._config = config or BingoConfig()
+        self._atlas = atlas  # AtlasLookup | None
 
     @property
     def name(self) -> str:
@@ -193,6 +220,7 @@ class IsalSRBingoRunner(ModelRunner):
         dedup = _CanonicalDeduplicator(
             use_pruned=cfg.use_pruned,
             timeout=cfg.canonicalization_timeout,
+            atlas=self._atlas,
         )
 
         t0 = time.perf_counter()
@@ -256,11 +284,14 @@ class IsalSRBingoRunner(ModelRunner):
         snapshots = evaluation.snapshots  # type: ignore[union-attr]
 
         log.info(
-            "IsalSR Bingo: total=%d unique=%d skipped=%d canon_time=%.2fs gens=%d",
+            "IsalSR Bingo: total=%d unique=%d skipped=%d canon=%.2fs "
+            "atlas_hits=%d misses=%d gens=%d",
             dedup.n_total,
             dedup.n_unique,
             dedup.n_skipped,
             dedup.canon_time_total,
+            dedup.atlas_hits,
+            dedup.atlas_misses,
             n_gens,
         )
 
@@ -280,4 +311,8 @@ class IsalSRBingoRunner(ModelRunner):
             n_skipped=dedup.n_skipped,
             canonicalization_time_s=dedup.canon_time_total,
             search_only_time_s=search_only,
+            atlas_hits=dedup.atlas_hits,
+            atlas_misses=dedup.atlas_misses,
+            atlas_lookup_time_s=dedup.atlas_lookup_time,
+            canon_fallback_time_s=dedup.canon_fallback_time,
         )

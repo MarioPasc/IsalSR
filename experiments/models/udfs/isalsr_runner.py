@@ -54,9 +54,11 @@ class _CanonicalDeduplicator:
         timeout: float = 60.0,
         snapshot_freq: int = 1000,
         t0: float = 0.0,
+        atlas: Any = None,
     ):
         self.use_pruned = use_pruned
         self.timeout = timeout
+        self.atlas = atlas  # AtlasLookup | None
         self.canonical_seen: set[int] = set()
         self.n_total = 0
         self.n_unique = 0
@@ -67,6 +69,11 @@ class _CanonicalDeduplicator:
         self._best_loss = float("inf")
         self.snapshots: list[TrajectorySnapshot] = []
         self._original_evaluate: Any = None
+        # Atlas-specific stats
+        self.atlas_hits: int = 0
+        self.atlas_misses: int = 0
+        self.atlas_lookup_time: float = 0.0
+        self.canon_fallback_time: float = 0.0
 
     def _maybe_snapshot(self) -> None:
         """Append a trajectory snapshot if it's time."""
@@ -78,6 +85,46 @@ class _CanonicalDeduplicator:
                     best_loss=self._best_loss,
                 )
             )
+
+    def _resolve_canonical_hash(self, labeled_dag: Any) -> int | None:
+        """Resolve the canonical hash for a DAG: atlas fast-path or online fallback.
+
+        Returns the canonical hash, or None if canonicalization failed.
+        Updates atlas/fallback timing stats as a side effect.
+        """
+        t0 = time.perf_counter()
+        canon_hash: int | None = None
+
+        # Atlas fast-path
+        if self.atlas is not None:
+            canon_hash, was_hit = self.atlas.lookup_dag(labeled_dag)
+            dt = time.perf_counter() - t0
+            self.atlas_lookup_time += dt
+            if was_hit:
+                self.atlas_hits += 1
+                self.canon_time_total += dt
+                return canon_hash
+            self.atlas_misses += 1
+
+        # Online fallback
+        t0_canon = time.perf_counter()
+        try:
+            if self.use_pruned:
+                from isalsr.core.canonical import pruned_canonical_string
+
+                canonical = pruned_canonical_string(labeled_dag, timeout=self.timeout)
+            else:
+                from isalsr.core.canonical import canonical_string
+
+                canonical = canonical_string(labeled_dag, timeout=self.timeout)
+        except Exception:  # noqa: BLE001
+            self.canon_fallback_time += time.perf_counter() - t0_canon
+            self.canon_time_total += time.perf_counter() - t0
+            return None
+
+        self.canon_fallback_time += time.perf_counter() - t0_canon
+        self.canon_time_total += time.perf_counter() - t0
+        return hash(canonical)
 
     def wrap_evaluate_cgraph(self, original_fn: Any) -> Any:
         """Create a wrapper around evaluate_cgraph with canonical dedup."""
@@ -103,25 +150,10 @@ class _CanonicalDeduplicator:
                 self._maybe_snapshot()
                 return result
 
-            t0 = time.perf_counter()
-            try:
-                if self.use_pruned:
-                    from isalsr.core.canonical import pruned_canonical_string
+            canon_hash = self._resolve_canonical_hash(labeled_dag)
 
-                    canonical = pruned_canonical_string(
-                        labeled_dag,
-                        timeout=self.timeout,
-                    )
-                else:
-                    from isalsr.core.canonical import canonical_string
-
-                    canonical = canonical_string(
-                        labeled_dag,
-                        timeout=self.timeout,
-                    )
-            except Exception:  # noqa: BLE001
+            if canon_hash is None:
                 # Canonicalization failed — evaluate normally
-                self.canon_time_total += time.perf_counter() - t0
                 result = self._original_evaluate(
                     cgraph,
                     X,
@@ -135,14 +167,8 @@ class _CanonicalDeduplicator:
                 self._maybe_snapshot()
                 return result
 
-            self.canon_time_total += time.perf_counter() - t0
-
-            canon_hash = hash(canonical)
             if canon_hash in self.canonical_seen:
                 self.n_skipped += 1
-                # Return infinite loss to skip this graph.
-                # Use valid-shaped consts array to avoid crashes in
-                # UDFS's invalid-tracking logic.
                 n_consts = cgraph.n_consts
                 dummy_consts = np.zeros(n_consts) if n_consts > 0 else np.array([])
                 self._maybe_snapshot()
@@ -180,8 +206,9 @@ def _patched_evaluate(deduplicator: _CanonicalDeduplicator):
 class IsalSRUDFSRunner(ModelRunner):
     """Runs UDFS with IsalSR canonical deduplication."""
 
-    def __init__(self, config: UDFSConfig | None = None):
+    def __init__(self, config: UDFSConfig | None = None, atlas: Any = None):
         self._config = config or UDFSConfig()
+        self._atlas = atlas  # AtlasLookup | None
 
     @property
     def name(self) -> str:
@@ -213,6 +240,7 @@ class IsalSRUDFSRunner(ModelRunner):
             timeout=cfg.canonicalization_timeout,
             snapshot_freq=cfg.snapshot_frequency,
             t0=t0,
+            atlas=self._atlas,
         )
 
         with _patched_evaluate(dedup), warnings.catch_warnings():
@@ -249,11 +277,13 @@ class IsalSRUDFSRunner(ModelRunner):
         search_only = wall_clock - dedup.canon_time_total
 
         log.info(
-            "IsalSR UDFS: total=%d unique=%d skipped=%d canon_time=%.2fs",
+            "IsalSR UDFS: total=%d unique=%d skipped=%d canon=%.2fs atlas_hits=%d misses=%d",
             dedup.n_total,
             dedup.n_unique,
             dedup.n_skipped,
             dedup.canon_time_total,
+            dedup.atlas_hits,
+            dedup.atlas_misses,
         )
 
         return UDFSRawResult(
@@ -271,4 +301,8 @@ class IsalSRUDFSRunner(ModelRunner):
             n_skipped=dedup.n_skipped,
             canonicalization_time_s=dedup.canon_time_total,
             search_only_time_s=search_only,
+            atlas_hits=dedup.atlas_hits,
+            atlas_misses=dedup.atlas_misses,
+            atlas_lookup_time_s=dedup.atlas_lookup_time,
+            canon_fallback_time_s=dedup.canon_fallback_time,
         )

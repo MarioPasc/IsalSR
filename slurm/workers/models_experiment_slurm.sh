@@ -80,12 +80,20 @@ echo ""
 CONFIG="${MODELS_EXPERIMENT_CONFIG:?ERROR: MODELS_EXPERIMENT_CONFIG not set}"
 RESULTS_DIR="${MODELS_RESULTS_DIR:?ERROR: MODELS_RESULTS_DIR not set}"
 
+# Optional atlas directory for O(1) canonical lookup
+ATLAS_FLAG=""
+if [[ -n "${MODELS_ATLAS_DIR:-}" ]]; then
+    echo "Atlas dir: ${MODELS_ATLAS_DIR}"
+    ATLAS_FLAG="--atlas-dir ${MODELS_ATLAS_DIR}"
+fi
+
 $PYTHON -m experiments.models.orchestrator \
     --config "${CONFIG}" \
     --output-dir "${RESULTS_DIR}" \
     --seeds "${SEED}" \
     --problems "${PROBLEM_NAME}" \
-    --variants "${MODELS_VARIANT}"
+    --variants "${MODELS_VARIANT}" \
+    ${ATLAS_FLAG}
 
 echo ""
 echo "=== Task ${TASK_ID} (${PROBLEM_NAME}, seed=${SEED}, ${MODELS_VARIANT}) complete: $(date) ==="

@@ -97,16 +97,21 @@ class UDFSTranslator(ResultTranslator):
         time_to_099 = r.wall_clock_s if r2_test >= 0.99 else None
         time_to_0999 = r.wall_clock_s if r2_test >= 0.999 else None
 
-        # Time metrics
+        # Atlas / cache metrics
+        total_lookups = r.atlas_hits + r.atlas_misses
+        hit_rate = r.atlas_hits / total_lookups if total_lookups > 0 else 0.0
+        avg_canon = r.canon_fallback_time_s / max(r.atlas_misses, 1) if r.atlas_misses > 0 else 0.0
+        estimated_saved = r.atlas_hits * avg_canon
+
         time_results = TimeResults(
             wall_clock_total_s=r.wall_clock_s,
             wall_clock_search_only_s=r.search_only_time_s,
-            canonicalization_precomputed_s=0.0,  # no precomputed cache for UDFS
+            canonicalization_precomputed_s=r.atlas_lookup_time_s,
             canonicalization_runtime_s=r.canonicalization_time_s,
-            cache_hit_rate=0.0,
-            cache_hits=0,
-            cache_misses=0,
-            estimated_time_saved_s=0.0,
+            cache_hit_rate=hit_rate,
+            cache_hits=r.atlas_hits,
+            cache_misses=r.atlas_misses,
+            estimated_time_saved_s=estimated_saved,
             time_to_r2_099_s=time_to_099,
             time_to_r2_0999_s=time_to_0999,
             evaluation_time_s=r.search_only_time_s,

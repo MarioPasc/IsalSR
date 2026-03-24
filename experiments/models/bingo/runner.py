@@ -84,6 +84,11 @@ class BingoRawResult(RawRunResult):
     n_skipped: int = 0
     canonicalization_time_s: float = 0.0
     search_only_time_s: float = 0.0
+    # Atlas-specific (populated when --atlas-dir is used)
+    atlas_hits: int = 0
+    atlas_misses: int = 0
+    atlas_lookup_time_s: float = 0.0
+    canon_fallback_time_s: float = 0.0
 
 
 class _TrajectoryEvaluation(Evaluation):

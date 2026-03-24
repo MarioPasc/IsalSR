@@ -128,6 +128,16 @@ submit_experiment() {
     local array_size=$((n_seeds * n_problems))
     local out_dir="${RESULTS_DIR}/slurm_logs/${exp_name}"
 
+    # Optional atlas directory (resolved from config, relative to RESULTS_DIR)
+    local atlas_dir_raw
+    atlas_dir_raw=$(get_exp_field "$exp_name" "atlas_dir")
+    local atlas_export=""
+    if [[ -n "$atlas_dir_raw" ]]; then
+        # Expand {results_dir} placeholder
+        local atlas_dir="${atlas_dir_raw//\{results_dir\}/${RESULTS_DIR}}"
+        atlas_export=",MODELS_ATLAS_DIR=${atlas_dir}"
+    fi
+
     echo "[${exp_name}]" >&2
     echo "  Method:    ${method}" >&2
     echo "  Benchmark: ${benchmark}" >&2
@@ -137,6 +147,9 @@ submit_experiment() {
     echo "  CPUs:      ${cpus}" >&2
     echo "  Mem:       ${mem_gb}G" >&2
     echo "  Out:       ${out_dir}" >&2
+    if [[ -n "$atlas_dir_raw" ]]; then
+        echo "  Atlas:     ${atlas_dir}" >&2
+    fi
     if [[ -n "$dep_flag" ]]; then
         echo "  Depends:   ${dep_flag}" >&2
     fi
@@ -153,7 +166,7 @@ submit_experiment() {
         --chdir=${REPO_DIR} \
         --array=1-${array_size}%50 \
         ${dep_flag} \
-        --export=ALL,ISALSR_REPO_DIR=${REPO_DIR},MODELS_METHOD=${method},MODELS_BENCHMARK=${benchmark},MODELS_VARIANT=${variant},MODELS_EXPERIMENT_CONFIG=${REPO_DIR}/${config_file},MODELS_N_SEEDS=${n_seeds},MODELS_RESULTS_DIR=${RESULTS_DIR} \
+        --export=ALL,ISALSR_REPO_DIR=${REPO_DIR},MODELS_METHOD=${method},MODELS_BENCHMARK=${benchmark},MODELS_VARIANT=${variant},MODELS_EXPERIMENT_CONFIG=${REPO_DIR}/${config_file},MODELS_N_SEEDS=${n_seeds},MODELS_RESULTS_DIR=${RESULTS_DIR}${atlas_export} \
         ${WORKER_SCRIPT}"
 
     if [[ "$DRY_RUN" == "true" ]]; then

@@ -34,6 +34,39 @@ from experiments.models.schemas import (
 
 log = logging.getLogger(__name__)
 
+# Metrics whose raw values can be NaN / ±inf due to extrapolation failures.
+# Following SRBench convention, R²-family metrics are clipped to [0, 1]
+# for robust statistics: negative R² is "worse than predicting the mean,"
+# and the exact magnitude of failure is uninformative.
+_R2_CLIP_METRICS = frozenset({"r2_test", "r2_train"})
+
+# Metrics that can produce NaN / ±inf from evaluation failures.
+# We sanitize these with nanmean/nanstd rather than clipping.
+_NAN_PRONE_METRICS = frozenset(
+    {
+        "r2_test",
+        "r2_train",
+        "nrmse_test",
+        "nrmse_train",
+        "mse_test",
+    }
+)
+
+
+def _sanitize_values(values: np.ndarray, metric_name: str) -> np.ndarray:
+    """Sanitize metric values for robust statistics.
+
+    - R² metrics: clip to [0, 1] (SRBench convention).
+    - All NaN-prone metrics: replace inf with NaN for nanmean/nanstd.
+    """
+    out = values.copy()
+    if metric_name in _R2_CLIP_METRICS:
+        out = np.where(np.isfinite(out), out, np.nan)
+        out = np.clip(out, 0.0, 1.0)
+    elif metric_name in _NAN_PRONE_METRICS:
+        out = np.where(np.isfinite(out), out, np.nan)
+    return out
+
 
 # ======================================================================
 # Metric extractors
@@ -81,7 +114,8 @@ def aggregate_seeds(
     if extractor is None:
         extractor = METRIC_EXTRACTORS[metric_name]
 
-    values = np.array([extractor(rl) for rl in run_logs])
+    raw = np.array([extractor(rl) for rl in run_logs])
+    values = _sanitize_values(raw, metric_name)
     rl0 = run_logs[0]
 
     return AggregateRow(
@@ -90,13 +124,13 @@ def aggregate_seeds(
         benchmark=rl0.metadata.benchmark,
         problem=rl0.metadata.problem,
         metric=metric_name,
-        mean=float(np.mean(values)),
-        std=float(np.std(values, ddof=1)) if len(values) > 1 else 0.0,
-        median=float(np.median(values)),
-        q25=float(np.percentile(values, 25)),
-        q75=float(np.percentile(values, 75)),
-        min_val=float(np.min(values)),
-        max_val=float(np.max(values)),
+        mean=float(np.nanmean(values)),
+        std=float(np.nanstd(values, ddof=1)) if len(values) > 1 else 0.0,
+        median=float(np.nanmedian(values)),
+        q25=float(np.nanpercentile(values, 25)),
+        q75=float(np.nanpercentile(values, 75)),
+        min_val=float(np.nanmin(values)),
+        max_val=float(np.nanmax(values)),
     )
 
 
@@ -152,39 +186,67 @@ def compute_paired_stats(
     )
 
     for metric_name, extractor in METRIC_EXTRACTORS.items():
-        baseline_vals = np.array([extractor(rl) for rl in baseline_logs])
-        isalsr_vals = np.array([extractor(rl) for rl in isalsr_logs])
+        raw_bl = np.array([extractor(rl) for rl in baseline_logs])
+        raw_is = np.array([extractor(rl) for rl in isalsr_logs])
+
+        # Sanitize: clip R² to [0,1], replace inf with NaN
+        baseline_vals = _sanitize_values(raw_bl, metric_name)
+        isalsr_vals = _sanitize_values(raw_is, metric_name)
         differences = isalsr_vals - baseline_vals
 
-        # Normality test
-        sw_stat, sw_p = shapiro_wilk(differences)
-        normal = sw_p > alpha
+        # Drop NaN pairs for statistical tests
+        valid = np.isfinite(differences)
+        n_dropped = int((~valid).sum())
+        if n_dropped > 0:
+            log.info(
+                "  %s: dropped %d/%d NaN pairs for statistical test",
+                metric_name,
+                n_dropped,
+                len(differences),
+            )
+        bl_clean = baseline_vals[valid]
+        is_clean = isalsr_vals[valid]
+        diff_clean = differences[valid]
 
-        # Choose test
-        if normal:
-            stat, p_raw = paired_ttest(baseline_vals, isalsr_vals)
-            test_used = "paired_t"
+        if len(diff_clean) < 3:
+            log.warning("  %s: <3 valid pairs, skipping statistical test", metric_name)
+            sw_p = float("nan")
+            stat = float("nan")
+            p_raw = float("nan")
+            test_used = "insufficient_data"
+            d = float("nan")
+            d_ci_lo = d_ci_hi = float("nan")
+            mean_d = ci_lo = ci_hi = float("nan")
         else:
-            stat, p_raw = wilcoxon_signed_rank(baseline_vals, isalsr_vals)
-            test_used = "wilcoxon"
+            # Normality test
+            _sw_stat, sw_p = shapiro_wilk(diff_clean)
+            normal = sw_p > alpha
 
-        # Effect size
-        d = cohens_d_paired(differences)
-        d_ci_lo, d_ci_hi = cohens_d_ci_bootstrap(
-            differences,
-            seed=bootstrap_seed,
-        )
-        mean_d, ci_lo, ci_hi = mean_diff_ci(differences)
+            # Choose test
+            if normal:
+                stat, p_raw = paired_ttest(bl_clean, is_clean)
+                test_used = "paired_t"
+            else:
+                stat, p_raw = wilcoxon_signed_rank(bl_clean, is_clean)
+                test_used = "wilcoxon"
+
+            # Effect size
+            d = cohens_d_paired(diff_clean)
+            d_ci_lo, d_ci_hi = cohens_d_ci_bootstrap(
+                diff_clean,
+                seed=bootstrap_seed,
+            )
+            mean_d, ci_lo, ci_hi = mean_diff_ci(diff_clean)
 
         paired.metrics[metric_name] = PairedStatsMetric(
-            baseline_mean=float(np.mean(baseline_vals)),
-            baseline_std=float(np.std(baseline_vals, ddof=1)) if len(baseline_vals) > 1 else 0.0,
-            isalsr_mean=float(np.mean(isalsr_vals)),
-            isalsr_std=float(np.std(isalsr_vals, ddof=1)) if len(isalsr_vals) > 1 else 0.0,
+            baseline_mean=float(np.nanmean(baseline_vals)),
+            baseline_std=float(np.nanstd(baseline_vals, ddof=1)) if len(baseline_vals) > 1 else 0.0,
+            isalsr_mean=float(np.nanmean(isalsr_vals)),
+            isalsr_std=float(np.nanstd(isalsr_vals, ddof=1)) if len(isalsr_vals) > 1 else 0.0,
             mean_diff=mean_d,
-            std_diff=float(np.std(differences, ddof=1)) if len(differences) > 1 else 0.0,
+            std_diff=float(np.nanstd(diff_clean, ddof=1)) if len(diff_clean) > 1 else 0.0,
             shapiro_wilk_p=sw_p,
-            normality_assumed=normal,
+            normality_assumed=sw_p > alpha if np.isfinite(sw_p) else False,
             test_used=test_used,
             statistic=stat,
             p_value_raw=p_raw,
@@ -280,9 +342,8 @@ def benchmark_summary(
             n_sig += 1
 
         # Speedup (baseline_time / isalsr_time) — only for time metrics
-        if "time" in metric_name or "wall_clock" in metric_name:
-            if m.isalsr_mean > 0:
-                speedups.append(m.baseline_mean / m.isalsr_mean)
+        if ("time" in metric_name or "wall_clock" in metric_name) and m.isalsr_mean > 0:
+            speedups.append(m.baseline_mean / m.isalsr_mean)
 
         # Reduction factor
         rf = ps.metrics.get("empirical_reduction_factor")
@@ -297,8 +358,8 @@ def benchmark_summary(
         metric=metric_name,
         n_problems=n_problems,
         n_significant=n_sig,
-        mean_cohens_d=float(np.mean(ds_arr)),
-        median_cohens_d=float(np.median(ds_arr)),
+        mean_cohens_d=float(np.nanmean(ds_arr)),
+        median_cohens_d=float(np.nanmedian(ds_arr)),
         mean_speedup=float(np.mean(speedups)) if speedups else 0.0,
         mean_reduction_factor=float(np.mean(reduction_factors)) if reduction_factors else 0.0,
         solution_rate_baseline=sol_baseline,
