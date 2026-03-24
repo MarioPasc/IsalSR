@@ -351,7 +351,7 @@ else
         echo "--- Phase 3: Analysis (after all experiments) ---"
         echo "  Depends on ${#ALL_JOB_IDS[@]} experiment jobs"
         echo ""
-        submit_analysis "--dependency=afterok:${ALL_DEP}"
+        submit_analysis "--dependency=afterany:${ALL_DEP}"
     else
         echo ""
         echo "[WARN] No experiment jobs submitted. Skipping analysis."

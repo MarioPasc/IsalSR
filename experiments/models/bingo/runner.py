@@ -31,6 +31,27 @@ from experiments.models.bingo.config import BingoConfig
 
 log = logging.getLogger(__name__)
 
+_POST_PROCESS_TIMEOUT = 120  # seconds for extract_sympy / evaluate_equation_at
+
+
+def _with_timeout(fn: Any, timeout_s: int = _POST_PROCESS_TIMEOUT) -> Any:
+    """Run *fn()* with a SIGALRM timeout. Returns None on timeout."""
+    import signal  # noqa: PLC0415
+
+    def _handler(signum: int, frame: Any) -> None:  # noqa: ARG001
+        raise TimeoutError
+
+    old = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(timeout_s)
+    try:
+        return fn()
+    except TimeoutError:
+        log.warning("Timeout (%ds) in Bingo post-processing", timeout_s)
+        return None
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
+
 
 @dataclass
 class BingoTrajectorySnapshot:
@@ -335,9 +356,19 @@ class BingoBaselineRunner(ModelRunner):
         try:
             best_agraph = island.get_best_individual()
             best_fitness = best_agraph.fitness
-            best_sympy_expr = extract_sympy(best_agraph)
-            y_pred_train = best_agraph.evaluate_equation_at(x_train).flatten()
-            y_pred_test = best_agraph.evaluate_equation_at(x_test).flatten()
+            best_sympy_expr = _with_timeout(lambda: extract_sympy(best_agraph))
+            pred_train = _with_timeout(
+                lambda: best_agraph.evaluate_equation_at(x_train).flatten(),
+                60,
+            )
+            pred_test = _with_timeout(
+                lambda: best_agraph.evaluate_equation_at(x_test).flatten(),
+                60,
+            )
+            if pred_train is not None:
+                y_pred_train = pred_train
+            if pred_test is not None:
+                y_pred_test = pred_test
         except Exception:  # noqa: BLE001
             log.debug("Failed to extract Bingo results", exc_info=True)
 

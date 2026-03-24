@@ -232,11 +232,23 @@ class IsalSRBingoRunner(ModelRunner):
         n_gens = island.generational_age
 
         try:
+            from experiments.models.bingo.runner import _with_timeout
+
             best_agraph = island.get_best_individual()
             best_fitness = best_agraph.fitness
-            best_sympy_expr = extract_sympy(best_agraph)
-            y_pred_train = best_agraph.evaluate_equation_at(x_train).flatten()
-            y_pred_test = best_agraph.evaluate_equation_at(x_test).flatten()
+            best_sympy_expr = _with_timeout(lambda: extract_sympy(best_agraph))
+            pred_train = _with_timeout(
+                lambda: best_agraph.evaluate_equation_at(x_train).flatten(),
+                60,
+            )
+            pred_test = _with_timeout(
+                lambda: best_agraph.evaluate_equation_at(x_test).flatten(),
+                60,
+            )
+            if pred_train is not None:
+                y_pred_train = pred_train
+            if pred_test is not None:
+                y_pred_test = pred_test
         except Exception:  # noqa: BLE001
             log.debug("Failed to extract Bingo IsalSR results", exc_info=True)
 
