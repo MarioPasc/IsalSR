@@ -110,9 +110,9 @@ class _CanonicalDeduplicator:
         t0_canon = time.perf_counter()
         try:
             if self.use_pruned:
-                from isalsr.core.canonical import pruned_canonical_string
+                from isalsr.core.canonical import fast_canonical_string
 
-                canonical = pruned_canonical_string(labeled_dag, timeout=self.timeout)
+                canonical = fast_canonical_string(labeled_dag, timeout=self.timeout)
             else:
                 from isalsr.core.canonical import canonical_string
 

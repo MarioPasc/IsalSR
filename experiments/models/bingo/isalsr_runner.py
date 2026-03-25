@@ -151,9 +151,9 @@ class IsalSREvaluation(Evaluation):
                     t0_canon = time.perf_counter()
                     try:
                         if self.dedup.use_pruned:
-                            from isalsr.core.canonical import pruned_canonical_string
+                            from isalsr.core.canonical import fast_canonical_string
 
-                            canonical = pruned_canonical_string(
+                            canonical = fast_canonical_string(
                                 dag,
                                 timeout=self.dedup.timeout,
                             )

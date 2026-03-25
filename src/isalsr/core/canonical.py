@@ -156,6 +156,38 @@ def compute_structural_tuples(
     return [_compute_node_tuple(dag, v) for v in range(n)]
 
 
+def fast_canonical_string(dag: LabeledDAG, *, timeout: float | None = None) -> str:
+    """Greedy-invariant canonical string from x_0.
+
+    At each V/v decision, candidates are sorted by an isomorphism-invariant
+    key ``(label_char ascending, 6-tuple descending)``. If the best candidate
+    is unique, it is taken greedily (no backtracking). Ties are resolved by
+    backtracking over tied candidates only (lexmin among tied).
+
+    This is a **complete labeled-DAG invariant**: two DAGs produce the same
+    ``fast_canonical_string`` if and only if they are isomorphic under the
+    SR isomorphism definition (variables fixed, internal nodes permutable).
+
+    NOT necessarily the shortest string (unlike ``canonical_string``), but
+    near-O(k²) for most practical DAGs. O(t^d × k²) only when automorphisms
+    cause ties at d recursion levels with t tied candidates each.
+
+    Args:
+        dag: The labeled DAG to canonicalize.
+        timeout: Maximum wall-clock seconds. Raises CanonicalTimeoutError if exceeded.
+
+    Returns:
+        The fast canonical string (deterministic, isomorphism-invariant).
+    """
+    if dag.node_count == 0:
+        return ""
+    num_vars = len(dag.var_nodes())
+    if dag.node_count == num_vars and dag.edge_count == 0:
+        return ""
+    normalized = dag.normalize_const_creation() if dag._has_const_nodes() else dag
+    return _fast_canonical_d2s(normalized, timeout=timeout)
+
+
 def dag_distance(d1: LabeledDAG, d2: LabeledDAG) -> int:
     """Approximate labeled-DAG edit distance via Levenshtein on canonical strings.
 
@@ -583,4 +615,291 @@ def _step(
 
     raise RuntimeError(
         f"Canonical D2S: no valid operation found. Remaining: {nleft} nodes, {eleft} edges."
+    )
+
+
+# ======================================================================
+# Internal: fast greedy-invariant canonical D2S
+# ======================================================================
+
+
+def _invariant_candidate_key(
+    node: int,
+    ig: LabeledDAG,
+    tuples: list[tuple[int, int, int, int, int, int]],
+) -> tuple[str, tuple[int, ...]]:
+    """Isomorphism-invariant sort key for a V/v candidate.
+
+    Primary: label_char ascending (lex-smallest V instruction first).
+    Secondary: 6-tuple descending (most connected node first, via negation).
+
+    Both components are preserved under any valid labeled-DAG isomorphism.
+    """
+    label_char = NODE_TYPE_TO_LABEL[ig.node_label_unchecked(node)]
+    neg_tuple = tuple(-x for x in tuples[node])
+    return (label_char, neg_tuple)
+
+
+def _fast_canonical_d2s(input_dag: LabeledDAG, *, timeout: float | None) -> str:
+    """Find the greedy-invariant canonical D2S string from x_0.
+
+    Same setup as ``_canonical_d2s`` but uses ``_fast_step`` which makes
+    greedy choices with invariant tie-breaking instead of exhaustive search.
+    """
+    n = input_dag.node_count
+    og = LabeledDAG(n)
+    cdll = CircularDoublyLinkedList(n)
+
+    # Always compute tuples (needed for invariant ordering).
+    tuples = compute_structural_tuples(input_dag)
+
+    deadline: float | None = None
+    if timeout is not None:
+        deadline = time.monotonic() + timeout
+
+    # Initialize: map all m VAR nodes, insert into CDLL.
+    i2o: dict[int, int] = {}
+    o2i: dict[int, int] = {}
+    var_nodes = sorted(
+        input_dag.var_nodes(),
+        key=lambda v: input_dag.node_data(v).get("var_index", v),
+    )
+
+    prev_cdll: int = -1
+    first_cdll: int = -1
+    for inp_node in var_nodes:
+        out_node = og.add_node(
+            NodeType.VAR,
+            var_index=int(input_dag.node_data(inp_node).get("var_index", 0)),
+        )
+        i2o[inp_node] = out_node
+        o2i[out_node] = inp_node
+        cdll_node = cdll.insert_after(prev_cdll, out_node)
+        if first_cdll == -1:
+            first_cdll = cdll_node
+        prev_cdll = cdll_node
+
+    num_vars = len(var_nodes)
+    nleft = n - num_vars
+    eleft = input_dag.edge_count
+
+    return _fast_step(
+        input_dag,
+        og,
+        cdll,
+        first_cdll,
+        first_cdll,
+        i2o,
+        o2i,
+        nleft,
+        eleft,
+        "",
+        tuples,
+        deadline,
+    )
+
+
+def _fast_step(
+    ig: LabeledDAG,
+    og: LabeledDAG,
+    cdll: CircularDoublyLinkedList,
+    pri: int,
+    sec: int,
+    i2o: dict[int, int],
+    o2i: dict[int, int],
+    nleft: int,
+    eleft: int,
+    prefix: str,
+    tuples: list[tuple[int, int, int, int, int, int]],
+    deadline: float | None,
+) -> str:
+    """One step of the greedy-invariant canonical D2S.
+
+    Same structure as ``_step`` but at V/v branch points:
+    1. Sort candidates by invariant key (label_char asc, 6-tuple desc).
+    2. Take ONLY the best-key group.
+    3. If unique → greedy (no backtracking).
+    4. If tied → backtrack over tied candidates only, take lexmin.
+
+    C/c edges remain deterministic (no branching).
+    Movement pairs iterate in cost order with early return on V/v (unchanged).
+    """
+    if nleft <= 0 and eleft <= 0:
+        return prefix
+
+    if deadline is not None and time.monotonic() > deadline:
+        raise CanonicalTimeoutError("Fast canonical string computation exceeded time budget")
+
+    pairs = generate_pairs_sorted_by_sum(og.node_count)
+
+    for a, b in pairs:
+        # ---- tentative primary position ----
+        tp = _walk(cdll, pri, a)
+        tp_out = cdll.get_value(tp)
+        tp_in = o2i[tp_out]
+
+        # -- V: primary has uninserted outgoing neighbor --
+        if nleft > 0:
+            cands = [n for n in ig.out_neighbors_raw(tp_in) if n not in i2o]
+            cands = [
+                c
+                for c in cands
+                if ig.node_label_unchecked(c) not in BINARY_OPS
+                or not ig.ordered_inputs(c)
+                or ig.ordered_inputs(c)[0] == tp_in
+            ]
+            if cands:
+                # Sort by invariant key, group by best key.
+                cands.sort(key=lambda c: _invariant_candidate_key(c, ig, tuples))
+                best_key = _invariant_candidate_key(cands[0], ig, tuples)
+                tied = [c for c in cands if _invariant_candidate_key(c, ig, tuples) == best_key]
+
+                mov = _primary_moves(a)
+                best: str | None = None
+                for c in tied:
+                    label = ig.node_label_unchecked(c)
+                    label_char = NODE_TYPE_TO_LABEL[label]
+                    data = ig.node_data_unchecked(c)
+
+                    new_out = og.add_node(
+                        label,
+                        var_index=int(data["var_index"]) if "var_index" in data else None,
+                        const_value=float(data["const_value"]) if "const_value" in data else None,
+                    )
+                    i2o[c] = new_out
+                    o2i[new_out] = c
+                    og.add_edge_unchecked(tp_out, new_out)
+                    new_cdll = cdll.insert_after(tp, new_out)
+
+                    r = _fast_step(
+                        ig,
+                        og,
+                        cdll,
+                        tp,
+                        sec,
+                        i2o,
+                        o2i,
+                        nleft - 1,
+                        eleft - 1,
+                        prefix + mov + "V" + label_char,
+                        tuples,
+                        deadline,
+                    )
+                    if best is None or (len(r), r) < (len(best), best):
+                        best = r
+
+                    # Backward
+                    cdll.remove(new_cdll)
+                    og.remove_edge(tp_out, new_out)
+                    og.undo_node()
+                    del i2o[c]
+                    del o2i[new_out]
+
+                return best  # type: ignore[return-value]
+
+        # ---- tentative secondary position ----
+        ts = _walk(cdll, sec, b)
+        ts_out = cdll.get_value(ts)
+        ts_in = o2i[ts_out]
+
+        # -- v: secondary has uninserted outgoing neighbor --
+        if nleft > 0:
+            cands = [n for n in ig.out_neighbors_raw(ts_in) if n not in i2o]
+            cands = [
+                c
+                for c in cands
+                if ig.node_label_unchecked(c) not in BINARY_OPS
+                or not ig.ordered_inputs(c)
+                or ig.ordered_inputs(c)[0] == ts_in
+            ]
+            if cands:
+                cands.sort(key=lambda c: _invariant_candidate_key(c, ig, tuples))
+                best_key = _invariant_candidate_key(cands[0], ig, tuples)
+                tied = [c for c in cands if _invariant_candidate_key(c, ig, tuples) == best_key]
+
+                mov = _secondary_moves(b)
+                best = None
+                for c in tied:
+                    label = ig.node_label_unchecked(c)
+                    label_char = NODE_TYPE_TO_LABEL[label]
+                    data = ig.node_data_unchecked(c)
+
+                    new_out = og.add_node(
+                        label,
+                        var_index=int(data["var_index"]) if "var_index" in data else None,
+                        const_value=float(data["const_value"]) if "const_value" in data else None,
+                    )
+                    i2o[c] = new_out
+                    o2i[new_out] = c
+                    og.add_edge_unchecked(ts_out, new_out)
+                    new_cdll = cdll.insert_after(ts, new_out)
+
+                    r = _fast_step(
+                        ig,
+                        og,
+                        cdll,
+                        pri,
+                        ts,
+                        i2o,
+                        o2i,
+                        nleft - 1,
+                        eleft - 1,
+                        prefix + mov + "v" + label_char,
+                        tuples,
+                        deadline,
+                    )
+                    if best is None or (len(r), r) < (len(best), best):
+                        best = r
+
+                    # Backward
+                    cdll.remove(new_cdll)
+                    og.remove_edge(ts_out, new_out)
+                    og.undo_node()
+                    del i2o[c]
+                    del o2i[new_out]
+
+                return best  # type: ignore[return-value]
+
+        # -- C: edge primary -> secondary --
+        if ig.has_edge_unchecked(tp_in, ts_in) and not og.has_edge_unchecked(tp_out, ts_out):
+            og.add_edge(tp_out, ts_out)
+            r = _fast_step(
+                ig,
+                og,
+                cdll,
+                tp,
+                ts,
+                i2o,
+                o2i,
+                nleft,
+                eleft - 1,
+                prefix + _primary_moves(a) + _secondary_moves(b) + "C",
+                tuples,
+                deadline,
+            )
+            og.remove_edge(tp_out, ts_out)
+            return r
+
+        # -- c: edge secondary -> primary --
+        if ig.has_edge_unchecked(ts_in, tp_in) and not og.has_edge_unchecked(ts_out, tp_out):
+            og.add_edge(ts_out, tp_out)
+            r = _fast_step(
+                ig,
+                og,
+                cdll,
+                tp,
+                ts,
+                i2o,
+                o2i,
+                nleft,
+                eleft - 1,
+                prefix + _primary_moves(a) + _secondary_moves(b) + "c",
+                tuples,
+                deadline,
+            )
+            og.remove_edge(ts_out, tp_out)
+            return r
+
+    raise RuntimeError(
+        f"Fast canonical D2S: no valid operation found. Remaining: {nleft} nodes, {eleft} edges."
     )
