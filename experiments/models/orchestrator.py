@@ -190,12 +190,18 @@ def create_translator(method, y_train, y_test, gt_expr, gt_vars):
         raise ValueError(f"Unknown method for translator: {method}")
 
 
-def _resolve_atlas(atlas_dir: str | None, num_variables: int):
-    """Find and load the atlas for a given num_variables.
+def _resolve_atlas(
+    atlas_dir: str | None,
+    benchmark_name: str,
+    num_variables: int,
+):
+    """Find and load the atlas for a given (benchmark, num_variables).
 
-    Scans *atlas_dir* subdirectories for ``cache_merged.h5`` files whose
-    HDF5 root attribute ``num_variables`` matches. Returns ``None`` (with
-    a logged warning) if no match is found or *atlas_dir* is ``None``.
+    Looks for subdirectories matching ``generate_cache_{benchmark}_{n}var``
+    containing a ``cache_merged.h5`` file. Falls back to matching by
+    ``num_variables`` alone if no benchmark-specific dir exists.
+
+    Returns ``None`` (with a logged warning) if no match is found.
     """
     if atlas_dir is None:
         return None
@@ -207,7 +213,16 @@ def _resolve_atlas(atlas_dir: str | None, num_variables: int):
 
     from isalsr.precomputed.atlas_lookup import AtlasLookup  # noqa: PLC0415
 
-    # Scan subdirectories for cache_merged.h5
+    # Try exact match: generate_cache_{benchmark}_{n}var/cache_merged.h5
+    exact = atlas_path / f"generate_cache_{benchmark_name}_{num_variables}var"
+    merged = exact / "cache_merged.h5"
+    if merged.exists():
+        try:
+            return AtlasLookup.from_hdf5(merged)
+        except Exception:  # noqa: BLE001
+            log.warning("Failed to load atlas %s", merged, exc_info=True)
+
+    # Fallback: scan all subdirs, match by num_variables
     for subdir in sorted(atlas_path.iterdir()):
         merged = subdir / "cache_merged.h5" if subdir.is_dir() else None
         if merged is None or not merged.exists():
@@ -219,17 +234,9 @@ def _resolve_atlas(atlas_dir: str | None, num_variables: int):
         except Exception:  # noqa: BLE001
             log.warning("Failed to load atlas %s", merged, exc_info=True)
 
-    # Also check atlas_dir itself for .h5 files (flat layout)
-    for h5_file in sorted(atlas_path.glob("*.h5")):
-        try:
-            candidate = AtlasLookup.from_hdf5(h5_file)
-            if candidate.num_variables == num_variables:
-                return candidate
-        except Exception:  # noqa: BLE001
-            log.warning("Failed to load atlas %s", h5_file, exc_info=True)
-
     log.warning(
-        "No atlas found for num_variables=%d in %s",
+        "No atlas found for %s/%dvar in %s",
+        benchmark_name,
         num_variables,
         atlas_dir,
     )
@@ -271,18 +278,19 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
 
         all_paired_stats = []
 
-        # Resolve atlas once per (benchmark, num_variables)
+        # Resolve atlas once per (benchmark_name, num_variables)
         atlas_dir = getattr(args, "atlas_dir", None)
-        _atlas_cache: dict[int, object] = {}
+        _atlas_cache: dict[tuple[str, int], object] = {}
 
         for bench in benchmarks:
             problem_name = bench["name"]
             log.info("=== %s / %s ===", bench_name, problem_name)
 
             nv = bench["num_variables"]
-            if nv not in _atlas_cache:
-                _atlas_cache[nv] = _resolve_atlas(atlas_dir, nv)
-            atlas = _atlas_cache[nv]
+            cache_key = (bench_name, nv)
+            if cache_key not in _atlas_cache:
+                _atlas_cache[cache_key] = _resolve_atlas(atlas_dir, bench_name, nv)
+            atlas = _atlas_cache[cache_key]
 
             paths = ensure_output_structure(output_base, method, bench_name, problem_name)
 

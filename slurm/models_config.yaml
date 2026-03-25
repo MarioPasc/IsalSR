@@ -134,12 +134,12 @@ experiments:
   # Baselines are unchanged — reuse existing baseline results.
 
   bingo_nguyen_isalsr_atlas:
-    enabled: false
+    enabled: true
     method: bingo
     benchmark: nguyen
     variant: isalsr
     config: experiments/configs/bingo_nguyen.yaml
-    atlas_dir: "{results_dir}/precomputed_cache"
+    atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
     n_seeds: 30
     n_problems: 12
     time_limit: "01:00:00"
@@ -147,12 +147,12 @@ experiments:
     mem_gb: 12
 
   bingo_feynman_isalsr_atlas:
-    enabled: false
+    enabled: true
     method: bingo
     benchmark: feynman
     variant: isalsr
     config: experiments/configs/bingo_feynman.yaml
-    atlas_dir: "{results_dir}/precomputed_cache"
+    atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
     n_seeds: 30
     n_problems: 10
     time_limit: "01:00:00"
@@ -160,12 +160,12 @@ experiments:
     mem_gb: 12
 
   udfs_nguyen_isalsr_atlas:
-    enabled: false
+    enabled: true
     method: udfs
     benchmark: nguyen
     variant: isalsr
     config: experiments/configs/udfs_nguyen.yaml
-    atlas_dir: "{results_dir}/precomputed_cache"
+    atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
     n_seeds: 30
     n_problems: 12
     time_limit: "01:30:00"
@@ -173,12 +173,12 @@ experiments:
     mem_gb: 8
 
   udfs_feynman_isalsr_atlas:
-    enabled: false
+    enabled: true
     method: udfs
     benchmark: feynman
     variant: isalsr
     config: experiments/configs/udfs_feynman.yaml
-    atlas_dir: "{results_dir}/precomputed_cache"
+    atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
     n_seeds: 30
     n_problems: 10
     time_limit: "01:30:00"

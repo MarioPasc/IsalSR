@@ -38,6 +38,7 @@ class AtlasLookup:
         "_n_entries",
         "_n_unique_canon",
         "_num_variables",
+        "_operator_set_json",
         "_load_time_s",
     )
 
@@ -46,6 +47,7 @@ class AtlasLookup:
         self._n_entries: int = 0
         self._n_unique_canon: int = 0
         self._num_variables: int = 0
+        self._operator_set_json: str = ""
         self._load_time_s: float = 0.0
 
     # ------------------------------------------------------------------
@@ -80,6 +82,7 @@ class AtlasLookup:
 
         with h5py.File(path, "r") as f:
             obj._num_variables = int(f.attrs.get("num_variables", 0))
+            obj._operator_set_json = str(f.attrs.get("operator_set", ""))
             gs_ds = f["strings"]["greedy_single"]
             pr_ds = f["strings"]["pruned"]
             n = len(gs_ds)
@@ -173,6 +176,11 @@ class AtlasLookup:
     def num_variables(self) -> int:
         """Number of input variables the atlas was generated for."""
         return self._num_variables
+
+    @property
+    def operator_set_json(self) -> str:
+        """JSON string of sorted operator labels (from HDF5 root attrs)."""
+        return self._operator_set_json
 
     @property
     def load_time_s(self) -> float:
