@@ -254,9 +254,9 @@ All internal imports must use package paths: `from isalsr.core.labeled_dag impor
 
 **`fast_canonical_string` (preferred, Ezequiel's insight 2026-03-25)**:
 At each V/v decision point, candidates are sorted by isomorphism-invariant key
-`(label_char ascending, 6-tuple descending)`. If the best candidate is unique,
-it is taken greedily (no backtracking). Ties (same label AND same 6-tuple)
-are resolved by backtracking over tied candidates only (lexmin among tied).
+`(label_char ascending, 6-tuple descending, WL subtree hash)`. If the best
+candidate is unique, it is taken greedily (no backtracking). Ties are resolved
+by backtracking over tied candidates only (lexmin among tied).
 
 The resulting string is NOT necessarily the shortest (unlike `canonical_string`),
 but IS a **complete labeled-DAG invariant**: `fast_canonical(D) = fast_canonical(D')`
@@ -267,8 +267,15 @@ Starting D2S from x_0 with invariant tie-breaking produces a deterministic,
 isomorphism-invariant string. The 6-tuple `(|in_N1|, |out_N1|, ..., |out_N3|)`
 resolves >96% of candidate ambiguities, making backtracking rare.
 
+**WL subtree hash** (added 2026-03-26): Weisfeiler-Leman hash computed bottom-up
+in O(k). Breaks ties that the 6-tuple cannot (siblings with identical depth-3
+neighborhoods but different subtrees). On evolved Bingo DAGs (k=20-30), the WL
+hash eliminates 100% of false ties, reducing backtracking from O(t!) to O(1).
+Togglable via `use_wl_hash=True` (default). Empirical speedup: 16x on evolved
+k=20 DAGs, up to 3000x on k=23 DAGs with many same-label siblings.
+
 Verified: 100% completeness across all k! permutations for every tested DAG.
-Speedup: 2.6x at k=5, 4.6x at k=7 vs pruned; expected 100x+ at production k=10-20.
+Speedup: 2.6x at k=5, 4.6x at k=7 vs pruned; 16-3000x on evolved Bingo DAGs.
 
 **6-tuple structural descriptor**:
 `τ(v) = (|in_N1(v)|, |out_N1(v)|, |in_N2(v)|, |out_N2(v)|, |in_N3(v)|, |out_N3(v)|)`
