@@ -11,6 +11,7 @@ search space for symbolic regression by factorial factors.
 
 - Ezequiel Lopez-Rubio (University of Malaga)
 - Mario Pascual Gonzalez (University of Malaga)
+- Karl Khader Thurnhofer-Hemsi (University of Malaga)
 
 ## Installation
 
