@@ -1,6 +1,6 @@
 # UDFS experiment on Feynman physics benchmarks
-# Reference: isalsr_experimental_design.md
-# Feynman data: Liu2025 Table 2 (200 samples, 80/20 train/test split)
+# Reference: isalsr_experimental_design.md, data_benchmarking_design.md
+# Feynman data: SRBench uses up to 10K; we use 1000/250 (conservative step)
 experiment:
   name: udfs_feynman
   method: udfs
@@ -9,8 +9,8 @@ experiment:
 benchmarks:
   feynman:
     problems: all
-    train_size: 160
-    test_size: 40
+    train_size: 1000      # 6.25x from Liu2025 (160); toward SRBench std (10K)
+    test_size: 250        # 20% holdout from 1250 total
 
 udfs:
   # Feynman problems have up to 3 variables; more calc nodes needed

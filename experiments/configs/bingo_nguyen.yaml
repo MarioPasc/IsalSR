@@ -1,5 +1,5 @@
 # Bingo experiment on Nguyen benchmarks
-# Reference: isalsr_experimental_design.md
+# Reference: isalsr_experimental_design.md, data_benchmarking_design.md
 experiment:
   name: bingo_nguyen
   method: bingo
@@ -8,8 +8,8 @@ experiment:
 benchmarks:
   nguyen:
     problems: all
-    train_size: 20
-    test_size: 100
+    train_size: 240       # 12x from Uy2011 (20); aligned with DSR (Petersen 2021: 256)
+    test_size: 1000       # robust test evaluation
 
 bingo:
   population_size: 500

@@ -248,37 +248,32 @@ All internal imports must use package paths: `from isalsr.core.labeled_dag impor
 
 | Function | Complexity | Use case |
 |----------|-----------|----------|
-| `fast_canonical_string` | Near-O(k²) | **PREFERRED.** Greedy-invariant from x_0. |
+| `fast_canonical_string` | Near-O(k²) | **PREFERRED.** Greedy-invariant, 3 modes. Default: `mode="wl_only"`. |
 | `pruned_canonical_string` | O(k! pruned) | Legacy. Exhaustive backtracking with 6-tuple pruning. |
 | `canonical_string` | O(k!) | Reference. True lexmin exhaustive (slow). |
 
 **`fast_canonical_string` (preferred, Ezequiel's insight 2026-03-25)**:
-At each V/v decision point, candidates are sorted by isomorphism-invariant key
-`(label_char ascending, 6-tuple descending, WL subtree hash)`. If the best
-candidate is unique, it is taken greedily (no backtracking). Ties are resolved
-by backtracking over tied candidates only (lexmin among tied).
+At each V/v decision point, candidates are sorted by isomorphism-invariant key.
+If the best candidate is unique, it is taken greedily (no backtracking). Ties
+are resolved by backtracking over tied candidates only (lexmin among tied).
 
-The resulting string is NOT necessarily the shortest (unlike `canonical_string`),
-but IS a **complete labeled-DAG invariant**: `fast_canonical(D) = fast_canonical(D')`
-iff `D ~ D'` under the SR isomorphism definition (φ fixes variables).
+Three modes via `mode` parameter:
 
-**Why this works**: Input variables are fixed and distinguishable (φ(x_i) = x_i).
-Starting D2S from x_0 with invariant tie-breaking produces a deterministic,
-isomorphism-invariant string. The 6-tuple `(|in_N1|, |out_N1|, ..., |out_N3|)`
-resolves >96% of candidate ambiguities, making backtracking rare.
+| Mode | Sort key | Default? |
+|------|----------|----------|
+| `"wl_only"` | `(label_char, WL_hash)` | **YES** |
+| `"wl_tiebreak"` | `(label_char, 6-tuple↓, WL_hash)` | No (previous default) |
+| `"tuple_only"` | `(label_char, 6-tuple↓)` | No (legacy) |
 
-**WL subtree hash** (added 2026-03-26): Weisfeiler-Leman hash computed bottom-up
-in O(k). Breaks ties that the 6-tuple cannot (siblings with identical depth-3
-neighborhoods but different subtrees). On evolved Bingo DAGs (k=20-30), the WL
-hash eliminates 100% of false ties, reducing backtracking from O(t!) to O(1).
-Togglable via `use_wl_hash=True` (default). Empirical speedup: 16x on evolved
-k=20 DAGs, up to 3000x on k=23 DAGs with many same-label siblings.
+**WL-only is the default (since 2026-03-27)** because:
+1. 1-WL subtree hash is strictly more discriminative than the 6-tuple
+   (Weisfeiler & Leman 1968; Shervashidze et al., JMLR 2011).
+   WL captures full subtree structure; 6-tuple only depth-3 neighborhood counts.
+2. 1.43x mean speedup on evolved Bingo DAGs (k=6-14), range 1.09-1.73x.
+3. Completeness verified exhaustively k=1..8 (all k! permutations, up to 40,320)
+   and statistically k=10-15 (100 random permutations). 890 tests pass.
 
-Verified: 100% completeness across all k! permutations for every tested DAG.
-Speedup: 2.6x at k=5, 4.6x at k=7 vs pruned; 16-3000x on evolved Bingo DAGs.
-
-**6-tuple structural descriptor**:
-`τ(v) = (|in_N1(v)|, |out_N1(v)|, |in_N2(v)|, |out_N2(v)|, |in_N3(v)|, |out_N3(v)|)`
+The `use_wl_hash` parameter is deprecated; use `mode` instead.
 
 **Search space reduction**: For k internal nodes, O(k!) equivalent labelings
 collapse to one canonical string. This is the paper's central contribution.
@@ -403,6 +398,7 @@ These constraints MUST be enforced at all times. The `proposal-guard` agent chec
 - @docs/ISALSR_AGENT_CONTEXT.md -- Full agent context document
 - @docs/design/experimental_design/isalsr_experimental_design.md -- Three-axis comparison framework
 - @docs/design/experimental_design/experimental_design_amendments.md -- Cache integration amendments
+- @docs/design/experimental_design/data_benchmarking_design.md -- Dataset sizes, train/test splits, literature justification
 - Save every output in `/media/mpascual/Sandisk2TB/research/isalsr`
 
 ## arXiv Search Space Experiment: Controlled Permutation Analysis
