@@ -436,3 +436,42 @@ DAG has |Aut(D)|=2, giving ratio=0.5). Invariant success rate = 100% across all 
 | Bingo  | **41.6%**      | **1.71**         | Stochastic GP: mutation/crossover rediscovers same structures |
 
 Full report: `/media/mpascual/Sandisk2TB/research/isalsr/results/experimental_framework_report_2026-03-18.md`
+
+## Production Results (fast_canonical + WL, Picasso, 2026-03-26)
+
+**2,640 SLURM tasks: 22 problems × 30 seeds × 2 methods × 2 variants.**
+Hardware: Intel Xeon Gold 6230R / AMD EPYC 7H12 (Picasso HPC).
+
+### Three-Axis Summary
+
+| Axis | UDFS | Bingo | Status |
+|------|------|-------|--------|
+| Search Space Reduction | RF=1.56, 34% redundancy | RF=1.28, 22% redundancy | **CHECKED** (100% significant) |
+| Regression Quality | Improved (10/22 R² train sig.) | Preserved (0 sig. diff) | **CHECKED** |
+| Computational Overhead | **0.6%** (negligible) | **51.0%** (significant) | UDFS CHECKED, Bingo OPEN |
+
+### Computational Overhead (Production)
+
+| Metric | Bingo (659 runs) | UDFS (660 runs) |
+|--------|------------------|-----------------|
+| Per-DAG canon cost | 0.46 ms (mean) | 0.30 ms (mean) |
+| Overhead % | 51.0% (mean) | 0.6% (mean) |
+| Fitness eval cost | ~0.14 ms | ~19.4 ms |
+| Canon/eval ratio | ~3.3:1 | ~1:64 |
+
+Bingo overhead by k-range: k<5: 44%, k=5-14: 49%, k=15-31: 56%.
+
+### Analysis Pipeline
+
+Run: `python -m experiments.models.analyze --results-dir <path> --methods udfs,bingo --benchmarks nguyen,feynman`
+
+Outputs in `analysis/`:
+- `benchmark_summary_{method}_{benchmark}.csv` — per-metric aggregates
+- `cross_method_{benchmark}.json` — Friedman/Nemenyi across methods
+- `reduction_comparison_{benchmark}.json` — RF comparison
+- `computational_overhead_{method}_{benchmark}.json` — overhead analysis by problem and k-range
+- `three_axis_summary_{method}_{benchmark}.json` — executive summary per (method, benchmark)
+- `three_axis_global.json` — grand summary for LaTeX tables
+- `global_summary.json` — legacy combined output
+
+Results dir: `/media/mpascual/Sandisk2TB/research/isalsr/results/model_validation/`

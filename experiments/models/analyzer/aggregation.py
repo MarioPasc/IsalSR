@@ -87,6 +87,7 @@ METRIC_EXTRACTORS: dict[str, Callable[[RunLog], float]] = {
     "unique_canonical_dags": lambda rl: float(rl.search_space.unique_canonical_dags),
     "empirical_reduction_factor": lambda rl: rl.search_space.empirical_reduction_factor,
     "redundancy_rate": lambda rl: rl.search_space.redundancy_rate,
+    "solution_recovered": lambda rl: float(rl.regression.solution_recovered),
 }
 
 
@@ -174,9 +175,26 @@ def compute_paired_stats(
     Returns:
         PairedStats with all metrics.
     """
-    assert len(baseline_logs) == len(isalsr_logs), (
-        f"Mismatched seed counts: {len(baseline_logs)} vs {len(isalsr_logs)}"
-    )
+    # Match seeds by number (robust to 1-3 missing seeds per variant)
+    bl_by_seed = {rl.metadata.seed: rl for rl in baseline_logs}
+    is_by_seed = {rl.metadata.seed: rl for rl in isalsr_logs}
+    common_seeds = sorted(set(bl_by_seed) & set(is_by_seed))
+
+    n_bl_only = len(bl_by_seed) - len(common_seeds)
+    n_is_only = len(is_by_seed) - len(common_seeds)
+    if n_bl_only > 0 or n_is_only > 0:
+        log.warning(
+            "  Dropped %d baseline + %d isalsr unmatched seeds (keeping %d paired)",
+            n_bl_only,
+            n_is_only,
+            len(common_seeds),
+        )
+
+    if len(common_seeds) < 3:
+        raise ValueError(f"Too few paired seeds ({len(common_seeds)}) for statistical testing")
+
+    baseline_logs = [bl_by_seed[s] for s in common_seeds]
+    isalsr_logs = [is_by_seed[s] for s in common_seeds]
 
     rl0 = baseline_logs[0]
     paired = PairedStats(
@@ -330,6 +348,16 @@ def benchmark_summary(
     reduction_factors = []
     sol_baseline = 0.0
     sol_isalsr = 0.0
+
+    # Compute solution rates from paired stats (solution_recovered metric)
+    sr_metrics = [
+        ps.metrics["solution_recovered"]
+        for ps in paired_stats_list
+        if "solution_recovered" in ps.metrics
+    ]
+    if sr_metrics:
+        sol_baseline = float(np.mean([m.baseline_mean for m in sr_metrics]))
+        sol_isalsr = float(np.mean([m.isalsr_mean for m in sr_metrics]))
 
     for ps in paired_stats_list:
         m = ps.metrics.get(metric_name)

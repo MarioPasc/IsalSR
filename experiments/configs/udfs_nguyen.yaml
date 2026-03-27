@@ -14,7 +14,7 @@ benchmarks:
 udfs:
   n_calc_nodes: 5
   max_orders: 200000
-  max_time: 3600
+  max_time: 43200
   processes: 1
   mode: hierarchical
   k: 2
@@ -25,7 +25,7 @@ udfs:
 
 isalsr:
   canonicalization_timeout: 60.0
-  use_pruned: true
+  use_fast_canonical: true
 
 output:
   base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

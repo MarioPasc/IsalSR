@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from isalsr.core.labeled_dag import LabeledDAG
+
 log = logging.getLogger(__name__)
 
 
@@ -127,7 +129,7 @@ class AtlasLookup:
     # Lookup
     # ------------------------------------------------------------------
 
-    def lookup_dag(self, dag: object) -> tuple[int | None, bool]:
+    def lookup_dag(self, dag: LabeledDAG) -> tuple[int | None, bool]:
         """Look up a DAG's canonical hash via greedy-single D2S from x_0.
 
         Computes ``GreedySingleD2S().encode(dag)`` (O(k²), ~0.01 ms),

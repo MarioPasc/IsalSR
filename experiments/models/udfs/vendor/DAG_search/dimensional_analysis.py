@@ -1,12 +1,14 @@
 from itertools import combinations
+
 import numpy as np
 import sympy
 
-class DA_Buckingham():
+
+class DA_Buckingham:
     ######################################################
     # Dimensional Analysis using Buckinghams Pi - Theorem
     ######################################################
-    def __init__(self): 
+    def __init__(self):
         pass
 
     def fit(self, D, X):
@@ -22,8 +24,8 @@ class DA_Buckingham():
 
         U = sympy.Matrix(M).nullspace()
         U = np.column_stack([np.array(u).astype(int) for u in U])
-            
-        
+
+
         # create new data
         X_new = []
         transl_dict = {}
@@ -38,7 +40,7 @@ class DA_Buckingham():
                 transl_dict[i] = transl_dict[i][:-1]
             X_new.append(xi)
         X_new = np.column_stack(X_new)
-            
+
         return X_new, transl_dict
 
     def translate(self, expr_red, transl_dict):
@@ -53,13 +55,13 @@ class DA_Buckingham():
         for i in range(len(transl_dict)):
             expr_str = expr_str.replace(f'v_{i}', f'({transl_dict[i]})')
         return sympy.sympify(expr_str)
-            
-class DA_Feynman():
+
+class DA_Feynman:
     ######################################################
     # Dimensional Analysis using Buckinghams Pi - Theorem
     # as performed by AIFeynman
     ######################################################
-    def __init__(self): 
+    def __init__(self):
         pass
 
     def get_p(self, M, b):
@@ -71,7 +73,7 @@ class DA_Feynman():
         rank = np.linalg.matrix_rank(M)
         d_cols = list(combinations(rand_drop_cols,M.shape[1]-rank))
         d_rows = list(combinations(rand_drop_rows, M.shape[0]-rank))
-        
+
         # find out which rows and columns to remove
         for i in d_cols:
             M1 = M.copy()
@@ -85,11 +87,11 @@ class DA_Feynman():
                     indices_sol = j
                     indices_powers = i
                     break
-        
+
         # remove and find solution in reduced problem
         solved_b = np.delete(b, indices_sol)
         params = np.linalg.solve(solved_M, solved_b)
-        
+
         # reconstruct solution for original problem
         sol = []
         for i in range(M.shape[1]):
@@ -98,7 +100,7 @@ class DA_Feynman():
             else:
                 sol = sol + [params[0]]
                 params = np.delete(params,0)
-        
+
         # this is the solution
         return np.array(sol)
 
@@ -122,14 +124,14 @@ class DA_Feynman():
             # get vector for dependent variable
             p = self.get_p(M, b)
             assert np.allclose(M@p.reshape(-1, 1) - b, 0)
-        
+
             # get vectors for independent variables
             U = self.get_U(M)
             assert len(U) > 0
             U = np.column_stack([np.array(u).astype(int) for u in U])
             assert np.allclose(M@U, 0)
-        
-        
+
+
             # create new data
             X_new = []
             transl_dict = {}
@@ -144,14 +146,14 @@ class DA_Feynman():
                     transl_dict[i] = transl_dict[i][:-1]
                 X_new.append(xi)
             X_new = np.column_stack(X_new)
-            
+
             y_new = y.copy()
             transl_dict['y'] = 'y*'
             for i in range(len(p)):
                 if p[i] != 0:
                     y_new *= X[:, i]**(-p[i])
                     transl_dict['y'] += f'(x_{i})**({-p[i]})*'
-            transl_dict['y'] = transl_dict['y'][:-1] 
+            transl_dict['y'] = transl_dict['y'][:-1]
         except AssertionError:
             return None
 

@@ -21,15 +21,15 @@ bingo:
   mutation_prob: 0.4
   metric: mse
   clo_alg: lm
-  generations: 10000000
+  generations: 100000000
   fitness_threshold: 1.0e-16
-  max_time: 1800
-  max_evals: 10000000
+  max_time: 43200
+  max_evals: 100000000
   snapshot_frequency: 10
 
 isalsr:
   canonicalization_timeout: 60.0
-  use_pruned: true
+  use_fast_canonical: true
 
 output:
   base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

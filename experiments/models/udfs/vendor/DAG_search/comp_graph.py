@@ -2,21 +2,19 @@
 The computational graph class
 '''
 
-import numpy as np
 import copy
 import warnings
-import sympy
-from sympy import simplify
-from tqdm import tqdm
-import networkx as nx
+
 import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import sympy
 import torch
-
-
 from DAG_search import config
+from sympy import simplify
 
 
-class CompGraph():
+class CompGraph:
 
     def __init__(self, m, n, k, node_dict = {}, expr = None):
         '''
@@ -24,7 +22,7 @@ class CompGraph():
         n... output dimension
         k... number of constants
         '''
-        
+
         self.inp_dim = m
         self.outp_dim = n
         self.n_consts = k
@@ -68,7 +66,7 @@ class CompGraph():
             node_depth = max([depth_dict[j] for j in children])
             if node_op != '=':
                 node_depth += 1
-                
+
             depth_dict[i] = node_depth
 
         return max([depth_dict[i] for i in self.outp_nodes])
@@ -117,22 +115,22 @@ class CompGraph():
             for j in self.node_dict[i][0]:
                 self.successors[j].append(i)
                 self.predecessors[i].append(j)
-        
+
         # set eval function
         self.set_eval_funcs()
-    
+
     def set_eval_funcs(self):
         k = self.inp_dim + self.n_consts
 
         res_dict = {i : '' for i in self.node_dict}
 
-        # inputs        
+        # inputs
         for i in range(self.inp_dim):
             res_dict[i] = f'X_full[:, :, {i}]'
 
         for i in range(self.n_consts):
             res_dict[i + self.inp_dim] = f'c_full[:, :, {i}]'
-            
+
         for i in self.eval_order[k:]:
             children, op = self.node_dict[i]
             node_op = config.NODE_STR[op]
@@ -146,7 +144,7 @@ class CompGraph():
                 assert len(children) == 1
                 node_result = node_op.replace('a', res_dict[children[0]])
             res_dict[i] = node_result
-            
+
         eval_strs = [res_dict[i] for i in self.outp_nodes]
         eval_strs_pt = [s.replace('np.', 'torch.') for s in eval_strs]
         self.eval_strs = eval_strs
@@ -221,7 +219,7 @@ class CompGraph():
         return self.max_subexp_depth(eval_order)/max_depth
 
     # Evaluation
-    
+
     def evaluate_pytorch(self, X, c):
         '''
         Here X and c need to be torch tensors
@@ -233,7 +231,7 @@ class CompGraph():
 
         grad_dict = {i : None for i in self.node_dict}
 
-        # inputs        
+        # inputs
         for i in range(self.inp_dim):
             grad_dict[i] = X[:, i]
 
@@ -267,7 +265,7 @@ class CompGraph():
         X_tensor = torch.tensor(X, requires_grad = True).double()
         c_tensor = (torch.ones((N, len(c))) * torch.as_tensor(c)).double()
         c_tensor.requires_grad = True
-        
+
         h_X = self.evaluate_pytorch(X_tensor, c)
 
         if h_X.requires_grad:
@@ -279,7 +277,7 @@ class CompGraph():
                     part_grad = np.zeros((h_X.shape[0], X.shape[1]))
                 else:
                     part_grad = part_grad.detach().numpy()
-                grad_X.append(part_grad)    
+                grad_X.append(part_grad)
             grad_X = np.stack(grad_X)
 
             grad_c = []
@@ -306,7 +304,7 @@ class CompGraph():
         assert len(self.node_dict) >= self.inp_dim + self.n_consts + self.outp_dim, 'Node dict not initialized'
         assert len(c.shape) <= 2, 'Constants must be either 1D (single) or 2D (multiple)'
 
-        
+
         # we assume that eval order is valid
 
         N = X.shape[0]
@@ -319,7 +317,7 @@ class CompGraph():
         #X_stacked = np.stack([X]*r)
         X_tensor = torch.tensor(X, requires_grad = True).double()
 
-        # inputs        
+        # inputs
         for i in range(self.inp_dim):
             res_dict[i] = X[:,i]
             grad_dict[i] = X_tensor[:,i]
@@ -352,7 +350,7 @@ class CompGraph():
 
         final_result = np.column_stack([res_dict[i] for i in self.outp_nodes])
 
-    
+
         if return_grad:
 
             h_X = torch.column_stack([grad_dict[i] for i in self.outp_nodes])
@@ -401,7 +399,7 @@ class CompGraph():
         X_stacked = np.stack([X]*r)
         X_tensor = torch.tensor(X_stacked, requires_grad = True).double()
 
-        # inputs        
+        # inputs
         for i in range(self.inp_dim):
             res_dict[i] = X_stacked[:, :, i]
             grad_dict[i] = X_tensor[:, :, i]
@@ -488,7 +486,7 @@ class CompGraph():
 
         res_dict = {i : None for i in self.node_dict}
 
-        # inputs        
+        # inputs
         for i in range(self.inp_dim):
             res_dict[i] = np.repeat(X[np.newaxis, :, i], r, axis=0) # r x N
 
@@ -515,7 +513,7 @@ class CompGraph():
             X_stacked = np.repeat(X[np.newaxis, :, :], r, axis=0)
             X_tensor = torch.tensor(X_stacked, requires_grad = True).double()
 
-            grad_dict = {i : None for i in self.node_dict}      
+            grad_dict = {i : None for i in self.node_dict}
 
             for i in range(self.inp_dim):
                 grad_dict[i] = X_tensor[:, :, i]
@@ -582,13 +580,13 @@ class CompGraph():
         N = X.shape[0]
         k = self.inp_dim + self.n_consts
 
-        
+
 
         if return_grad:
             X_stacked = np.repeat(X[np.newaxis, :, :], r, axis=0)
             X_tensor = torch.tensor(X_stacked, requires_grad = True).double()
 
-            grad_dict = {i : None for i in self.node_dict}      
+            grad_dict = {i : None for i in self.node_dict}
 
             for i in range(self.inp_dim):
                 grad_dict[i] = X_tensor[:, :, i]
@@ -631,7 +629,7 @@ class CompGraph():
         else:
             res_dict = {i : None for i in self.node_dict}
 
-            # inputs        
+            # inputs
             for i in range(self.inp_dim):
                 res_dict[i] = np.repeat(X[np.newaxis, :, i], r, axis=0) # r x N
 
@@ -680,7 +678,7 @@ class CompGraph():
 
         res_dict = {i : None for i in self.node_dict}
 
-        # inputs        
+        # inputs
         for i in range(self.inp_dim):
             res_dict[i] = np.repeat(X[np.newaxis, :, i], r, axis=0) # r x N
 
@@ -725,7 +723,7 @@ class CompGraph():
         N = X.shape[0]
         k = self.inp_dim + self.n_consts
 
-        
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             X_full = np.broadcast_to(X, (c.shape[0], X.shape[0], X.shape[1])) # r x N x m
@@ -734,14 +732,14 @@ class CompGraph():
             if return_grad:
                 X_full = torch.tensor(X_full, requires_grad = True).double()
                 c_full = torch.tensor(c_full)
-                
+
                 if self.outp_dim == 1:
                     # regression case
                     h_X = eval(self.eval_funcs_pt[0])[:, :, None]
                 else:
                     h_X = torch.stack([eval(self.eval_funcs_pt[i]) for i in range(self.outp_dim)], dim = -1)
 
-                
+
                 if h_X.requires_grad:
                     # shape: r x n x N x inps
                     h_X_grad = []
@@ -754,9 +752,9 @@ class CompGraph():
                     h_X_grad = np.zeros((h_X.shape[0], h_X.shape[2], h_X.shape[1], X.shape[1]))
 
                 final_result = h_X.detach().numpy()
-                
+
             else:
-                
+
                 if self.outp_dim == 1:
                     # regression case
                     #final_result = self.eval_funcs[0](X_full, c_full)[:, :, np.newaxis]
@@ -788,7 +786,7 @@ class CompGraph():
             c = [sympy.symbols(f'c_{i}', real = True) for i in range(self.n_consts)]
         if ret_nodes is None:
             ret_nodes = self.outp_nodes
-        
+
         if len(self.node_dict) < self.inp_dim + self.n_consts + self.outp_dim:
             return None
 
@@ -796,7 +794,7 @@ class CompGraph():
         k = self.inp_dim + self.n_consts
 
         res_dict = {i : None for i in self.node_dict}
-        # inputs        
+        # inputs
         for i in range(self.inp_dim):
             res_dict[i] = X[i]
 
@@ -840,14 +838,14 @@ def is_equal(cgraph1:CompGraph, cgraph2:CompGraph, consts1:np.ndarray = None, co
 
         dict1 = cgraph1.node_dict
         dict2 = cgraph2.node_dict
-        
-        
+
+
         if len(dict1) != len(dict2):
             return False
-        
+
         k1 = sorted(dict1.keys())
         k2 = sorted(dict2.keys())
-        
+
         for i1, i2 in zip(k1, k2):
             if i1 != i2:
                 return False
@@ -856,7 +854,7 @@ def is_equal(cgraph1:CompGraph, cgraph2:CompGraph, consts1:np.ndarray = None, co
                 l2, op2 = dict2[i2]
                 if (sorted(l1), op1) != (sorted(l2), op2):
                     return False
-                
+
         return True
     else:
         tmp1 = cgraph1.evaluate_symbolic(c = consts1)
@@ -874,21 +872,21 @@ def get_sympy_dag(expr, tree_dict = None):
     if idx < 0:
         # new node
         idx = len(tree_dict)
-    
+
         func = expr.func
         children = expr.args
-        
+
         if func is sympy.core.power.Pow and int(children[1]) != float(children[1]):
             func = sympy.exp
             children = [float(children[1])*sympy.log(children[0])]
-        
+
         if func is sympy.core.mul.Mul and children[0] == -1:
             func = 'neg'
             child_exp = children[1]
             for i in range(2, len(children)):
                 child_exp = child_exp * children[i]
-            children = [child_exp]     
-            
+            children = [child_exp]
+
         elif func is sympy.core.mul.Mul and (type(children[0]) is sympy.core.numbers.Integer):
             if children[0] < 0:
                 func = 'neg'
@@ -904,7 +902,7 @@ def get_sympy_dag(expr, tree_dict = None):
                     for i in range(2, len(children)):
                         child_exp = child_exp * children[i]
                     children = [child_exp]*k
-                
+
         if func is sympy.core.power.Pow and children[1] == -1:
             # inversion
             tree_dict[idx] = (expr, 'inv', [])
@@ -916,21 +914,21 @@ def get_sympy_dag(expr, tree_dict = None):
             n = abs(int(children[1]))
             tree_dict, c_idx = get_sympy_dag(children[0]**n, tree_dict)
             tree_dict[idx] = (expr, 'inv', [c_idx])
-            
+
         elif func is sympy.core.power.Pow and children[1] == 0.5:
             # sqrt
             tree_dict[idx] = (expr, 'inv', [])
             n = abs(int(children[1]))
             tree_dict, c_idx = get_sympy_dag(children[0]**n, tree_dict)
             tree_dict[idx] = (expr, 'inv', [c_idx])
-        
-        else:            
+
+        else:
             if func is sympy.core.power.Pow:
                 n = int(children[1])
                 func = sympy.core.mul.Mul
                 children = [children[0]]*n
-            
-            
+
+
             tree_dict[idx] = (expr, func, [])
             if len(children) == 1:
                 tree_dict, c_idx = get_sympy_dag(children[0], tree_dict)
@@ -944,23 +942,23 @@ def get_sympy_dag(expr, tree_dict = None):
                 for c in children:
                     tree_dict, c_idx = get_sympy_dag(c, tree_dict)
                     child_idxs.append(c_idx)
-                
+
                 tree_dict[idx + new_idxs] = (None, func, child_idxs[:2])
                 for i in range(len(child_idxs) - 2):
-                    j = idx + new_idxs - (i + 1) 
+                    j = idx + new_idxs - (i + 1)
                     tree_dict[j] = (None, func, [j + 1, child_idxs[2+i]])
                 _, _, tmp = tree_dict[idx]
                 tree_dict[idx] = (expr, func, tmp)
             else:
                 # leaf node
                 tree_dict[idx] = (expr, func, [])
-    
+
     return tree_dict, idx
 
 def expressions2dag(expr1, expr2):
     cgraph1 = sympy2dag(expr1)
     cgraph2 = sympy2dag(expr2)
-    
+
     node_dict1 = cgraph1.node_dict
     node_dict2 = cgraph2.node_dict
 
@@ -1017,8 +1015,8 @@ def expressions2dag(expr1, expr2):
 
 def sympy2dag(expr, m):
     sympy_dict, _ = get_sympy_dag(expr)
-    
-    
+
+
     const_counter = 0
     transl_dict = {
         sympy.core.add.Add : '+',
@@ -1063,7 +1061,7 @@ def sympy2dag(expr, m):
             new_idx = max(new_dict.keys())
             new_dict[new_idx + 1] = (f'x_{i}', [])
 
-    
+
     outp_idxs = [0]
     inp_idxs = [i for i in new_dict if new_dict[i][0].startswith('x_')]
     const_idxs = [i for i in new_dict if new_dict[i][0].startswith('c_')]
@@ -1075,7 +1073,7 @@ def sympy2dag(expr, m):
 
     taken_idxs = set(inp_idxs + const_idxs + outp_idxs)
     rest_idxs = [i for i in new_dict if i not in taken_idxs]
-    
+
     transl_dict = {j: i for i, j in enumerate(inp_idxs + const_idxs + outp_idxs + rest_idxs)}
 
     ret_dict = {}
@@ -1086,7 +1084,7 @@ def sympy2dag(expr, m):
     m = len(inp_idxs)
     n = 1
     k = len(const_idxs)
-    
+
 
     cgraph = reduce_graph(CompGraph(m, n, k, ret_dict))
 
@@ -1095,20 +1093,20 @@ def sympy2dag(expr, m):
 def change_operation(cgraph):
     bin_ops = [op for op in config.NODE_ARITY if config.NODE_ARITY[op] == 2]
     un_ops = [op for op in config.NODE_ARITY if config.NODE_ARITY[op] == 1]
-    
+
     ret_graph = cgraph.copy()
-    
+
     # 1. select node
     comp_nodes = [i for i in range((cgraph.inp_dim + cgraph.n_consts), len(cgraph.node_dict))]
     node_idx = np.random.choice(comp_nodes)
-    
+
     # 2. change operation
     parents, op = cgraph.node_dict[node_idx]
     if len(parents) == 2:
         new_op = np.random.choice([x for x in bin_ops if x != op])
     else:
         new_op = np.random.choice([x for x in un_ops if x != op])
-    
+
     ret_graph.node_dict[node_idx] = (parents, new_op)
     return ret_graph
 
@@ -1118,20 +1116,20 @@ def change_edge(cgraph):
     # 1. select node
     comp_nodes = [i for i in range((cgraph.inp_dim + cgraph.n_consts), len(cgraph.node_dict))]
     node_idx = np.random.choice(comp_nodes)
-    
+
     # 2. select new parent
     parents, op = cgraph.node_dict[node_idx]
     parent_idx = np.random.randint(len(parents))
     p_old = parents[parent_idx]
     possible_parents = [i for i in cgraph.eval_order[:cgraph.eval_order.index(node_idx)] if i != p_old]
     p_new = np.random.choice(possible_parents)
-    
+
     if len(parents) == 1:
         new_parents = [p_new]
     else:
         new_parents = sorted([p_new, parents[int(1-parent_idx)]])
-    
-    
+
+
     ret_graph.node_dict[node_idx] = (new_parents, op)
     return reduce_graph(ret_graph)
 
@@ -1172,8 +1170,8 @@ def reduce_graph(comp_graph:CompGraph) -> CompGraph:
 
         if (op == '=') and (v not in cgraph.outp_nodes):
             u = children[0] # should be the only child
-            H.append((u,v))  
-            
+            H.append((u,v))
+
     if len(H) > 0:
         # 1. resolve H
         # delete v
@@ -1199,7 +1197,7 @@ def reduce_graph(comp_graph:CompGraph) -> CompGraph:
                 while new_c not in cgraph.node_dict:
                     new_c = transl_dict[new_c]
                 new_children.append(new_c)
-            
+
             tmp[new_i] = (new_children, op)
         # update indices
         transl_dict = {i : j for j, i in enumerate(sorted(tmp.keys()))}
@@ -1209,9 +1207,9 @@ def reduce_graph(comp_graph:CompGraph) -> CompGraph:
             new_children = [transl_dict[c] for c in children]
             new_node_dict[transl_dict[i]] = (new_children, op)
         cgraph.node_dict = new_node_dict
-        cgraph.update_stats() 
+        cgraph.update_stats()
 
-    
+
     # Special case: Remove unneccessary identity nodes at output
     H = {}
     V = set()
@@ -1251,8 +1249,8 @@ def reduce_graph(comp_graph:CompGraph) -> CompGraph:
 
     cgraph.node_dict = new_node_dict
     cgraph.update_stats()
-    
-              
+
+
     # 2. remove deadends
     rem_mask = (np.sum((cgraph.R[cgraph.outp_nodes,:] > 0), axis=0) == 0)
     rem_mask[cgraph.inp_nodes] = False
@@ -1261,7 +1259,7 @@ def reduce_graph(comp_graph:CompGraph) -> CompGraph:
 
     tmp = {i : cgraph.node_dict[i] for i in cgraph.node_dict}
     for idx in rem_idx:
-        del tmp[idx]  
+        del tmp[idx]
     transl_dict = {old_idx : new_idx for new_idx, old_idx in enumerate(sorted(tmp.keys()))}
     new_node_dict = {}
     for i in tmp:
@@ -1327,7 +1325,7 @@ def collapse_nodes(cgraph, param_nodes = []):
                     valid = valid and (n1==n2)
                 if valid:
                     valid_successors.add(s)
-        
+
         if (len(ref_nodes & (predecessors | valid_successors)) == len(ref_nodes)) and len(ref_nodes) > 0:
             collapse_nodes.append(node)
 
@@ -1356,7 +1354,7 @@ def collapse_nodes(cgraph, param_nodes = []):
     for node in np.where(mask)[0]:
         if node in c_nodes:
             del_consts.add(node)
-            
+
         if node >= cgraph.inp_dim:
             del_nodes.add(node)
     final_collapse_nodes = [node for node in final_collapse_nodes if node not in del_nodes]
@@ -1387,7 +1385,7 @@ def collapse_nodes(cgraph, param_nodes = []):
                 new_parents = [transl_dict[p] for p in parents]
                 new_node_dict[transl_dict[node]] = new_parents, op
 
-    transl_dict = {}        
+    transl_dict = {}
     for i, node in enumerate(sorted(new_node_dict)):
         transl_dict[node] = i
 
@@ -1420,7 +1418,7 @@ def plot_cgraph(cgraph:CompGraph, ax=plt.axes, radius = 0.1, buffer_factor = 5.0
 
     # get layers of nodes
     eval_order = cgraph.get_eval_order()
-    
+
     # get positions for nodes
 
     y_max = max([len(order) for order in eval_order])
@@ -1475,15 +1473,15 @@ def plot_cgraph(cgraph:CompGraph, ax=plt.axes, radius = 0.1, buffer_factor = 5.0
     color_list = [color_dict[n] for n in G.nodes()]
     nx.draw_networkx_nodes(G, node_positions, node_color=color_list, edgecolors='black', node_size = (2*radius)*10**4, ax = ax)
     nx.draw_networkx_labels(G, node_positions, labels=label_dict, ax = ax)
-    
+
     for e in G.edges:
-        
-        
+
+
         x0, y0 = node_positions[e[0]]
         x1, y1 = node_positions[e[1]]
-        
+
         sign = (e[2]%2)*2-1
-        ampl = (((e[2]+1)//2))*curvature
+        ampl = ((e[2]+1)//2)*curvature
         ax.annotate("",
                     xy=(x0, y0), xycoords='data',
                     xytext=(x1, y1), textcoords='data',
@@ -1494,8 +1492,8 @@ def plot_cgraph(cgraph:CompGraph, ax=plt.axes, radius = 0.1, buffer_factor = 5.0
                                     ),
                                     ),
                     )
-    
-    
+
+
 
     buffer = buffer_factor*radius
     xs = []
@@ -1504,12 +1502,12 @@ def plot_cgraph(cgraph:CompGraph, ax=plt.axes, radius = 0.1, buffer_factor = 5.0
         (x,y) = node_positions[n]
         xs.append(x)
         ys.append(y)
-    
+
     ymin, ymax = np.min(ys), np.max(ys)
     xmin, xmax = np.min(xs), np.max(xs)
     ax.set_ylim(ymin-buffer, ymax+buffer)
     ax.set_xlim(xmin-buffer, xmax+buffer)
-    
+
     return G
 
 

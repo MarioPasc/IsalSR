@@ -1,17 +1,13 @@
-import numpy as np
-import sympy
-
-import sklearn
-from sklearn.metrics import r2_score
-from sklearn.neighbors import NearestNeighbors
-
+import numbers
 import warnings
 from copy import deepcopy
-import numbers
 
-from DAG_search import utils
-from DAG_search import dag_search
-from DAG_search import comp_graph
+import numpy as np
+import sklearn
+import sympy
+from DAG_search import comp_graph, dag_search, utils
+from sklearn.metrics import r2_score
+from sklearn.neighbors import NearestNeighbors
 
 ########################################
 # Loss Functions for DAG Search
@@ -23,14 +19,14 @@ def codec_coefficient(X, y, k = 1, normalize = True):
     else:
         z = X
     n = y.shape[0]
-    
+
     r = y.argsort().argsort()
     l = n - r - 1
     denom = np.sum(l * (n-l))
 
     neigh = NearestNeighbors(n_neighbors= k+1 ).fit(z)
     nn = neigh.kneighbors(z, return_distance = False)
-    
+
     num = np.sum(n * np.min(r[nn], axis = 1) - l**2)
     return 1- num/denom
 
@@ -62,18 +58,18 @@ def translate_back(expr, transl_dict):
     res = sympy.solve(total_expr, y_symb)
     assert len(res) > 0
     return [sympy.sympify(str(r).replace('g', f'({x_expr})')) for r in res]
-    
+
 def get_transl_dict(d, expr_sub, current_dict = {}):
     # given a substitution + translation, creates a new translation
     # d... dimensionality of X
     # expr_sub... substitution expression
     # orig_dict... current translation
-    
+
     if len(current_dict) == 0:
         current_dict = {i : f'x_{i}' for i in range(d)}
         current_dict[d] = 'y'
-        
-        
+
+
     repl_idxs = sorted([int(str(x).split('_')[-1]) for x in expr_sub.free_symbols if 'x_' in str(x)])
     transl_dict = {}
     y_idx = d
@@ -88,19 +84,19 @@ def get_transl_dict(d, expr_sub, current_dict = {}):
         for i in repl_idxs:
             new_y = new_y.replace(f'z_{i}', f'({current_dict[i]})')
         transl_dict[len(remain_idxs)] = new_y
-    
+
     else:
         remain_idxs = sorted([i for i in range(d) if i not in repl_idxs and i!=y_idx])
         for i, idx in enumerate(remain_idxs):
             transl_dict[i+1] = current_dict[idx]
-    
+
         new_x = str(expr_sub).replace('x_', 'z_')
         for i in repl_idxs:
             new_x = new_x.replace(f'z_{i}', f'({current_dict[i]})')
         transl_dict[0] = new_x
         transl_dict[len(transl_dict)] = current_dict[y_idx]
     k = sorted(list(transl_dict.keys()))
-    return {i : transl_dict[i] for i in k}      
+    return {i : transl_dict[i] for i in k}
 
 
 # Using DAG Search:
@@ -116,8 +112,8 @@ class Dimensional_Loss_Fkt(dag_search.DAG_Loss_fkt):
         super().__init__()
         self.score_func = score_func
         self.only_input = only_input
-        
-        
+
+
     def __call__(self, X:np.ndarray, cgraph:comp_graph.CompGraph, c:np.ndarray) -> np.ndarray:
         '''
         Lossfkt(X, graph, consts)
@@ -190,11 +186,11 @@ def elimination_loop(X, y, score_fkt, nodes_elim = 1, verbose = 0, only_improve 
             'n_processes' : processes,
             'topk' : 1,
             'verbose' : verbose,
-            'max_orders' : 10000, 
+            'max_orders' : 10000,
             'stop_thresh' : 1e-30
         }
         res = dag_search.exhaustive_search(**params)
-    
+
         # store
         cgraph = res['graphs'][0]
         loss = res['losses'][0]
@@ -213,16 +209,16 @@ def elimination_loop(X, y, score_fkt, nodes_elim = 1, verbose = 0, only_improve 
                 X_all = np.column_stack([X_all[:, i] for i in range(X_all.shape[1]) if i not in idxs] + [fx])
             else:
                 X_all = np.column_stack([fx] + [X_all[:, i] for i in range(X_all.shape[1]) if i not in idxs])
-            
+
             exprs.append(expr)
             Xs.append(X_all[:, :-1])
             ys.append(X_all[:, -1])
             losses.append(loss)
-            
+
 
             if verbose > 0:
                 print(f'Elimination: {str(expr)}\nNew Shape: {X_all.shape[1] -1}')
-    return exprs, Xs, ys  
+    return exprs, Xs, ys
 
 def beam_elimination_loop(X, y, score_fkt, beam_size = 2, nodes_elim = 1, verbose = 0, only_improve = False, only_input = False, processes = 1):
     loss_fkt = Dimensional_Loss_Fkt(score_fkt, only_input)
@@ -252,7 +248,7 @@ def beam_elimination_loop(X, y, score_fkt, beam_size = 2, nodes_elim = 1, verbos
                     'n_processes' : processes,
                     'topk' : beam_size,
                     'verbose' : 0,
-                    'max_orders' : 10000, 
+                    'max_orders' : 10000,
                     'stop_thresh' : 1e-30
                 }
                 res = dag_search.exhaustive_search(**params)
@@ -277,13 +273,13 @@ def beam_elimination_loop(X, y, score_fkt, beam_size = 2, nodes_elim = 1, verbos
                             y_new = y_b.copy()
 
                         exprs_new = exprs + [expr]
-                        new_beam.append((X_new, y_new, exprs_new , loss))  
+                        new_beam.append((X_new, y_new, exprs_new , loss))
 
                         if loss < best_score:
                             best_score = loss
                             best_result = new_beam[-1]
 
-        
+
         if len(new_beam) == 0:
             #beam_scores = [x[-1] for x in beam]
             #best_result = beam[np.argmin(beam_scores)]
@@ -291,8 +287,8 @@ def beam_elimination_loop(X, y, score_fkt, beam_size = 2, nodes_elim = 1, verbos
         else:
             new_beam_scores = [x[-1] for x in new_beam]
             take_idxs = np.argsort(new_beam_scores)[:beam_size]
-            beam = [new_beam[i] for i in take_idxs] 
-        
+            beam = [new_beam[i] for i in take_idxs]
+
 
     # reenact best result
     Xs = [X.copy()]
@@ -312,7 +308,7 @@ def beam_elimination_loop(X, y, score_fkt, beam_size = 2, nodes_elim = 1, verbos
             y_new = ys[-1].copy()
         Xs.append(X_new)
         ys.append(y_new)
-    return exprs, Xs, ys 
+    return exprs, Xs, ys
 
 # Just Pairwise
 
@@ -368,7 +364,7 @@ def elimination_loop_pairwise(X, y, score_fkt, verbose = 0, only_improve = False
                     best_loss = loss
                     best_comb = f'x_{i} - x_{j}'
                     best_fx = fx.copy()
-                
+
                 # j - i
                 fx = X_all[:, j] - X_all[:, i]
                 loss = score_pointcloud(X_all, fx, idxs, score_fkt)
@@ -410,15 +406,15 @@ def elimination_loop_pairwise(X, y, score_fkt, verbose = 0, only_improve = False
                 X_all = np.column_stack([X_all[:, i] for i in range(X_all.shape[1]) if i not in idxs] + [fx])
             else:
                 X_all = np.column_stack([fx] + [X_all[:, i] for i in range(X_all.shape[1]) if i not in idxs])
-            
+
             exprs.append(expr)
             Xs.append(X_all[:, :-1])
             ys.append(X_all[:, -1])
             losses.append(loss)
-            
+
             if verbose > 0:
                 print(f'Elimination: {str(expr)}\nNew Shape: {X_all.shape[1] -1}')
-    return exprs, Xs, ys      
+    return exprs, Xs, ys
 
 
 
@@ -429,7 +425,7 @@ def elimination_loop_pairwise(X, y, score_fkt, verbose = 0, only_improve = False
 ########################################
 
 def check_correctness(d, expr_true, expr_sub):
-    
+
     repl_idxs = sorted([int(str(x).split('_')[-1]) for x in expr_sub.free_symbols if 'x_' in str(x)])
     y_idx = d
     try:
@@ -449,7 +445,7 @@ def check_correctness(d, expr_true, expr_sub):
             for i, idx in enumerate(remain_idxs):
                 expr_new = expr_new.replace(f'z_{idx}', f'x_{i}')
             expr_new = sympy.sympify(expr_new)
-        
+
         else:
             # z -> x_0
             z_symb = sympy.Symbol('z')
@@ -464,8 +460,8 @@ def check_correctness(d, expr_true, expr_sub):
             # if this passes, its correct
             for i in repl_idxs:
                 assert f'x_{i}' not in str(z)
-            
-            
+
+
             # create new expression
             # replace z with z_-1, all others with z_i
             z = z.subs(z_symb, sympy.Symbol('x_-1'))
@@ -474,10 +470,10 @@ def check_correctness(d, expr_true, expr_sub):
             for i, idx in enumerate(remain_idxs):
                 expr_new = expr_new.replace(f'z_{idx}', f'x_{i}')
             expr_new = sympy.sympify(expr_new)
-            
+
     except AssertionError:
         return (False, None)
-    
+
     return (True, expr_new)
 
 def get_true_red_size(Xs:list, exprs:list, expr_true, ret_expr:bool = False) -> int:
@@ -539,7 +535,7 @@ class SubstitutionRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
             y... output data (shape n_samples)
         '''
         assert len(y.shape) == 1, f'y must be 1-dimensional (current shape: {y.shape})'
-        
+
 
         r2_thresh = self.early_stop_thresh # if solution is found with higher r2 score than this: early stop
         x_symbs = [f'x_{i}' for i in range(X.shape[1])]
@@ -559,7 +555,7 @@ class SubstitutionRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
 
         if verbose > 0:
             print(f'Finished!\nCreated {len(Xs)} regression problems')
-            print(f'Trying to solve problems')
+            print('Trying to solve problems')
 
         # try all simplifications  + keep best one
         best_score = -np.inf

@@ -50,13 +50,13 @@ class _CanonicalDeduplicator:
 
     def __init__(
         self,
-        use_pruned: bool = True,
+        use_fast_canonical: bool = True,
         timeout: float = 60.0,
         snapshot_freq: int = 1000,
         t0: float = 0.0,
         atlas: Any = None,
     ):
-        self.use_pruned = use_pruned
+        self.use_fast_canonical = use_fast_canonical
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
         self.canonical_seen: set[int] = set()
@@ -109,7 +109,7 @@ class _CanonicalDeduplicator:
         # Online fallback
         t0_canon = time.perf_counter()
         try:
-            if self.use_pruned:
+            if self.use_fast_canonical:
                 from isalsr.core.canonical import fast_canonical_string
 
                 canonical = fast_canonical_string(labeled_dag, timeout=self.timeout)
@@ -236,7 +236,7 @@ class IsalSRUDFSRunner(ModelRunner):
 
         t0 = time.perf_counter()
         dedup = _CanonicalDeduplicator(
-            use_pruned=cfg.use_pruned,
+            use_fast_canonical=cfg.use_fast_canonical,
             timeout=cfg.canonicalization_timeout,
             snapshot_freq=cfg.snapshot_frequency,
             t0=t0,

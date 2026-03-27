@@ -31,7 +31,7 @@ def cohens_d_paired(differences: np.ndarray) -> float:
     if len(differences) < 2:
         return 0.0
     sd = np.std(differences, ddof=1)
-    if sd == 0:
+    if sd < 1e-10:
         return 0.0
     return float(np.mean(differences) / sd)
 
@@ -62,7 +62,7 @@ def cohens_d_ci_bootstrap(
     for b in range(n_boot):
         sample = rng.choice(differences, size=n, replace=True)
         sd = np.std(sample, ddof=1)
-        boot_ds[b] = np.mean(sample) / sd if sd > 0 else 0.0
+        boot_ds[b] = np.mean(sample) / sd if sd > 1e-10 else 0.0
 
     alpha = 1 - ci
     lower = float(np.percentile(boot_ds, 100 * alpha / 2))

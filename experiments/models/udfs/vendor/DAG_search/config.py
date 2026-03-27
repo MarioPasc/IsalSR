@@ -1,6 +1,6 @@
 import numpy as np
-import torch
 import sympy
+import torch
 
 '''
 Constants
@@ -56,7 +56,7 @@ NODE_ARITY = {
     '=' : 1,
     'inv' : 1,
     'neg' : 1,
-    'sin' : 1, 
+    'sin' : 1,
     'cos' : 1,
     'exp' : 1,
     'log' : 1,

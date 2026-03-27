@@ -1,18 +1,16 @@
 
-import numbers
-import sklearn
-from sklearn.linear_model import LinearRegression, Lasso
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score
 import itertools
-import numpy as np
-import sympy
-from scipy import stats
+import numbers
 import warnings
 
-from DAG_search import utils
-from DAG_search import dag_search
-from DAG_search import comp_graph
+import numpy as np
+import sklearn
+import sympy
+from DAG_search import comp_graph, dag_search, utils
+from scipy import stats
+from sklearn.linear_model import Lasso, LinearRegression
+from sklearn.metrics import r2_score
+
 
 class Feature_loss_fkt(dag_search.DAG_Loss_fkt):
     def __init__(self, regr, y):
@@ -29,8 +27,8 @@ class Feature_loss_fkt(dag_search.DAG_Loss_fkt):
         self.opt_const = False
         self.regr = regr
         self.y = y
-        
-        
+
+
     def __call__(self, X:np.ndarray, cgraph:comp_graph.CompGraph, c:np.ndarray) -> np.ndarray:
         '''
         Lossfkt(X, graph, consts)
@@ -45,7 +43,7 @@ class Feature_loss_fkt(dag_search.DAG_Loss_fkt):
         '''
         loss = np.inf
         x_repl = cgraph.evaluate(X, np.array([]))[:, 0]
-        if np.all(np.isreal(x_repl) & np.isfinite(x_repl)): 
+        if np.all(np.isreal(x_repl) & np.isfinite(x_repl)):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 X_new = np.column_stack([x_repl, X])
@@ -56,8 +54,8 @@ class Feature_loss_fkt(dag_search.DAG_Loss_fkt):
                 except (np.linalg.LinAlgError, ValueError):
                     loss = np.inf
         return loss
-    
-class BaseReg():
+
+class BaseReg:
     '''
     Regressor based on Linear combination of polynomials and trigonometric functions
     '''
@@ -75,7 +73,7 @@ class BaseReg():
         self.normalize = normalize
         self.max_terms = max_terms
         self.interactions = interactions
-        
+
     def transform2poly(self, X):
         # polynomials up to degree
         # interactions up to interactions
@@ -115,7 +113,7 @@ class BaseReg():
             self.X = X.reshape(-1, 1).copy()
         else:
             self.X = X.copy()
-        
+
         if self.normalize:
             self.x_mean = np.mean(X, axis=0)
             self.x_std = np.std(self.X, axis=0)
@@ -131,7 +129,7 @@ class BaseReg():
             # keep only top coefficients according to p value
 
             current_coef = self.regr.coef_
-            
+
             p_values = self.regression_p_values(X_all, y, self.regr)
 
 
@@ -141,7 +139,7 @@ class BaseReg():
 
     def predict(self, X):
         assert self.X is not None
-        
+
         if self.normalize:
             assert self.x_std is not None and self.x_mean is not None
             X_tmp = (X - self.x_mean)/self.x_std
@@ -150,9 +148,9 @@ class BaseReg():
 
         X_trig = np.column_stack([np.sin(X_tmp), np.cos(X_tmp)])
         X_poly = self.transform2poly(X_tmp)
-        
+
         X_all = np.column_stack([X_poly, X_trig])
-        
+
         pred = self.regr.predict(X_all)
 
 
@@ -162,7 +160,7 @@ class BaseReg():
         assert self.X is not None
 
         names = [sympy.symbols(f'x_{i}', real = True) for i in range(self.X.shape[1])]
-        
+
         if self.normalize:
             assert self.x_std is not None and self.x_mean is not None
             for i in range(len(names)):
@@ -171,8 +169,8 @@ class BaseReg():
 
         X_idxs = np.arange(self.X.shape[1])
         X_poly = []
-        for degree in range(1, self.degree+1):   
-            for name in names: 
+        for degree in range(1, self.degree+1):
+            for name in names:
                 X_poly.append(name**degree)
         X_interact = []
 
@@ -218,7 +216,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
 
         if self.random_state is not None:
             np.random.seed(self.random_state)
-            
+
 
         # check for polynomial
         X_train, X_test, y_train, y_test = utils.split_extrapolation(X, y, test_size = 0.1, random_state = 42)
@@ -236,7 +234,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
             s_train = r2_score(y_train, pred_train)
             s_test = r2_score(y_test, pred_test)
             test_scores.append(s_test)
-            
+
             expr = utils.simplify(utils.round_floats(self.regr_poly.model(), round_digits=5))
             if s_train >= fit_thresh and s_test >= fit_thresh and utils.tree_size(expr) < max_tree_size:
                 found = True
@@ -255,10 +253,10 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
             #    if score > 0.999:
             #        break
             degree = polydegrees[np.argmax(test_scores[:len(polydegrees)])]
-            
+
             if verbose > 0:
                 print(f'Selected degree {degree}')
-            
+
             self.regr_poly = BaseReg(degree = degree)
             self.regr_poly.fit(X, y)
 
@@ -285,7 +283,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
                 'topk' : self.topk,
                 'opt_mode' : 'grid_zoom',
                 'verbose' : verbose,
-                'max_orders' : self.max_orders, 
+                'max_orders' : self.max_orders,
                 'stop_thresh' : 1e-20,
                 'max_time' : self.max_time_aug
             }
@@ -296,7 +294,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
             scores = []
             exprs = []
 
-            
+
             if verbose > 0:
                 print('Iterating trough best replacements')
 
@@ -326,7 +324,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
                                 print(f'Poly: {score}, Size: {ts}')
                             if score >= fit_thresh and ts < max_tree_size:
                                 if verbose > 0:
-                                    print(f'Expression is a polynomial on a substitution')
+                                    print('Expression is a polynomial on a substitution')
                                     print(expr)
                                 found = True
                                 break
@@ -348,15 +346,15 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
                                 print(f'Regressor: {score} Size: {ts}')
                             if score >= fit_thresh and ts < max_tree_size:
                                 if verbose > 0:
-                                    print(f'Expression found trough exhaustive search with a substitution')
+                                    print('Expression found trough exhaustive search with a substitution')
                                     print(expr)
                                 found = True
                                 break
-                
+
             if not found:
                 # fit original problem using symbolic regressor
                 if verbose > 0:
-                    print(f'Replacement: Original Problem')
+                    print('Replacement: Original Problem')
                 self.regr_search.fit(X, y, verbose = verbose)
                 pred = self.regr_search.predict(X)
                 score = r2_score(y, pred)
@@ -378,7 +376,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
                 ranks1 = np.argsort(sizes)
                 ranks2 = np.argsort(-scores)
 
-                pareto_idxs = [ranks1[0]] 
+                pareto_idxs = [ranks1[0]]
                 current_score = scores[ranks1[0]] # have to be greater than this
                 for i in ranks1[1:]:
                     if scores[i] > current_score:
@@ -387,7 +385,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
 
                 self.pareto_front = [exprs[i] for i in pareto_idxs]
 
-                    
+
                 if np.any(sizes < max_tree_size):
                     # select best model of the smallest models
                     idxs = np.where(sizes < max_tree_size)[0]
@@ -396,7 +394,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
                     self.expr = exprs[np.argmax(scores)]
                 else:
                     self.expr = exprs[np.argmin(sizes)]
-        
+
 
         # for equality check, make sure that variables have the right properties
         positives = np.all(X > 0, axis = 0)
@@ -408,19 +406,19 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
             else:
                 transl_dict[s] = sympy.Symbol(f'x_{idx}', real = True)
         self.expr = self.expr.subs(transl_dict)
-        
+
         x_symbs = [f'x_{i}' for i in range(X.shape[1])]
         self.exec_func = sympy.lambdify(x_symbs, self.expr)
-         
+
         return self
-    
+
     def predict(self, X):
         assert hasattr(self, 'expr')
 
         if not hasattr(self, 'exec_func'):
             x_symbs = [f'x_{i}' for i in range(X.shape[1])]
             self.exec_func = sympy.lambdify(x_symbs, self.expr)
-            
+
         pred = self.exec_func(*[X[:, i] for i in range(X.shape[1])])
         if isinstance(pred, numbers.Number):
             pred = pred*np.ones(X.shape[0])
@@ -440,7 +438,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
         '''
         assert hasattr(self, 'expr'), 'No expression found yet. Call .fit first!'
         return self.expr
-    
+
     def _translate(self, X, expr, repl_expr):
         '''
         Translates the expression back.
@@ -464,7 +462,7 @@ class AugmentationRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMi
             else:
                 transl_dict[i] = f'z_{n_i}'
 
-        expr = str(expr)   
+        expr = str(expr)
         for i in transl_dict:
             expr = expr.replace(f'x_{i}', f'({transl_dict[i]})')
         expr = expr.replace('z_', 'x_')

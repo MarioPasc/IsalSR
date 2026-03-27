@@ -7,6 +7,9 @@
 # Each experiment runs paired comparisons: baseline vs IsalSR.
 # Parallelization: one array task per (problem, seed) pair.
 # Array size = n_problems * n_seeds.
+#
+# Time limits: 12h algorithm + 2-4h buffer (raised from 30min/60min
+# to push exploration depth and find upper-bound reduction factors).
 
 # Paths
 repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
@@ -29,7 +32,7 @@ experiments:
     config: experiments/configs/udfs_nguyen.yaml
     n_seeds: 30
     n_problems: 12
-    time_limit: "01:30:00"    # ~1h typical for UDFS + 30min buffer
+    time_limit: "14:00:00"    # 12h algorithm + 2h buffer
     cpus: 1
     mem_gb: 8
 
@@ -41,7 +44,7 @@ experiments:
     config: experiments/configs/udfs_nguyen.yaml
     n_seeds: 30
     n_problems: 12
-    time_limit: "02:00:00"    # canonicalization overhead
+    time_limit: "16:00:00"    # 12h algorithm + 4h canonicalization overhead buffer
     cpus: 1
     mem_gb: 8
 
@@ -56,9 +59,9 @@ experiments:
     config: experiments/configs/bingo_nguyen.yaml
     n_seeds: 30
     n_problems: 12
-    time_limit: "01:30:00"    # ~30min evolution + buffer (extra margin for slow sympy/predict)
+    time_limit: "14:00:00"    # 12h evolution + 2h buffer
     cpus: 1
-    mem_gb: 12
+    mem_gb: 16
 
   bingo_nguyen_isalsr:
     enabled: true
@@ -68,9 +71,9 @@ experiments:
     config: experiments/configs/bingo_nguyen.yaml
     n_seeds: 30
     n_problems: 12
-    time_limit: "01:30:00"    # canonicalization overhead + buffer
+    time_limit: "16:00:00"    # 12h evolution + 4h canonicalization overhead buffer
     cpus: 1
-    mem_gb: 12
+    mem_gb: 16
 
   # =========================================================
   # UDFS on Feynman (10 problems x 30 seeds = 300 tasks/group)
@@ -83,7 +86,7 @@ experiments:
     config: experiments/configs/udfs_feynman.yaml
     n_seeds: 30
     n_problems: 10
-    time_limit: "01:30:00"
+    time_limit: "14:00:00"    # 12h algorithm + 2h buffer
     cpus: 1
     mem_gb: 8
 
@@ -95,7 +98,7 @@ experiments:
     config: experiments/configs/udfs_feynman.yaml
     n_seeds: 30
     n_problems: 10
-    time_limit: "02:00:00"
+    time_limit: "16:00:00"    # 12h algorithm + 4h canonicalization overhead buffer
     cpus: 1
     mem_gb: 8
 
@@ -110,9 +113,9 @@ experiments:
     config: experiments/configs/bingo_feynman.yaml
     n_seeds: 30
     n_problems: 10
-    time_limit: "01:30:00"    # ~30min evolution + buffer (extra margin for slow sympy/predict)
+    time_limit: "14:00:00"    # 12h evolution + 2h buffer
     cpus: 1
-    mem_gb: 12
+    mem_gb: 16
 
   bingo_feynman_isalsr:
     enabled: true
@@ -122,9 +125,9 @@ experiments:
     config: experiments/configs/bingo_feynman.yaml
     n_seeds: 30
     n_problems: 10
-    time_limit: "01:30:00"    # canonicalization overhead + buffer
+    time_limit: "16:00:00"    # 12h evolution + 4h canonicalization overhead buffer
     cpus: 1
-    mem_gb: 12
+    mem_gb: 16
 
   # =========================================================
   # Atlas-enabled IsalSR (uses precomputed canonical lookup)
@@ -142,9 +145,9 @@ experiments:
     atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
     n_seeds: 30
     n_problems: 12
-    time_limit: "01:00:00"
+    time_limit: "14:00:00"    # no online canon overhead, but long algo time
     cpus: 1
-    mem_gb: 12
+    mem_gb: 16
 
   bingo_feynman_isalsr_atlas:
     enabled: true
@@ -155,9 +158,9 @@ experiments:
     atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
     n_seeds: 30
     n_problems: 10
-    time_limit: "01:00:00"
+    time_limit: "14:00:00"
     cpus: 1
-    mem_gb: 12
+    mem_gb: 16
 
   udfs_nguyen_isalsr_atlas:
     enabled: true
@@ -168,7 +171,7 @@ experiments:
     atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
     n_seeds: 30
     n_problems: 12
-    time_limit: "01:30:00"
+    time_limit: "14:00:00"
     cpus: 1
     mem_gb: 8
 
@@ -181,7 +184,7 @@ experiments:
     atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
     n_seeds: 30
     n_problems: 10
-    time_limit: "01:30:00"
+    time_limit: "14:00:00"
     cpus: 1
     mem_gb: 8
 
@@ -203,6 +206,6 @@ experiments:
     enabled: true
     methods: "udfs,bingo"
     benchmarks: "nguyen,feynman"
-    time_limit: "01:00:00"
+    time_limit: "02:00:00"    # more data to process with 12h runs
     cpus: 1
     mem_gb: 16

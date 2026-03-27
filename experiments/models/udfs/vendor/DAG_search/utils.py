@@ -1,13 +1,15 @@
-import stopit
-import zss
+import numbers
+import traceback
+import warnings
+
+import networkx as nx
 import numpy as np
 import scipy.stats
+import stopit
 import sympy
-import traceback
+import zss
 from DAG_search import config
-import warnings
-import networkx as nx
-import numbers
+
 
 def split_extrapolation(X, y, test_size = 0.2, random_state = None):
 
@@ -32,7 +34,7 @@ def get_pareto_idxs(obj1, obj2):
     M = np.column_stack([obj1, obj2])
     ret = []
     for i, p in enumerate(M):
-        is_dominated = (np.all(M <= p, axis = 1) & np.any(M != p, axis = 1)).sum() > 1
+        is_dominated = (np.all(p >= M, axis = 1) & np.any(p != M, axis = 1)).sum() > 1
         if not is_dominated:
             ret.append(i)
     return np.array(ret)
@@ -42,7 +44,7 @@ def get_pareto_idxs(obj1, obj2):
 #####################################
 
 def est_gradient(reg, X, fx = None, eps = 1e-5):
-    
+
     X_tmp = []
     for i in range(X.shape[1]):
         x_tmp = X.copy()
@@ -111,7 +113,7 @@ def get_subexprs_sympy(expr) -> list:
     for c in children:
         subs += get_subexprs_sympy(c)
     return subs
-    
+
 def insert_subexprs(expr1, expr2) -> list:
     '''
     Creates all subexpressions that are created
@@ -171,7 +173,7 @@ def mix_error(expr, population : list, X : np.ndarray, y : np.ndarray, max_error
             insert_exprs = insert_subexprs(expr_pop, expr) # insert expr at expr_pop
             for expr_insert in insert_exprs:
                 valid = True
-                
+
                 try:
                     with stopit.ThreadingTimeout(2.0, swallow_exc=False) as to_ctx_mgr:
                         assert to_ctx_mgr.state == to_ctx_mgr.EXECUTING
@@ -183,7 +185,7 @@ def mix_error(expr, population : list, X : np.ndarray, y : np.ndarray, max_error
                         valid = False
                 except (TypeError, KeyError, AttributeError, RecursionError, stopit.utils.TimeoutException):
                     valid = False
-                
+
                 if valid and np.all(np.isreal(pred)) and not np.any(np.isnan(pred)):
                     mse = min(np.mean(np.abs(pred - y)), max_error)
                     errors.append(mse)
@@ -203,7 +205,7 @@ def mean_confidence_interval(data : list, confidence : float = 0.95) -> tuple:
     @Returns:
         mean, lower, upper for confidence interval
     '''
-    # 
+    #
     a = 1.0 * np.array(data)
     n = len(a)
     m, se = np.mean(a), scipy.stats.sem(a)
@@ -282,8 +284,8 @@ def is_const(expr, timeout:float = 5.0) -> bool:
         else:
             return (len(expr.free_symbols) == 0)
     except (TypeError, KeyError, AttributeError, RecursionError, stopit.utils.TimeoutException, stopit.TimeoutException):
-        return (len(expr.free_symbols) == 0)  
-    
+        return (len(expr.free_symbols) == 0)
+
 def symb_eq(expr_est, expr_true) -> bool:
     '''
     Checks symbolic equivalence of expressions.
@@ -297,7 +299,7 @@ def symb_eq(expr_est, expr_true) -> bool:
     '''
 
     try:
-        
+
 
         # 0. make sure all constants have same properties
         transl_dict = {}
@@ -330,7 +332,7 @@ def symb_eq(expr_est, expr_true) -> bool:
                 return True
             else:
                 return False
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
         # all kind of exotic sympy exceptions can occur here.
         return False
@@ -451,7 +453,7 @@ def lcsubstring_length(a, b):
     return longest
 
 def dfs_ratio(graph1, graph2):
-    
+
     outp_idx1 = graph1.inp_dim + graph1.n_consts
     outp_idx2 = graph2.inp_dim + graph2.n_consts
 
@@ -470,7 +472,7 @@ def get_subexprs(graph):
     k = graph.inp_dim + graph.n_consts
 
     res_dict = {i : None for i in graph.node_dict}
-    # inputs        
+    # inputs
     for i in range(graph.inp_dim):
         res_dict[i] = X[i]
 
@@ -492,7 +494,7 @@ def get_subexprs(graph):
             node_result = node_op(node_result)
 
         res_dict[i] = node_result
-    
+
     ret_dict = {}
     for i in res_dict:
         ret_dict[i] = str(res_dict[i])
@@ -513,29 +515,29 @@ def get_depths(graph):
 def subexpr_ratio(graph1, graph2):
     subexprs1 = get_subexprs(graph1)
     subexprs2 = get_subexprs(graph2)
-    
-    
+
+
     depths1 = get_depths(graph1)
     depths2 = get_depths(graph2)
     d1 = graph1.depth()
     d2 = graph2.depth()
-    
-    
+
+
     exprs1 = set([subexprs1[i] for i in subexprs1])
     exprs2 = set([subexprs2[i] for i in subexprs2])
     common_exprs = list(exprs1 & exprs2)
-    
+
     scores = []
     for expr in common_exprs:
-        
+
         # find depth in graph1
         tmp = []
         for i1 in subexprs1:
             if subexprs1[i1] == expr:
                 tmp.append(depths1[i1])
         depth1 = min(tmp)
-        
-        
+
+
         # find depth in graph2
         tmp = []
         for i1 in subexprs2:
@@ -545,12 +547,12 @@ def subexpr_ratio(graph1, graph2):
 
         score = min(depth1/(d1 + 1), depth2/(d2 + 1))
         scores.append(score)
-        
+
     if len(scores) == 0:
         return 0.0
     else:
         return max(scores)
-    
+
 
 # Zhang-Shasha tree edit distance
 # https://epubs.siam.org/doi/10.1137/0218082
@@ -571,7 +573,7 @@ def get_tree(graph, idx):
         for child in children:
             ret.addkid(get_tree(graph, child))
         return ret
-    
+
 def graph_edit_distance(graph1, graph2):
     tree1 = graph2trees(graph1)[0]
     tree2 = graph2trees(graph2)[0]

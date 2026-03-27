@@ -46,11 +46,11 @@ class _CanonicalDeduplicator:
 
     def __init__(
         self,
-        use_pruned: bool = True,
+        use_fast_canonical: bool = True,
         timeout: float = 60.0,
         atlas: Any = None,
     ):
-        self.use_pruned = use_pruned
+        self.use_fast_canonical = use_fast_canonical
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
         self.canonical_seen: set[int] = set()
@@ -150,7 +150,7 @@ class IsalSREvaluation(Evaluation):
                     # No atlas or atlas miss: compute canonical string
                     t0_canon = time.perf_counter()
                     try:
-                        if self.dedup.use_pruned:
+                        if self.dedup.use_fast_canonical:
                             from isalsr.core.canonical import fast_canonical_string
 
                             canonical = fast_canonical_string(
@@ -218,7 +218,7 @@ class IsalSRBingoRunner(ModelRunner):
         np.random.seed(seed)
 
         dedup = _CanonicalDeduplicator(
-            use_pruned=cfg.use_pruned,
+            use_fast_canonical=cfg.use_fast_canonical,
             timeout=cfg.canonicalization_timeout,
             atlas=self._atlas,
         )

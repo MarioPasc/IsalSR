@@ -95,7 +95,6 @@ def compgraph_to_labeled_dag(
     """
     m = cg.inp_dim
     k = cg.n_consts
-    n = cg.outp_dim
 
     dag = LabeledDAG(max_nodes=len(cg.node_dict) + 10)
 

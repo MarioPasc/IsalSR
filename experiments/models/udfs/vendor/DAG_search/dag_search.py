@@ -1,36 +1,32 @@
 '''
 Operations for combining computational graphs
 '''
-import numpy as np
 import itertools
+import multiprocessing
+import pickle
+import time
 import warnings
+
+import numpy as np
+import sklearn
 import sympy
+from DAG_search import comp_graph, config, utils
 from scipy.optimize import minimize
 from scipy.special import logsumexp
 from sklearn.metrics import r2_score
 from tqdm import tqdm
-import pickle
-import multiprocessing
-import time
-import sklearn
-
-
-from DAG_search import config
-from DAG_search import comp_graph
-from DAG_search import utils
-
 
 ########################
 # Loss Functions + Optimizing constants
 ########################
 
-class DAG_Loss_fkt(object):
+class DAG_Loss_fkt:
     '''
     Abstract class for Loss function
     '''
     def __init__(self, opt_const:bool = True):
         self.opt_const = opt_const
-        
+
     def __call__(self, X:np.ndarray, cgraph:comp_graph.CompGraph, c:np.ndarray) -> np.ndarray:
         '''
         Lossfkt(X, graph, consts)
@@ -57,7 +53,7 @@ class MSE_loss_fkt(DAG_Loss_fkt):
         '''
         super().__init__()
         self.outp = outp
-        
+
     def __call__(self, X:np.ndarray, cgraph:comp_graph.CompGraph, c:np.ndarray) -> np.ndarray:
         '''
         Lossfkt(X, graph, consts)
@@ -80,13 +76,13 @@ class MSE_loss_fkt(DAG_Loss_fkt):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            
+
             pred = cgraph.evaluate(X, c = c)
             losses = np.mean((pred.reshape(r, -1) - self.outp.flatten())**2, axis=-1)
-            
+
             # must not be nan or inf
             invalid = ~np.isfinite(losses)
-            
+
         # consider not using inf, since optimizers struggle with this
         losses[invalid] = np.inf
         #losses[losses > 1000] = 1000
@@ -108,7 +104,7 @@ class R2_loss_fkt(DAG_Loss_fkt):
         super().__init__()
         self.outp = outp # N x n
         self.outp_var = np.var(self.outp, axis = 0) # n
-        
+
     def __call__(self, X:np.ndarray, cgraph:comp_graph.CompGraph, c:np.ndarray) -> np.ndarray:
         '''
         Lossfkt(X, graph, consts)
@@ -132,14 +128,14 @@ class R2_loss_fkt(DAG_Loss_fkt):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            
+
             pred = cgraph.evaluate(X, c = c) # r x N x n
             mses = np.mean((pred - self.outp)**2, axis=1) # r x n
             losses = np.mean(mses/self.outp_var, axis = 1) # r
-            
+
             # must not be nan or inf
             invalid = ~np.isfinite(losses)
-            
+
         # consider not using inf, since optimizers struggle with this
         losses[invalid] = np.inf
         #losses[losses > 1000] = 1000
@@ -151,7 +147,7 @@ class R2_loss_fkt(DAG_Loss_fkt):
             return losses
 
 ## Substitution
-        
+
 class Fit_loss_fkt(DAG_Loss_fkt):
     def __init__(self, regr, y, test_perc = 0.2):
         '''
@@ -165,7 +161,7 @@ class Fit_loss_fkt(DAG_Loss_fkt):
         self.opt_const = False
         self.regr = regr
         self.y = y
-        
+
         self.test_perc = test_perc
         self.test_amount = int(self.test_perc*len(y))
         assert self.test_amount > 0, f'Too little data for test share of {self.test_perc}'
@@ -175,7 +171,7 @@ class Fit_loss_fkt(DAG_Loss_fkt):
         self.train_idxs = all_idxs[self.test_amount:]
 
 
-        
+
     def __call__(self, X:np.ndarray, cgraph:comp_graph.CompGraph, c:np.ndarray) -> np.ndarray:
         '''
         Lossfkt(X, graph, consts)
@@ -190,15 +186,15 @@ class Fit_loss_fkt(DAG_Loss_fkt):
         '''
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            
+
             expr = cgraph.evaluate_symbolic()[0]
             used_idxs = sorted([int(str(e).split('_')[-1]) for e in expr.free_symbols])
-            
+
             if len(used_idxs) > 1:
                 X_new = cgraph.evaluate(X, np.array([]))
                 X_new = np.column_stack([X_new] + [X[:, i] for i in range(X.shape[1]) if i not in used_idxs])
 
-                if np.all(np.isreal(X_new) & np.isfinite(X_new) & (np.abs(X_new) < 1000)): 
+                if np.all(np.isreal(X_new) & np.isfinite(X_new) & (np.abs(X_new) < 1000)):
                     try:
                         self.regr.fit(X_new[self.train_idxs], self.y[self.train_idxs])
                         pred = self.regr.predict(X_new[self.test_idxs])
@@ -228,8 +224,8 @@ class Gradient_loss_fkt(DAG_Loss_fkt):
         if hasattr(self.regr, 'fit'):
             self.regr.fit(X, y)
         self.df_dx = utils.est_gradient(self.regr, X, y)
-        
-        
+
+
     def __call__(self, X:np.ndarray, cgraph:comp_graph.CompGraph, c:np.ndarray) -> np.ndarray:
         '''
         Lossfkt(X, graph, consts)
@@ -249,16 +245,16 @@ class Gradient_loss_fkt(DAG_Loss_fkt):
             r = 1
             c = c.reshape(1, -1)
             vec = False
-        
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
 
             expr = cgraph.evaluate_symbolic()[0]
             I = sorted([int(str(e).split('_')[-1]) for e in expr.free_symbols if str(e).startswith('x_')])
-            
+
             df_dxI = self.df_dx[:, I]
             df_dxI_norm = (df_dxI.T/np.linalg.norm(df_dxI, axis = 1)).T # shape N x I
-            
+
             if len(I) > 1:
 
                 h_x, dh_dx = cgraph.evaluate(X, c, return_grad = True) # shape r x 1 x N x inps
@@ -291,7 +287,7 @@ class Gradient_loss_fkt(DAG_Loss_fkt):
             return losses[0]
         else:
             return losses
-        
+
 
 # Invariants
 
@@ -309,7 +305,7 @@ class Invariant_loss_fkt(DAG_Loss_fkt):
         self.grad_min = grad_min
         self.grad_max = grad_max
         self.value_max = value_max
-        
+
     def __call__(self, X:np.ndarray, cgraph:comp_graph.CompGraph, c:np.ndarray) -> np.ndarray:
         '''
         Lossfkt(X, graph, consts)
@@ -336,18 +332,18 @@ class Invariant_loss_fkt(DAG_Loss_fkt):
             pred, grad = cgraph.evaluate(X, c, return_grad = True)
             grad[np.isnan(grad)] = 0
             pred = pred[:, :, 0]
-            losses = np.mean(((pred.T - np.mean(pred, axis = 1))**2), axis = 0)    
+            losses = np.mean(((pred.T - np.mean(pred, axis = 1))**2), axis = 0)
 
-            absgrad = np.abs(grad).reshape(r, -1)  
+            absgrad = np.abs(grad).reshape(r, -1)
             invalid = np.mean(absgrad, axis = 1) > self.grad_max
             invalid = invalid | (np.mean(absgrad, axis = 1) < self.grad_min)
-            
+
             absvalue = np.abs(pred)
             invalid = invalid | (np.mean(absvalue, axis = 1) > self.value_max)
 
             # must not be nan or inf
             invalid = invalid | (~np.isfinite(losses))
-            
+
         # consider not using inf, since optimizers struggle with this
         losses[invalid] = np.inf
         losses[losses < 0] = np.inf
@@ -379,7 +375,7 @@ def get_consts_grid(cgraph:comp_graph.CompGraph, X:np.ndarray, loss_fkt:DAG_Loss
         loss = loss_fkt(X, cgraph, consts)
         return consts, loss
 
-    if not (type(c_init) is np.ndarray):
+    if type(c_init) is not np.ndarray:
         c_init = c_init*np.ones(k)
 
     l = interval_size/2
@@ -445,11 +441,11 @@ def get_consts_opt(cgraph:comp_graph.CompGraph, X:np.ndarray, loss_fkt:DAG_Loss_
     '''
 
     n_constants = cgraph.n_consts
-    
+
     options = {'maxiter' : 20}
     def opt_func(c):
         return loss_fkt(X, cgraph, np.reshape(c, (1, -1)))[0]
-    
+
     if n_constants > 0:
         success = False
         it = 0
@@ -476,7 +472,7 @@ def get_consts_opt(cgraph:comp_graph.CompGraph, X:np.ndarray, loss_fkt:DAG_Loss_
             c = best_c
     else:
         c = np.array([])
-        
+
     return c, opt_func(c)
 
 def get_consts_pool(cgraph:comp_graph.CompGraph, X:np.ndarray, loss_fkt:DAG_Loss_fkt, pool:list = config.CONST_POOL) -> tuple:
@@ -503,7 +499,7 @@ def get_consts_pool(cgraph:comp_graph.CompGraph, X:np.ndarray, loss_fkt:DAG_Loss
         best_idx = np.argmin(losses)
         best_loss = losses[best_idx]
         best_c = c_combs[best_idx]
-    
+
         return best_c, best_loss
     return np.array([]), loss_fkt(X, cgraph, np.array([]))
 
@@ -532,7 +528,7 @@ def get_pre_order(order:list, node:int, inp_nodes:list, inter_nodes:list, outp_n
         idx = 2*(node - len(inp_nodes) - len(outp_nodes))
     idx_l = idx
     idx_r = idx + 1
-    
+
     v_l = order[idx_l]
     v_r = order[idx_r]
 
@@ -631,7 +627,7 @@ def get_build_orders(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int = 100
         sample_space_edges.append(predecs[i])
         sample_space_edges.append(predecs[i] + [-1])
     #its_total = np.prod([len(s) for s in sample_space_edges]) # potential overflow!
-    log_its_total = np.sum([np.log(len(s)) for s in sample_space_edges]) 
+    log_its_total = np.sum([np.log(len(s)) for s in sample_space_edges])
 
     if fix_size:
         if n_calc_nodes > 0:
@@ -658,7 +654,7 @@ def get_build_orders(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int = 100
     if verbose == 2:
         total_its = np.prod([len(s) for s in sample_space_edges])
         pbar = tqdm(possible_edges, total = total_its)
-    else: 
+    else:
         pbar = possible_edges
 
     for order in pbar:
@@ -673,7 +669,7 @@ def get_build_orders(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int = 100
             # pre orders of outputs
             for i in range(n):
                 order_ID = order_ID + get_pre_order(order, m + k + i, inp_nodes, inter_nodes, outp_nodes)
-            
+
             is_new = True
             if fix_size:
                 if n_calc_nodes > 0:
@@ -691,12 +687,12 @@ def get_build_orders(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int = 100
                         counter += 1
                 tmp_ID = tuple([ren_dict[node] if node in ren_dict else node for node in order_ID])
                 is_new = tmp_ID not in valid_set
-            
-        
-            
+
+
+
             if is_new:
                 valid_set.add(tmp_ID)
-                
+
                 # build (node, parents) order for intermediate + output nodes
                 tmp = sorted([i for i in set(order_ID) if i in inter_nodes])
                 ren_dict = {node : inter_nodes[i] for i, node in enumerate(tmp)}
@@ -727,7 +723,7 @@ def get_build_orders(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int = 100
                     else:
                         build_order.append((i, tuple(preds)))
                 build_orders.append(tuple(build_order))
-                
+
     return filter_func(build_orders)
 
 def get_build_orders_prior_old(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int = 10000, verbose:int = 0, double_probs:dict=None, **params) -> list:
@@ -742,20 +738,20 @@ def get_build_orders_prior_old(m:int, n:int, k:int, n_calc_nodes:int, max_orders
             ('const', 'unary'): 0.005443747937974308,
             ('const', 'binary'): 0.0526228967337512,
         }
-    
+
     l = n_calc_nodes
     inp_nodes = [i for i in range(m + k)]
     outp_nodes = [i + m + k for i in range(n)]
     inter_nodes = [i + m + k + n for i in range(l)]
-    
+
     # collect possible predecessors
     predecs = {}
     for i in inp_nodes:
         predecs[i] = []
-    
+
     for i in outp_nodes:
         predecs[i] = inp_nodes + inter_nodes
-    
+
     for i in inter_nodes:
         predecs[i] = inp_nodes + [j for j in inter_nodes if j < i]
 
@@ -771,7 +767,7 @@ def get_build_orders_prior_old(m:int, n:int, k:int, n_calc_nodes:int, max_orders
     # start sampling
     if verbose == 2:
         pbar = tqdm(range(max_orders))
-    else: 
+    else:
         pbar = range(max_orders)
     for _ in pbar:
         # sample an order according to probabilities
@@ -782,7 +778,7 @@ def get_build_orders_prior_old(m:int, n:int, k:int, n_calc_nodes:int, max_orders
             probs = []
             for i1 in range(1, len(pre_idxs)):
                 for i2 in range(i1):
-            
+
                     p1 = pre_idxs[i1]
                     p2 = pre_idxs[i2]
                     if p2 < 0:
@@ -794,7 +790,7 @@ def get_build_orders_prior_old(m:int, n:int, k:int, n_calc_nodes:int, max_orders
                         t11 = role_dict[p1]
                         t12 = role_dict[p2]
                         prob = double_probs[(t11, t2)]*double_probs[(t12, t2)]
-            
+
                     options.append((p1, p2))
                     probs.append(prob)
             probs = np.array(probs)/sum(probs)
@@ -820,10 +816,10 @@ def get_build_orders_prior_old(m:int, n:int, k:int, n_calc_nodes:int, max_orders
                 counter += 1
         tmp_ID = tuple([ren_dict[node] if node in ren_dict else node for node in order_ID])
         is_new = tmp_ID not in valid_set
-        
+
         if is_new:
             valid_set.add(tmp_ID)
-            
+
             # build (node, parents) order for intermediate + output nodes
             tmp = sorted([i for i in set(order_ID) if i in inter_nodes])
             ren_dict = {node : inter_nodes[i] for i, node in enumerate(tmp)}
@@ -875,20 +871,20 @@ def get_build_orders_prior_old2(m:int, n:int, k:int, n_calc_nodes:int, max_order
             ('unary', 'const'): 0.008188585607940446,
             ('binary', 'const', 'const'): 0.0
         }
-    
+
     l = n_calc_nodes
     inp_nodes = [i for i in range(m + k)]
     outp_nodes = [i + m + k for i in range(n)]
     inter_nodes = [i + m + k + n for i in range(l)]
-    
+
     # collect possible predecessors
     predecs = {}
     for i in inp_nodes:
         predecs[i] = []
-    
+
     for i in outp_nodes:
         predecs[i] = inp_nodes + inter_nodes
-    
+
     for i in inter_nodes:
         predecs[i] = inp_nodes + [j for j in inter_nodes if j < i]
 
@@ -904,7 +900,7 @@ def get_build_orders_prior_old2(m:int, n:int, k:int, n_calc_nodes:int, max_order
     # start sampling
     if verbose == 2:
         pbar = tqdm(range(max_orders))
-    else: 
+    else:
         pbar = range(max_orders)
     for _ in pbar:
         # sample an order according to probabilities
@@ -990,10 +986,10 @@ def get_build_orders_prior_old2(m:int, n:int, k:int, n_calc_nodes:int, max_order
                 counter += 1
         tmp_ID = tuple([ren_dict[node] if node in ren_dict else node for node in order_ID])
         is_new = tmp_ID not in valid_set
-        
+
         if is_new:
             valid_set.add(tmp_ID)
-            
+
             # build (node, parents) order for intermediate + output nodes
             tmp = sorted([i for i in set(order_ID) if i in inter_nodes])
             ren_dict = {node : inter_nodes[i] for i, node in enumerate(tmp)}
@@ -1043,10 +1039,10 @@ def get_build_orders_prior(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int
     predecs = {}
     for i in inp_nodes:
         predecs[i] = []
-    
+
     for i in outp_nodes:
         predecs[i] = inp_nodes + inter_nodes
-    
+
     for i in inter_nodes:
         predecs[i] = inp_nodes + [j for j in inter_nodes if j < i]
 
@@ -1056,7 +1052,7 @@ def get_build_orders_prior(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int
     # start sampling
     if verbose == 2:
         pbar = tqdm(range(max_orders))
-    else: 
+    else:
         pbar = range(max_orders)
     for _ in pbar:
         # sample an order according to probabilities
@@ -1089,12 +1085,12 @@ def get_build_orders_prior(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int
                     counter += 1
             tmp_ID = tuple([ren_dict[node] if node in ren_dict else node for node in order_ID])
             is_new = tmp_ID not in valid_set
-            
-        
-            
+
+
+
         if is_new:
             valid_set.add(tmp_ID)
-            
+
             # build (node, parents) order for intermediate + output nodes
             tmp = sorted([i for i in set(order_ID) if i in inter_nodes])
             ren_dict = {node : inter_nodes[i] for i, node in enumerate(tmp)}
@@ -1125,7 +1121,7 @@ def get_build_orders_prior(m:int, n:int, k:int, n_calc_nodes:int, max_orders:int
                 else:
                     build_order.append((i, tuple(preds)))
             build_orders.append(tuple(build_order))
-        
+
     return build_orders
 
 
@@ -1162,7 +1158,7 @@ def evaluate_cgraph(cgraph:comp_graph.CompGraph, X:np.ndarray, loss_fkt:callable
 
         assert opt_mode in ['pool', 'opt', 'grid', 'grid_opt', 'grid_zoom', 'grid_zoom_tan'], 'Mode has to be one of {pool, opt, grid, grid_opt}'
 
-        
+
         if opt_mode == 'pool':
             consts, loss = get_consts_pool(cgraph, X, loss_fkt)
         elif opt_mode == 'opt':
@@ -1183,7 +1179,7 @@ def evaluate_cgraph(cgraph:comp_graph.CompGraph, X:np.ndarray, loss_fkt:callable
         return consts, loss
     else:
         return np.array([]), np.inf
-        
+
 def evaluate_build_order(order:list, m:int, n:int, k:int, X:np.ndarray, loss_fkt:callable, topk:int = 5, opt_mode:str = 'grid_zoom', loss_thresh:float = None, start_time:float = None, max_time:float = 3600, expect_evals:int = None, pareto:bool = False) -> tuple:
     '''
     Given a build order (output of get_build_orders), tests all possible assignments of operators.
@@ -1215,7 +1211,7 @@ def evaluate_build_order(order:list, m:int, n:int, k:int, X:np.ndarray, loss_fkt
         # we are in parallel mode
         global stop_var
         evaluate = not bool(stop_var)
-        
+
     ret_consts = []
     ret_losses = []
     ret_ops = []
@@ -1242,7 +1238,7 @@ def evaluate_build_order(order:list, m:int, n:int, k:int, X:np.ndarray, loss_fkt
                     op_spaces.append(un_ops)
                 else:
                     op_spaces.append([op for op in un_ops if op != '='])
-            transl_dict[node] = i            
+            transl_dict[node] = i
 
         if expect_evals is not None:
             v = np.log(expect_evals)
@@ -1261,13 +1257,13 @@ def evaluate_build_order(order:list, m:int, n:int, k:int, X:np.ndarray, loss_fkt
         inv_array = []
         inv_mask = []
         for ops in itertools.product(*op_spaces):
-            
+
             if (start_time is not None) and ((time.time() - start_time) >= max_time):
                 break
             accept = True
             if accept_ratio < 1.0:
                 accept = (np.random.rand() < accept_ratio)
-            
+
             if len(inv_array) > 0:
                 num_ops = np.array([config.NODE_ID[op] for op in ops])
                 is_inv = np.sum((abs(inv_array - num_ops))*inv_mask, axis = 1)
@@ -1300,7 +1296,7 @@ def evaluate_build_order(order:list, m:int, n:int, k:int, X:np.ndarray, loss_fkt
                             else:
                                 inv_array = np.row_stack([inv_array, tmp])
                             inv_mask = (inv_array > 0).astype(int)
-                    
+
                 if (len(ret_losses) == 0):
                     ret_consts.append(consts)
                     ret_losses.append(loss)
@@ -1319,7 +1315,7 @@ def evaluate_build_order(order:list, m:int, n:int, k:int, X:np.ndarray, loss_fkt
                         ret_consts = [consts] + [ret_consts[i] for i in range(len(ret_consts)) if i not in dominated_entries]
                         ret_losses = [loss] + [ret_losses[i] for i in range(len(ret_consts)) if i not in dominated_entries]
                         ret_ops = [ops] + [ret_ops[i] for i in range(len(ret_consts)) if i not in dominated_entries]
-                    
+
                 elif (len(ret_losses) < topk):
                     # append
                     ret_consts.append(consts)
@@ -1334,7 +1330,7 @@ def evaluate_build_order(order:list, m:int, n:int, k:int, X:np.ndarray, loss_fkt
                         ret_consts[max_idx] = consts
                         ret_losses[max_idx] = loss
                         ret_ops[max_idx] = ops
-                        
+
                         max_idx = np.argmax(ret_losses)
                         max_loss = ret_losses[max_idx]
             else:
@@ -1371,7 +1367,7 @@ def sample_graph(m:int, n:int, k:int, n_calc_nodes:int, only_order:bool = False)
 
     for i in outp_nodes:
         predecs[i] = inp_nodes + inter_nodes
-        
+
     for i in inter_nodes:
         predecs[i] = inp_nodes + [j for j in inter_nodes if j < i]
 
@@ -1396,7 +1392,7 @@ def sample_graph(m:int, n:int, k:int, n_calc_nodes:int, only_order:bool = False)
         dep_entries = dep_entries + tmp_deps
         tmp = set([order[i] for i in tmp_deps if order[i] not in inp_nodes and order[i] >= 0])
     dep_entries = sorted(dep_entries)
-        
+
     ren_dict = {}
     order_ID = []
     counter = m + k
@@ -1422,13 +1418,13 @@ def sample_graph(m:int, n:int, k:int, n_calc_nodes:int, only_order:bool = False)
         new_preds = [j if j not in ren_dict else ren_dict[j] for j in preds]
         new_order_ID.append((ren_dict[i], tuple(new_preds)))
     order = tuple(new_order_ID)
-        
+
 
 
 
     if only_order:
         return order
-    
+
     # 2. sample operations on build order
     node_ops = []
     for _, parents in order:
@@ -1455,13 +1451,13 @@ def sample_graph_prior(m:int, n:int, k:int, n_calc_nodes:int, only_order:bool = 
     '''
 
     order = get_build_orders_prior(m = m, n = n, k = k, n_calc_nodes = n_calc_nodes, max_orders = 1, prob_dict=prob_dict)[0]
-    
+
     if only_order:
         return order
-    
+
     bin_ops = [op for op in config.NODE_ARITY if config.NODE_ARITY[op] == 2]
     un_ops = [op for op in config.NODE_ARITY if config.NODE_ARITY[op] == 1]
-    
+
     # 2. sample operations on build order
     node_ops = []
     for _, parents in order:
@@ -1480,7 +1476,7 @@ def sample_graph_prior(m:int, n:int, k:int, n_calc_nodes:int, only_order:bool = 
 
 def init_process(early_stop):
     global stop_var
-    stop_var = early_stop 
+    stop_var = early_stop
 
 def is_pickleable(x:object) -> bool:
     '''
@@ -1577,7 +1573,7 @@ def exhaustive_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_
                 top_consts += consts
                 top_ops += ops
                 top_orders += [order]*len(losses)
-                
+
                 complexities = [len(op) for op in top_ops]
                 pareto_idxs = utils.get_pareto_idxs(top_losses, complexities)
 
@@ -1591,21 +1587,21 @@ def exhaustive_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_
                             take_idxs.append(j)
                 else:
                     take_idxs = pareto_idxs
-                
+
                 top_losses = [top_losses[i] for i in take_idxs]
                 top_consts = [top_consts[i] for i in take_idxs]
                 top_ops = [top_ops[i] for i in take_idxs]
                 top_orders = [top_orders[i] for i in take_idxs]
 
 
-                
+
                 if verbose == 2:
                     pbar.set_postfix({'best_loss' : np.min(top_losses), 'n_pareto' : len(top_losses)})
 
                 early_stop = np.any(np.array(top_losses) < stop_thresh)
             else:
                 for c, loss, op in zip(consts, losses, ops):
-                    
+
                     if loss <= loss_thresh:
                         if unique_loss:
                             valid = loss not in top_losses
@@ -1624,7 +1620,7 @@ def exhaustive_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_
                                 top_losses.append(loss)
                                 top_ops.append(op)
                                 top_orders.append(order)
-                            
+
                             loss_thresh = np.max(top_losses)
                             if verbose == 2:
                                 pbar.set_postfix({'best_loss' : np.min(top_losses)})
@@ -1643,7 +1639,7 @@ def exhaustive_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_
 
         with ctx.Pool(processes=n_processes, initializer=init_process, initargs=(early_stop,)) as pool:
             pool_results = pool.starmap(evaluate_build_order, pbar)
-        
+
         if verbose > 0:
             print('Collecting results')
         for i, (consts, losses, ops) in enumerate(pool_results):
@@ -1655,7 +1651,7 @@ def exhaustive_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_
                 top_consts += consts
                 top_ops += ops
                 top_orders += [orders[i]]*len(losses)
-                
+
                 complexities = [len(op) for op in top_ops]
                 pareto_idxs = utils.get_pareto_idxs(top_losses, complexities)
 
@@ -1669,12 +1665,12 @@ def exhaustive_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_
                             take_idxs.append(j)
                 else:
                     take_idxs = pareto_idxs
-                
+
                 top_losses = [top_losses[j] for j in take_idxs]
                 top_consts = [top_consts[j] for j in take_idxs]
                 top_ops = [top_ops[j] for j in take_idxs]
                 top_orders = [top_orders[j] for j in take_idxs]
-                
+
                 if verbose == 2:
                     pbar.set_postfix({'best_loss' : np.min(top_losses), 'n_pareto' : len(top_losses)})
 
@@ -1699,7 +1695,7 @@ def exhaustive_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_
                                 top_losses.append(loss)
                                 top_ops.append(op)
                                 top_orders.append(orders[i])
-                            
+
                             loss_thresh = np.max(top_losses)
                             if verbose == 2:
                                 pbar.set_postfix({'best_loss' : np.min(top_losses)})
@@ -1802,7 +1798,7 @@ def sample_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_calc
                 if len(dominated_entries) > 0:
                     top_consts = [c] + [top_consts[i] for i in range(len(top_consts)) if i not in dominated_entries]
                     top_losses = [loss] + [top_losses[i] for i in range(len(top_consts)) if i not in dominated_entries]
-                    top_graphs = [cgraph] + [top_graphs[i] for i in range(len(top_consts)) if i not in dominated_entries]           
+                    top_graphs = [cgraph] + [top_graphs[i] for i in range(len(top_consts)) if i not in dominated_entries]
 
                     if verbose == 2:
                         pbar.set_postfix({'best_loss' : np.min(top_losses), 'n_pareto' : len(top_losses)})
@@ -1825,7 +1821,7 @@ def sample_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_calc
                         top_consts.append(c)
                         top_losses.append(loss)
                         top_graphs.append(cgraph.copy())
-                    
+
                     loss_thresh = np.max(top_losses)
                     if verbose == 2:
                         pbar.set_postfix({'best_loss' : np.min(top_losses)})
@@ -1857,7 +1853,7 @@ def sample_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_calc
                 if len(dominated_entries) > 0:
                     top_consts = [c] + [top_consts[j] for j in range(len(top_consts)) if j not in dominated_entries]
                     top_losses = [loss] + [top_losses[j] for j in range(len(top_consts)) if j not in dominated_entries]
-                    top_graphs = [cgraphs[i]] + [top_graphs[j] for j in range(len(top_consts)) if j not in dominated_entries]           
+                    top_graphs = [cgraphs[i]] + [top_graphs[j] for j in range(len(top_consts)) if j not in dominated_entries]
 
                     if verbose == 2:
                         pbar.set_postfix({'best_loss' : np.min(top_losses), 'n_pareto' : len(top_losses)})
@@ -1880,7 +1876,7 @@ def sample_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_calc
                         top_consts.append(c)
                         top_losses.append(loss)
                         top_graphs.append(cgraphs[i].copy())
-                    
+
                     loss_thresh = np.max(top_losses)
                     if verbose == 2:
                         pbar.set_postfix({'best_loss' : np.min(top_losses)})
@@ -1889,7 +1885,7 @@ def sample_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, n_calc
     top_graphs = [top_graphs[i] for i in sort_idx]
     top_consts = [top_consts[i] for i in sort_idx]
     top_losses = [top_losses[i] for i in sort_idx]
-    
+
     ret = {
         'graphs' : top_graphs,
         'consts' : top_consts,
@@ -1989,7 +1985,7 @@ def hierarchical_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, 
                     top_consts += consts
                     top_ops += ops
                     top_orders += [order]*len(losses)
-                    
+
                     complexities = [len(op) for op in top_ops]
                     pareto_idxs = utils.get_pareto_idxs(top_losses, complexities)
 
@@ -2003,18 +1999,18 @@ def hierarchical_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, 
                                 take_idxs.append(j)
                     else:
                         take_idxs = pareto_idxs
-                    
+
                     top_losses = [top_losses[i] for i in take_idxs]
                     top_consts = [top_consts[i] for i in take_idxs]
                     top_ops = [top_ops[i] for i in take_idxs]
                     top_orders = [top_orders[i] for i in take_idxs]
 
 
-                
+
                     if verbose == 2:
                         pbar.set_postfix({'best_loss' : np.min(top_losses), 'n_pareto' : len(top_losses)})
 
-                
+
                 else:
                     for c, loss, op in zip(consts, losses, ops):
                         if loss <= loss_thresh:
@@ -2035,7 +2031,7 @@ def hierarchical_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, 
                                     top_losses.append(loss)
                                     top_ops.append(op)
                                     top_orders.append(order)
-                                
+
                                 loss_thresh = np.max(top_losses)
                                 if verbose == 2:
                                     pbar.set_postfix({'best_loss' : np.min(top_losses)})
@@ -2063,7 +2059,7 @@ def hierarchical_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, 
                     top_consts += consts
                     top_ops += ops
                     top_orders += [orders[i]]*len(losses)
-                    
+
                     complexities = [len(op) for op in top_ops]
                     pareto_idxs = utils.get_pareto_idxs(top_losses, complexities)
 
@@ -2077,12 +2073,12 @@ def hierarchical_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, 
                                 take_idxs.append(j)
                     else:
                         take_idxs = pareto_idxs
-                    
+
                     top_losses = [top_losses[j] for j in take_idxs]
                     top_consts = [top_consts[j] for j in take_idxs]
                     top_ops = [top_ops[j] for j in take_idxs]
                     top_orders = [top_orders[j] for j in take_idxs]
-                    
+
                     if verbose == 2:
                         pbar.set_postfix({'best_loss' : np.min(top_losses), 'n_pareto' : len(top_losses)})
 
@@ -2107,7 +2103,7 @@ def hierarchical_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, 
                                     top_losses.append(loss)
                                     top_ops.append(op)
                                     top_orders.append(orders[i])
-                                
+
                                 loss_thresh = np.max(top_losses)
                                 if verbose == 2:
                                     pbar.set_postfix({'best_loss' : np.min(top_losses)})
@@ -2125,7 +2121,7 @@ def hierarchical_search(X:np.ndarray, n_outps: int, loss_fkt: callable, k: int, 
 
         if top_losses[0] <= stop_thresh or np.any(np.array(top_losses) <= hierarchy_stop_thresh):
             if verbose > 0:
-                print(f'Stopping because early stop criteria has been matched!')
+                print('Stopping because early stop criteria has been matched!')
             break
     ret['graphs'] = top_graphs
     ret['consts'] = top_consts
@@ -2223,7 +2219,7 @@ class DAGRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMixin):
             'topk' : 10,
             'opt_mode' : opt_mode,
             'verbose' : verbose,
-            'max_orders' : self.max_orders, 
+            'max_orders' : self.max_orders,
             'stop_thresh' : self.stop_thresh,
             'max_time' : self.max_time,
             'pareto' : self.pareto
@@ -2252,7 +2248,7 @@ class DAGRegressor(sklearn.base.BaseEstimator, sklearn.base.RegressorMixin):
             if verbose > 0:
                 print(f'Found graph with loss {losses[best_idx]}')
 
-            
+
             self.cgraph = res['graphs'][best_idx]
             self.consts = consts[best_idx]
         return self

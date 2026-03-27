@@ -30,7 +30,7 @@ class BingoConfig:
 
     # IsalSR-specific settings
     canonicalization_timeout: float = 60.0
-    use_pruned: bool = True
+    use_fast_canonical: bool = True
 
     # Trajectory logging
     snapshot_frequency: int = 10  # snapshot every N generations
@@ -38,5 +38,8 @@ class BingoConfig:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> BingoConfig:
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        # Backward compat: accept legacy 'use_pruned' key
+        if "use_pruned" in d and "use_fast_canonical" not in d:
+            d = {**d, "use_fast_canonical": d.pop("use_pruned")}
         filtered = {k: v for k, v in d.items() if k in known_fields}
         return cls(**filtered)
