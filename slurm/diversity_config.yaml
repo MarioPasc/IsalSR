@@ -1,0 +1,43 @@
+# Diversity Conjecture (X.7) Experiment Configuration
+# =====================================================
+# Validates Conjecture X.7: IsalSR canonical deduplication
+# increases population diversity (delta and mean pairwise GED).
+#
+# Each SLURM array task runs ONE (seed, variant) pair.
+# Task layout: tasks 1..N_SEEDS = baseline, N_SEEDS+1..2*N_SEEDS = isalsr.
+
+# Paths (Picasso filesystem layout)
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/diversity
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu
+account: tic_163_uma
+
+# Experiment parameters
+experiment:
+  # Bingo evolution
+  population_size: 200
+  stack_size: 16
+  max_time: 3600.0       # seconds, wall-clock limit per evolutionary run
+  snapshot_gens: "0,5,10,20,30,50,70,100,120,150"
+  trajectory_freq: 1     # lightweight log every generation
+
+  # GED mode
+  ged_mode: exact         # "bp" for fast bipartite, "exact" for NetworkX A*
+  ged_timeout: 10.0       # seconds per pair for exact GED
+
+  # Seeds and array
+  n_seeds: 20             # total seeds (array size = 2 * n_seeds = 40 tasks)
+
+  # SLURM resources per task
+  time_limit: "08:00:00"  # 8 hours per (seed, variant) task
+  cpus: 8                 # CPUs for parallel GED computation
+  mem_gb: 16              # RAM per task
+
+  # Analysis job
+  analysis:
+    time_limit: "01:00:00"
+    cpus: 4
+    mem_gb: 8

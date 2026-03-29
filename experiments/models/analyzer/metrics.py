@@ -59,6 +59,23 @@ def mse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.mean((y_true - y_pred) ** 2))
 
 
+def _strip_symbol_assumptions(expr: Any) -> Any:
+    """Replace all symbols with bare versions (no assumptions).
+
+    UDFS creates symbols with ``real=True, positive=True`` while ground truth
+    uses bare symbols. SymPy treats these as distinct, so
+    ``simplify(x_real - x_bare)`` does not reduce to zero. Stripping
+    assumptions before comparison fixes this.
+    """
+    import sympy
+
+    subs = {}
+    for sym in expr.free_symbols:
+        if sym.assumptions0:  # has non-default assumptions
+            subs[sym] = sympy.Symbol(sym.name)
+    return expr.subs(subs) if subs else expr
+
+
 def solution_recovered(
     expr_found: Any,
     expr_true: Any,
@@ -67,6 +84,8 @@ def solution_recovered(
     """Check if the found expression exactly matches the ground truth.
 
     Uses SymPy simplification: simplify(expr_found - expr_true) == 0.
+    Symbol assumptions (real, positive, etc.) are stripped before comparison
+    to avoid false negatives from assumption mismatches between SR methods.
 
     Args:
         expr_found: Found SymPy expression.
@@ -79,7 +98,9 @@ def solution_recovered(
     try:
         import sympy
 
-        diff = sympy.simplify(expr_found - expr_true)
+        found = _strip_symbol_assumptions(expr_found)
+        true = _strip_symbol_assumptions(expr_true)
+        diff = sympy.simplify(found - true)
         return diff == 0
     except Exception:  # noqa: BLE001
         log.debug("Solution recovery check failed", exc_info=True)

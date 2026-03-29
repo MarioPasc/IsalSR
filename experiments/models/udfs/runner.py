@@ -187,6 +187,12 @@ class UDFSBaselineRunner(ModelRunner):
                 best_loss = float(min(losses))
             n_top = len(regressor.results.get("graphs", []))
 
+        # Use tracker.n_total (all evaluate_cgraph calls) for consistency
+        # with the IsalSR variant, which also counts all calls via its
+        # deduplicator wrapper. regressor.total_evals only counts post-filter
+        # valid graphs (loss < 1000, finite), which is a ~30x undercount.
+        actual_total = tracker.n_total if tracker.n_total > 0 else total_evals
+
         return UDFSRawResult(
             wall_clock_s=wall_clock,
             seed=seed,
@@ -197,8 +203,8 @@ class UDFSBaselineRunner(ModelRunner):
             best_loss=best_loss,
             n_top_graphs=n_top,
             trajectory_snapshots=tracker.snapshots,
-            n_total_dags=total_evals,
-            n_unique_canonical=total_evals,  # baseline: all unique (no dedup)
+            n_total_dags=actual_total,
+            n_unique_canonical=actual_total,  # baseline: all unique (no dedup)
             n_skipped=0,
             canonicalization_time_s=0.0,
             search_only_time_s=wall_clock,
