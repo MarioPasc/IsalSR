@@ -53,13 +53,14 @@ MAX_TIME=$(     echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.s
 SNAPSHOT_GENS=$(echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('snapshot_gens', '0,5,10,20,30,50,70,100,120,150'))")
 TRAJ_FREQ=$(    echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('trajectory_freq', 1))")
 GED_MODE=$(     echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('ged_mode', 'exact'))")
-GED_TIMEOUT=$(  echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('ged_timeout', 10.0))")
+GED_TIMEOUT=$(  echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('ged_timeout', 5.0))")
+GED_SUBSAMPLE=$(echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('ged_subsample', 2000))")
 
 TASK_ID="${SLURM_ARRAY_TASK_ID:-1}"
 N_WORKERS="${SLURM_CPUS_PER_TASK:-8}"
 
 echo "Config: N=$POP_SIZE, stack=$STACK_SIZE, max_time=$MAX_TIME"
-echo "        GED mode=$GED_MODE, timeout=${GED_TIMEOUT}s/pair, workers=$N_WORKERS"
+echo "        GED mode=$GED_MODE, timeout=${GED_TIMEOUT}s/pair, subsample=$GED_SUBSAMPLE, workers=$N_WORKERS"
 echo "        snapshots=$SNAPSHOT_GENS, trajectory_freq=$TRAJ_FREQ"
 echo "        seeds=$N_SEEDS, task_id=$TASK_ID"
 echo "Output: $RESULTS_DIR"
@@ -75,6 +76,7 @@ $PYTHON -m experiments.scripts.diversity.diversity_experiment \
     --trajectory-freq "$TRAJ_FREQ" \
     --ged-mode "$GED_MODE" \
     --ged-timeout "$GED_TIMEOUT" \
+    --ged-subsample "$GED_SUBSAMPLE" \
     --n-workers "$N_WORKERS" \
     --output-dir "$RESULTS_DIR"
 

@@ -26,7 +26,8 @@ experiment:
 
   # GED mode
   ged_mode: exact         # "bp" for fast bipartite, "exact" for NetworkX A*
-  ged_timeout: 10.0       # seconds per pair for exact GED
+  ged_timeout: 5.0        # seconds per pair for exact GED
+  ged_subsample: 2000     # random pairs for exact GED (all C(200,2)=19900 if 0)
 
   # Seeds and array
   n_seeds: 20             # total seeds (array size = 2 * n_seeds = 40 tasks)

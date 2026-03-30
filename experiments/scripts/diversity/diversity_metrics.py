@@ -348,30 +348,45 @@ def _compute_exact_ged_pair(args):
     return i, j, d, exact
 
 
-def compute_exact_ged_matrix(
-    dags: list[LabeledDAG | None],
-    bp_fallback: np.ndarray | None = None,
-    timeout_per_pair: float = 10.0,
-    n_workers: int = 1,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Compute NxN GED matrix using NetworkX exact solver with timeout.
+@dataclass
+class ExactGEDResult:
+    """Summary of subsampled exact GED computation."""
 
-    For pairs that exceed the timeout, the best upper bound from
-    optimize_graph_edit_distance is used. If even that fails, falls
-    back to bipartite GED from bp_fallback matrix.
+    d_bar: float  # mean pairwise GED over sampled pairs
+    diameter: float  # max GED over sampled pairs
+    n_exact: int  # pairs where optimal was proven
+    n_sampled: int  # total pairs sampled
+    values: np.ndarray  # (n_sampled,) raw GED values
+    pair_indices: np.ndarray  # (n_sampled, 2) (i, j) indices
+    exact_flags: np.ndarray  # (n_sampled,) bool: proven optimal?
+
+
+def compute_exact_ged_subsample(
+    dags: list[LabeledDAG | None],
+    n_subsample: int = 2000,
+    timeout_per_pair: float = 5.0,
+    n_workers: int = 1,
+    rng_seed: int = 42,
+) -> ExactGEDResult:
+    """Compute exact GED on a random subsample of pairs.
+
+    Instead of all C(N,2) pairs (prohibitively expensive), randomly
+    samples n_subsample pairs. Mean estimate has SE proportional to
+    1/sqrt(n_subsample), which at 2000 pairs is only ~3x wider than
+    the full C(200,2)=19,900 computation.
 
     Args:
-        dags: N LabeledDAGs (None entries get inf distance).
-        bp_fallback: Optional (N, N) bipartite GED matrix for fallback.
-        timeout_per_pair: Seconds budget per pair.
+        dags: N LabeledDAGs (None entries skipped).
+        n_subsample: Number of random pairs to sample.
+        timeout_per_pair: Seconds per pair for A* solver.
         n_workers: Parallel workers.
+        rng_seed: RNG seed for pair selection reproducibility.
 
     Returns:
-        (ged_matrix (N,N) float32, exact_mask (N,N) bool — True if optimal proven)
+        ExactGEDResult with summary stats and raw values.
     """
     n = len(dags)
-    mat = np.zeros((n, n), dtype=np.float32)
-    exact_mask = np.zeros((n, n), dtype=bool)
+    rng = np.random.RandomState(rng_seed)
 
     # Pre-convert to NetworkX
     nx_graphs = []
@@ -381,32 +396,58 @@ def compute_exact_ged_matrix(
         else:
             nx_graphs.append(None)
 
-    pairs = []
-    for i, j in combinations(range(n), 2):
-        if nx_graphs[i] is not None and nx_graphs[j] is not None:
-            pairs.append((i, j, nx_graphs[i], nx_graphs[j], timeout_per_pair))
-        else:
-            # One or both failed conversion — use fallback or large value
-            fb = bp_fallback[i, j] if bp_fallback is not None else 100.0
-            mat[i, j] = fb
-            mat[j, i] = fb
+    # Generate all valid pair indices, then subsample
+    valid_pairs = [
+        (i, j)
+        for i, j in combinations(range(n), 2)
+        if nx_graphs[i] is not None and nx_graphs[j] is not None
+    ]
 
-    if n_workers <= 1 or len(pairs) == 0:
-        for i, j, g1, g2, to in pairs:
-            d, exact = _exact_ged_with_timeout(g1, g2, to)
-            mat[i, j] = d
-            mat[j, i] = d
-            exact_mask[i, j] = exact
-            exact_mask[j, i] = exact
+    if len(valid_pairs) == 0:
+        return ExactGEDResult(
+            d_bar=0.0,
+            diameter=0.0,
+            n_exact=0,
+            n_sampled=0,
+            values=np.array([]),
+            pair_indices=np.array([]).reshape(0, 2),
+            exact_flags=np.array([], dtype=bool),
+        )
+
+    n_sample = min(n_subsample, len(valid_pairs))
+    sample_idx = rng.choice(len(valid_pairs), size=n_sample, replace=False)
+    sampled_pairs = [valid_pairs[k] for k in sample_idx]
+
+    # Build work items
+    work = [(i, j, nx_graphs[i], nx_graphs[j], timeout_per_pair) for i, j in sampled_pairs]
+
+    # Compute GED
+    results = []
+    if n_workers <= 1:
+        for item in work:
+            results.append(_compute_exact_ged_pair(item))
     else:
         with ProcessPoolExecutor(max_workers=n_workers) as pool:
-            for i, j, d, exact in pool.map(_compute_exact_ged_pair, pairs, chunksize=16):
-                mat[i, j] = d
-                mat[j, i] = d
-                exact_mask[i, j] = exact
-                exact_mask[j, i] = exact
+            results = list(pool.map(_compute_exact_ged_pair, work, chunksize=32))
 
-    return mat, exact_mask
+    # Unpack
+    values = np.array([d for _, _, d, _ in results], dtype=np.float32)
+    exact_flags = np.array([ex for _, _, _, ex in results], dtype=bool)
+    pair_indices = np.array([(i, j) for i, j, _, _ in results], dtype=np.int32)
+
+    d_bar = float(np.mean(values)) if len(values) > 0 else 0.0
+    diameter = float(np.max(values)) if len(values) > 0 else 0.0
+    n_exact = int(np.sum(exact_flags))
+
+    return ExactGEDResult(
+        d_bar=d_bar,
+        diameter=diameter,
+        n_exact=n_exact,
+        n_sampled=n_sample,
+        values=values,
+        pair_indices=pair_indices,
+        exact_flags=exact_flags,
+    )
 
 
 # ======================================================================
@@ -590,7 +631,8 @@ def capture_population_snapshot(
     y_train: np.ndarray,
     n_workers: int = 1,
     ged_mode: str = "bp",
-    ged_timeout: float = 10.0,
+    ged_timeout: float = 5.0,
+    ged_subsample: int = 2000,
 ) -> tuple[PopulationSnapshot, DiversitySummary]:
     """Capture full population snapshot with all diversity metrics.
 
@@ -602,8 +644,9 @@ def capture_population_snapshot(
         x_train: Training inputs (n_samples, n_features).
         y_train: Training targets (n_samples,).
         n_workers: Workers for parallel GED computation.
-        ged_mode: "bp" (bipartite only), "exact" (exact + bipartite fallback).
+        ged_mode: "bp" (bipartite only), "exact" (subsampled exact + bipartite).
         ged_timeout: Per-pair timeout for exact GED (seconds).
+        ged_subsample: Number of random pairs for exact GED subsampling.
 
     Returns:
         (PopulationSnapshot, DiversitySummary) tuple.
@@ -625,10 +668,10 @@ def capture_population_snapshot(
     # 3. Effective diversity ratio
     delta, n_unique = compute_delta(canonical_strings)
 
-    # 4. Levenshtein distance matrix
+    # 4. Levenshtein distance matrix (full NxN, fast: ~200ms for N=200)
     lev_mat = compute_levenshtein_matrix(canonical_strings)
 
-    # 5. Bipartite GED matrix (always computed — fast, used as fallback for exact)
+    # 5. Bipartite GED matrix (full NxN, fast: ~1s with 8 workers for N=200)
     graph_data = []
     for d in dags:
         if d is not None:
@@ -637,18 +680,21 @@ def capture_population_snapshot(
             graph_data.append({"n": 0, "labels": [], "in_deg": [], "out_deg": [], "edges": set()})
     bp_ged_mat = compute_bipartite_ged_matrix(graph_data, n_workers=n_workers)
 
-    # 5b. Exact GED (if requested)
-    exact_ged_mat = None
-    exact_ged_mask = None
+    # 5b. Exact GED on SUBSAMPLED pairs (if requested)
+    exact_result: ExactGEDResult | None = None
     if ged_mode == "exact":
         log.info(
-            "  Computing exact GED (timeout=%.1fs/pair, workers=%d)...", ged_timeout, n_workers
+            "  Computing exact GED (subsample=%d, timeout=%.1fs/pair, workers=%d)...",
+            ged_subsample,
+            ged_timeout,
+            n_workers,
         )
-        exact_ged_mat, exact_ged_mask = compute_exact_ged_matrix(
+        exact_result = compute_exact_ged_subsample(
             dags,
-            bp_fallback=bp_ged_mat,
+            n_subsample=ged_subsample,
             timeout_per_pair=ged_timeout,
             n_workers=n_workers,
+            rng_seed=seed * 1000 + generation,
         )
 
     # 6. WL features
@@ -686,12 +732,12 @@ def capture_population_snapshot(
     d_bar_exact = -1.0
     diameter_exact = -1.0
     n_exact_pairs = 0
-    if exact_ged_mat is not None:
-        upper_tri_exact = exact_ged_mat[np.triu_indices(n, k=1)]
-        d_bar_exact = float(np.mean(upper_tri_exact)) if len(upper_tri_exact) > 0 else 0.0
-        diameter_exact = float(np.max(upper_tri_exact)) if len(upper_tri_exact) > 0 else 0.0
-        if exact_ged_mask is not None:
-            n_exact_pairs = int(np.sum(exact_ged_mask[np.triu_indices(n, k=1)]))
+    n_total_sampled = 0
+    if exact_result is not None:
+        d_bar_exact = exact_result.d_bar
+        diameter_exact = exact_result.diameter
+        n_exact_pairs = exact_result.n_exact
+        n_total_sampled = exact_result.n_sampled
 
     snapshot = PopulationSnapshot(
         generation=generation,
@@ -702,13 +748,15 @@ def capture_population_snapshot(
         wl_features=wl_features,
         lev_distances=lev_mat,
         bp_ged_distances=bp_ged_mat,
-        exact_ged_distances=exact_ged_mat,
-        exact_ged_mask=exact_ged_mask,
+        exact_ged_distances=None,  # full NxN not stored for subsampled
+        exact_ged_mask=None,
         pca_coords=pca_coords,
         pca_explained_variance=pca_var,
         command_arrays=cmd_arrays,
         constants=const_arrays,
     )
+    # Attach subsampled exact GED result for serialization
+    snapshot._exact_result = exact_result  # type: ignore[attr-defined]
 
     summary = DiversitySummary(
         generation=generation,
@@ -727,7 +775,7 @@ def capture_population_snapshot(
         pca_var1=pca_var[0],
         pca_var2=pca_var[1],
         n_exact_pairs=n_exact_pairs,
-        n_total_pairs=n_pairs,
+        n_total_pairs=n_total_sampled,
     )
 
     return snapshot, summary

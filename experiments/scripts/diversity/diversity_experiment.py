@@ -155,7 +155,8 @@ def run_single_variant(
     snapshot_gens: list[int],
     n_workers: int,
     ged_mode: str = "bp",
-    ged_timeout: float = 10.0,
+    ged_timeout: float = 5.0,
+    ged_subsample: int = 2000,
     max_gen: int = 150,
     trajectory_freq: int = 1,
 ) -> tuple[list[tuple[PopulationSnapshot, DiversitySummary]], list[dict]]:
@@ -227,6 +228,7 @@ def run_single_variant(
                 n_workers,
                 ged_mode=ged_mode,
                 ged_timeout=ged_timeout,
+                ged_subsample=ged_subsample,
             )
             dt = time.perf_counter() - t0
             results.append((snap, summary))
@@ -320,10 +322,12 @@ def save_snapshot(snap: PopulationSnapshot, output_dir: Path) -> None:
         "pca_explained_variance": np.array(snap.pca_explained_variance),
     }
 
-    if snap.exact_ged_distances is not None:
-        save_dict["exact_ged_distances"] = snap.exact_ged_distances
-    if snap.exact_ged_mask is not None:
-        save_dict["exact_ged_mask"] = snap.exact_ged_mask
+    # Save subsampled exact GED data (values + pair indices + exact flags)
+    exact_result = getattr(snap, "_exact_result", None)
+    if exact_result is not None and exact_result.n_sampled > 0:
+        save_dict["exact_ged_values"] = exact_result.values
+        save_dict["exact_ged_pairs"] = exact_result.pair_indices
+        save_dict["exact_ged_flags"] = exact_result.exact_flags
 
     np.savez_compressed(path, **save_dict)
     log.debug("  Saved snapshot: %s", path)
@@ -422,6 +426,7 @@ def save_config(args: argparse.Namespace, cfg: BingoConfig, output_dir: Path) ->
         "n_workers": args.n_workers,
         "ged_mode": args.ged_mode,
         "ged_timeout": args.ged_timeout,
+        "ged_subsample": args.ged_subsample,
         "trajectory_freq": args.trajectory_freq,
         "benchmark": "Nguyen-1",
         "formula": "x^3 + x^2 + x",
@@ -505,8 +510,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ged-timeout",
         type=float,
-        default=10.0,
+        default=5.0,
         help="Per-pair timeout for exact GED (seconds)",
+    )
+    parser.add_argument(
+        "--ged-subsample",
+        type=int,
+        default=2000,
+        help="Number of random pairs for exact GED subsampling",
     )
 
     # Per-generation trajectory logging
@@ -588,7 +599,12 @@ def main():
     log.info("Population size: %d", cfg.population_size)
     log.info("Stack size: %d", cfg.stack_size)
     log.info("Snapshot generations: %s", snapshot_gens)
-    log.info("GED mode: %s (timeout=%.1fs)", args.ged_mode, args.ged_timeout)
+    log.info(
+        "GED mode: %s (timeout=%.1fs, subsample=%d)",
+        args.ged_mode,
+        args.ged_timeout,
+        args.ged_subsample,
+    )
     log.info("Trajectory freq: every %d generations", args.trajectory_freq)
     log.info("Run pairs: %d (seed, variant) combinations", len(run_pairs))
     log.info("Workers: %d", n_workers)
@@ -637,6 +653,7 @@ def main():
             n_workers=n_workers,
             ged_mode=args.ged_mode,
             ged_timeout=args.ged_timeout,
+            ged_subsample=args.ged_subsample,
             max_gen=max_gen,
             trajectory_freq=args.trajectory_freq,
         )
