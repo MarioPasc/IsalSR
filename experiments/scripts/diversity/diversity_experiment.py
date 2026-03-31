@@ -58,7 +58,23 @@ log = logging.getLogger(__name__)
 
 RESULTS_DIR = Path("/media/mpascual/Sandisk2TB/research/isalsr/results/model_validation/diversity")
 
-DEFAULT_SNAPSHOT_GENS = [0, 5, 10, 20, 30, 50, 70, 100, 120, 150]
+DEFAULT_SNAPSHOT_GENS = [0, 10, 25, 50, 100, 150, 200, 300, 400, 500]
+
+# Available benchmarks
+BENCHMARKS = {
+    "Nguyen-1": {
+        "formula": "x^3 + x^2 + x",
+        "n_variables": 1,
+    },
+    "I.10.7": {
+        "formula": "m0 / sqrt(1 - v^2/c^2)",
+        "n_variables": 3,
+    },
+    "I.48.20": {
+        "formula": "m*c^2 / sqrt(1-(v/c)^2)",
+        "n_variables": 3,
+    },
+}
 
 
 # ======================================================================
@@ -66,12 +82,22 @@ DEFAULT_SNAPSHOT_GENS = [0, 5, 10, 20, 30, 50, 70, 100, 120, 150]
 # ======================================================================
 
 
-def make_nguyen1_data(n_samples: int = 20):
-    """Generate Nguyen-1 benchmark: y = x^3 + x^2 + x, x in [-1, 1]."""
-    rng = np.random.RandomState(42)
-    x = rng.uniform(-1, 1, (n_samples, 1))
-    y = x[:, 0] ** 3 + x[:, 0] ** 2 + x[:, 0]
-    return x, y
+def make_benchmark_data(name: str):
+    """Generate train data for a benchmark problem.
+
+    Returns (x_train, y_train).
+    """
+    if name == "Nguyen-1":
+        rng = np.random.RandomState(42)
+        x = rng.uniform(-1, 1, (20, 1))
+        y = x[:, 0] ** 3 + x[:, 0] ** 2 + x[:, 0]
+        return x, y
+    else:
+        from benchmarks.datasets.feynman import generate_data, get_benchmark
+
+        bench = get_benchmark(name)
+        x_train, y_train, _, _ = generate_data(bench, n_samples=200)
+        return x_train, y_train
 
 
 # ======================================================================
@@ -154,10 +180,7 @@ def run_single_variant(
     y_train: np.ndarray,
     snapshot_gens: list[int],
     n_workers: int,
-    ged_mode: str = "bp",
-    ged_timeout: float = 5.0,
-    ged_subsample: int = 2000,
-    max_gen: int = 150,
+    max_gen: int = 500,
     trajectory_freq: int = 1,
 ) -> tuple[list[tuple[PopulationSnapshot, DiversitySummary]], list[dict]]:
     """Run one (variant, seed) and capture population snapshots.
@@ -226,19 +249,12 @@ def run_single_variant(
                 x_train,
                 y_train,
                 n_workers,
-                ged_mode=ged_mode,
-                ged_timeout=ged_timeout,
-                ged_subsample=ged_subsample,
             )
             dt = time.perf_counter() - t0
             results.append((snap, summary))
 
-            exact_info = ""
-            if summary.d_bar_exact >= 0:
-                exact_info = f" d_exact={summary.d_bar_exact:.1f} ({summary.n_exact_pairs}/{summary.n_total_pairs} exact)"
-
             log.info(
-                "  [%s] seed=%d gen=%3d | delta=%.3f d_lev=%.1f d_bp=%.1f%s "
+                "  [%s] seed=%d gen=%3d | delta=%.3f d_lev=%.1f d_bp=%.1f "
                 "R2=%.4f unique=%d/%d (%.1fs)",
                 variant,
                 seed,
@@ -246,7 +262,6 @@ def run_single_variant(
                 summary.delta,
                 summary.d_bar_lev,
                 summary.d_bar_bp,
-                exact_info,
                 summary.best_r2,
                 summary.n_unique_classes,
                 cfg.population_size,
@@ -412,6 +427,7 @@ def save_trajectory_csv(trajectory: list[dict], output_dir: Path, seed: int, var
 
 def save_config(args: argparse.Namespace, cfg: BingoConfig, output_dir: Path) -> None:
     """Save experiment configuration for reproducibility."""
+    bench_info = BENCHMARKS.get(args.benchmark, {})
     config = {
         "population_size": cfg.population_size,
         "stack_size": cfg.stack_size,
@@ -424,14 +440,10 @@ def save_config(args: argparse.Namespace, cfg: BingoConfig, output_dir: Path) ->
         "snapshot_gens": args.snapshot_gens,
         "seeds": args.seeds,
         "n_workers": args.n_workers,
-        "ged_mode": args.ged_mode,
-        "ged_timeout": args.ged_timeout,
-        "ged_subsample": args.ged_subsample,
         "trajectory_freq": args.trajectory_freq,
-        "benchmark": "Nguyen-1",
-        "formula": "x^3 + x^2 + x",
-        "n_variables": 1,
-        "n_train_samples": 20,
+        "benchmark": args.benchmark,
+        "formula": bench_info.get("formula", ""),
+        "n_variables": bench_info.get("n_variables", 0),
         "experiment": "diversity_conjecture_x7",
     }
     path = output_dir / "config.json"
@@ -480,8 +492,15 @@ def parse_args() -> argparse.Namespace:
         description="Diversity Conjecture X.7: Bingo baseline vs IsalSR"
     )
     parser.add_argument("--pop-size", type=int, default=200)
-    parser.add_argument("--stack-size", type=int, default=16)
-    parser.add_argument("--seeds", type=int, default=10)
+    parser.add_argument("--stack-size", type=int, default=32)
+    parser.add_argument("--seeds", type=int, default=20)
+    parser.add_argument(
+        "--benchmark",
+        type=str,
+        default="I.48.20",
+        choices=list(BENCHMARKS.keys()),
+        help="Benchmark problem to use",
+    )
     parser.add_argument(
         "--snapshot-gens",
         type=str,
@@ -497,28 +516,7 @@ def parse_args() -> argparse.Namespace:
         choices=["both", "baseline", "isalsr"],
         default="both",
     )
-    parser.add_argument("--max-time", type=float, default=600.0, help="Max wall-clock per run (s)")
-
-    # GED mode
-    parser.add_argument(
-        "--ged-mode",
-        type=str,
-        choices=["bp", "exact"],
-        default="bp",
-        help="GED computation: bp=bipartite approx (fast), exact=NetworkX A* with timeout",
-    )
-    parser.add_argument(
-        "--ged-timeout",
-        type=float,
-        default=5.0,
-        help="Per-pair timeout for exact GED (seconds)",
-    )
-    parser.add_argument(
-        "--ged-subsample",
-        type=int,
-        default=2000,
-        help="Number of random pairs for exact GED subsampling",
-    )
+    parser.add_argument("--max-time", type=float, default=3600.0, help="Max wall-clock per run (s)")
 
     # Per-generation trajectory logging
     parser.add_argument(
@@ -596,15 +594,13 @@ def main():
     log.info("=" * 72)
     log.info("Diversity Conjecture X.7 Experiment")
     log.info("=" * 72)
+    log.info(
+        "Benchmark: %s (%s)", args.benchmark, BENCHMARKS.get(args.benchmark, {}).get("formula", "")
+    )
     log.info("Population size: %d", cfg.population_size)
     log.info("Stack size: %d", cfg.stack_size)
     log.info("Snapshot generations: %s", snapshot_gens)
-    log.info(
-        "GED mode: %s (timeout=%.1fs, subsample=%d)",
-        args.ged_mode,
-        args.ged_timeout,
-        args.ged_subsample,
-    )
+    log.info("GED mode: bipartite (Riesen & Bunke 2009)")
     log.info("Trajectory freq: every %d generations", args.trajectory_freq)
     log.info("Run pairs: %d (seed, variant) combinations", len(run_pairs))
     log.info("Workers: %d", n_workers)
@@ -627,7 +623,7 @@ def main():
     save_config(args, cfg, output_dir)
 
     # Generate training data (fixed seed=42 for reproducibility)
-    x_train, y_train = make_nguyen1_data(n_samples=20)
+    x_train, y_train = make_benchmark_data(args.benchmark)
     log.info("Training data: x_train=%s, y_train=%s", x_train.shape, y_train.shape)
 
     total_t0 = time.perf_counter()
@@ -651,9 +647,6 @@ def main():
             y_train=y_train,
             snapshot_gens=snapshot_gens,
             n_workers=n_workers,
-            ged_mode=args.ged_mode,
-            ged_timeout=args.ged_timeout,
-            ged_subsample=args.ged_subsample,
             max_gen=max_gen,
             trajectory_freq=args.trajectory_freq,
         )

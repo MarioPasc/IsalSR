@@ -5,6 +5,8 @@
 # Each array task runs ONE (seed, variant) pair.
 # Task layout: tasks 1..N_SEEDS = baseline, N_SEEDS+1..2*N_SEEDS = isalsr.
 #
+# GED: Bipartite approximation only (no exact GED). ~1s per snapshot.
+#
 # Environment variables (exported by diversity_launch.sh):
 #   ISALSR_REPO_DIR          - Path to IsalSR repository
 #   DIVERSITY_N_SEEDS        - Number of seeds (for task ID decoding)
@@ -47,20 +49,18 @@ RESULTS_DIR="${DIVERSITY_RESULTS_DIR:-$($PYTHON -c "import yaml; print(yaml.safe
 # Read experiment parameters from config
 EXP=$($PYTHON -c "import yaml,json; json.dump(yaml.safe_load(open('${CONFIG}'))['experiment'], __import__('sys').stdout)")
 
-POP_SIZE=$(     echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('population_size', 200))")
-STACK_SIZE=$(   echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('stack_size', 16))")
-MAX_TIME=$(     echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('max_time', 3600.0))")
-SNAPSHOT_GENS=$(echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('snapshot_gens', '0,5,10,20,30,50,70,100,120,150'))")
-TRAJ_FREQ=$(    echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('trajectory_freq', 1))")
-GED_MODE=$(     echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('ged_mode', 'exact'))")
-GED_TIMEOUT=$(  echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('ged_timeout', 5.0))")
-GED_SUBSAMPLE=$(echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('ged_subsample', 2000))")
+BENCHMARK=$(  echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('benchmark', 'I.48.20'))")
+POP_SIZE=$(   echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('population_size', 200))")
+STACK_SIZE=$( echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('stack_size', 32))")
+MAX_TIME=$(   echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('max_time', 7200.0))")
+SNAPSHOT_GENS=$(echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('snapshot_gens', '0,10,25,50,100,150,200,300,400,500'))")
+TRAJ_FREQ=$(  echo "$EXP" | $PYTHON -c "import json,sys; print(json.load(sys.stdin).get('trajectory_freq', 1))")
 
 TASK_ID="${SLURM_ARRAY_TASK_ID:-1}"
 N_WORKERS="${SLURM_CPUS_PER_TASK:-8}"
 
-echo "Config: N=$POP_SIZE, stack=$STACK_SIZE, max_time=$MAX_TIME"
-echo "        GED mode=$GED_MODE, timeout=${GED_TIMEOUT}s/pair, subsample=$GED_SUBSAMPLE, workers=$N_WORKERS"
+echo "Config: benchmark=$BENCHMARK, N=$POP_SIZE, stack=$STACK_SIZE, max_time=$MAX_TIME"
+echo "        GED=bipartite (BP), workers=$N_WORKERS"
 echo "        snapshots=$SNAPSHOT_GENS, trajectory_freq=$TRAJ_FREQ"
 echo "        seeds=$N_SEEDS, task_id=$TASK_ID"
 echo "Output: $RESULTS_DIR"
@@ -69,14 +69,12 @@ echo ""
 $PYTHON -m experiments.scripts.diversity.diversity_experiment \
     --task-id "$TASK_ID" \
     --seeds "$N_SEEDS" \
+    --benchmark "$BENCHMARK" \
     --pop-size "$POP_SIZE" \
     --stack-size "$STACK_SIZE" \
     --max-time "$MAX_TIME" \
     --snapshot-gens "$SNAPSHOT_GENS" \
     --trajectory-freq "$TRAJ_FREQ" \
-    --ged-mode "$GED_MODE" \
-    --ged-timeout "$GED_TIMEOUT" \
-    --ged-subsample "$GED_SUBSAMPLE" \
     --n-workers "$N_WORKERS" \
     --output-dir "$RESULTS_DIR"
 
