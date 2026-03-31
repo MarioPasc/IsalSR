@@ -74,7 +74,7 @@ experiments:
     n_problems: 12
     time_limit: "17:00:00"    # 12h evolution + 5h canon overhead buffer
     cpus: 1
-    mem_gb: 16
+    mem_gb: 32              # 16→32: OOM at gen ~5000-6500 on hard problems (Nguyen-7/12)
 
   # =========================================================
   # UDFS on Feynman (10 problems x 30 seeds = 300 tasks/group)
@@ -128,7 +128,7 @@ experiments:
     n_problems: 10
     time_limit: "17:00:00"    # 12h evolution + 5h canon overhead buffer
     cpus: 1
-    mem_gb: 16
+    mem_gb: 32              # 16→32: OOM at gen ~5000-6500 on hard problems (I.10.7, I.48.20)
 
   # =========================================================
   # Atlas-enabled IsalSR (uses precomputed canonical lookup)
@@ -144,7 +144,7 @@ experiments:
     n_problems: 12
     time_limit: "15:00:00"
     cpus: 1
-    mem_gb: 16
+    mem_gb: 32
 
   bingo_feynman_isalsr_atlas:
     enabled: true
@@ -157,7 +157,7 @@ experiments:
     n_problems: 10
     time_limit: "15:00:00"
     cpus: 1
-    mem_gb: 16
+    mem_gb: 32
 
   udfs_nguyen_isalsr_atlas:
     enabled: true
