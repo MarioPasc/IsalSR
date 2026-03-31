@@ -51,6 +51,7 @@ experiments = [
     "scikit-posthocs>=0.9",
     "seaborn>=0.12",
     "torch",
+    "critdd @ git+https://github.com/mirkobunse/critdd",
 ]
 all = ["isalsr[networkx,sympy,eval,search,viz,bench,dev,experiments]"]
 
