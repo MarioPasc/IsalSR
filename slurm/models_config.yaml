@@ -26,7 +26,7 @@ experiments:
   # UDFS on Nguyen (12 problems x 30 seeds = 360 tasks/group)
   # =========================================================
   udfs_nguyen_baseline:
-    enabled: true
+    enabled: false
     method: udfs
     benchmark: nguyen
     variant: baseline
@@ -38,7 +38,7 @@ experiments:
     mem_gb: 8
 
   udfs_nguyen_isalsr:
-    enabled: true
+    enabled: false
     method: udfs
     benchmark: nguyen
     variant: isalsr
@@ -80,7 +80,7 @@ experiments:
   # UDFS on Feynman (10 problems x 30 seeds = 300 tasks/group)
   # =========================================================
   udfs_feynman_baseline:
-    enabled: true
+    enabled: false
     method: udfs
     benchmark: feynman
     variant: baseline
@@ -92,7 +92,7 @@ experiments:
     mem_gb: 8
 
   udfs_feynman_isalsr:
-    enabled: true
+    enabled: false
     method: udfs
     benchmark: feynman
     variant: isalsr
@@ -134,7 +134,7 @@ experiments:
   # Atlas-enabled IsalSR (uses precomputed canonical lookup)
   # =========================================================
   bingo_nguyen_isalsr_atlas:
-    enabled: true
+    enabled: false
     method: bingo
     benchmark: nguyen
     variant: isalsr
@@ -147,7 +147,7 @@ experiments:
     mem_gb: 32
 
   bingo_feynman_isalsr_atlas:
-    enabled: true
+    enabled: false
     method: bingo
     benchmark: feynman
     variant: isalsr
@@ -160,7 +160,7 @@ experiments:
     mem_gb: 32
 
   udfs_nguyen_isalsr_atlas:
-    enabled: true
+    enabled: false
     method: udfs
     benchmark: nguyen
     variant: isalsr
@@ -173,7 +173,7 @@ experiments:
     mem_gb: 8
 
   udfs_feynman_isalsr_atlas:
-    enabled: true
+    enabled: false
     method: udfs
     benchmark: feynman
     variant: isalsr
@@ -189,7 +189,7 @@ experiments:
   # Debug: sequential test of all (method, benchmark) combos
   # =========================================================
   models_debug:
-    enabled: true
+    enabled: false
     time_limit: "04:00:00"
     cpus: 1
     mem_gb: 8
