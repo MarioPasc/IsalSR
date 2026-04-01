@@ -117,7 +117,8 @@ select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM"]
 # E402: imports after pytest.importorskip() -- standard pattern for optional deps
 "tests/integration/*.py" = ["E402"]
 # N802: test names may use uppercase instruction names (V, C, N, P, W)
-"tests/**/*.py" = ["N802"]
+# ANN: test functions/fixtures don't require type annotations
+"tests/**/*.py" = ["N802", "ANN"]
 # ANN: benchmark/experiment scripts use dynamic typing for flexibility
 "benchmarks/**/*.py" = ["E402", "ANN"]
 "experiments/**/*.py" = ["E402", "ANN"]

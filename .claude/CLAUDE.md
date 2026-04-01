@@ -173,6 +173,23 @@ model-agnostic — it consumes unified RunLog/TrajectoryRow schemas.
   Collision probability < 3×10⁻⁶ for 10M entries (birthday bound n²/2⁶⁵).
 - Orchestrator resume: validates `run_log.json` content (not just existence) before skipping.
   Corrupt files from OOM/timeout kills are deleted and re-run on next launch.
+- **VarAnd clone detection (B12, fix 2026-04-01)**: Bingo's `VarAnd` creates offspring via
+  `parent.copy()` when crossover doesn't fire (P=0.6). `AGraph.copy()` preserves
+  `fit_set=True`, so `_serial_eval`'s `not indv.fit_set` guard skipped ~36% of offspring.
+  Fix: exploit MuPlusLambda's call structure — `__call__` detects the parent evaluation
+  (all fit_set=True, _call_count>0) and records `_parent_ids`.  In `_serial_eval`,
+  any individual NOT in `_parent_ids` is forced through dedup regardless of fit_set.
+  Achieves δ_finite=1.000 at ALL generations (verified 3 seeds × 50 gens).
+  Tests: `tests/integration/test_dedup_clone_bypass.py` (8 tests).
+  **Production Bingo+IsalSR and diversity experiments need re-execution.**
+- **UDFS dedup verified correct (2026-04-01)**: UDFS monkey-patches `evaluate_cgraph` at
+  module level. Empirically verified on Nguyen-1 (11,375 calls, 100% intercepted,
+  23.6% redundancy, 20/20 canonical spot-checks correct). Zero conversion/canon failures.
+  **Latent bug**: UDFS uses `multiprocessing.get_context('spawn')` — spawned workers
+  import modules fresh and bypass the patch. All production configs use `processes: 1`
+  (confirmed in all 4 YAML configs + SLURM `cpus: 1`), so production results are valid.
+  If `processes > 1` is ever needed, the patch must be applied inside worker init.
+  Verification script: `experiments/scripts/verify_udfs_dedup.py`.
 
 ---
 
@@ -203,6 +220,10 @@ model-agnostic — it consumes unified RunLog/TrajectoryRow schemas.
 10. **Label-aware pruning (B13).** The 6-tuple pruning must partition candidates BY LABEL
     before taking max-τ. Cross-label pruning is invalid (automorphisms preserve labels).
     Implemented in canonical.py for both V (primary) and v (secondary) sections.
+11. **Bingo dedup must check ALL offspring (B12).** `AGraph.copy()` preserves `fit_set=True`.
+    VarAnd creates unmodified copies when crossover/mutation don't fire (~36% of offspring).
+    `IsalSREvaluation._serial_eval` must NOT rely solely on `not indv.fit_set` — use the
+    `_established` dict (id → command_array fingerprint) to detect new individuals.
 
 ### Edge Direction Convention
 

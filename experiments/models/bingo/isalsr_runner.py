@@ -7,10 +7,23 @@ them infinite fitness.
 
 Architectural difference from UDFS: Instead of monkey-patching, we
 subclass Evaluation._serial_eval (Bingo's component-swapping design).
+
+Bug fix (2026-04-01): VarAnd clone bypass.
+  Bingo's VarAnd creates offspring via parent.copy() when crossover
+  doesn't fire (~60% of the time). AGraph.copy() preserves fit_set=True,
+  so these unmodified clones were SKIPPED by _serial_eval's
+  ``not indv.fit_set`` guard — bypassing dedup entirely.  ~36% of
+  offspring (P(no crossover)×P(no mutation) = 0.6×0.6) entered the
+  combined pool with the parent's fitness, allowing selection to keep
+  both parent and clone.
+  Fix: track object IDs of established population members.  Any
+  individual with an unrecognized ID is forced through dedup regardless
+  of fit_set.
 """
 
 from __future__ import annotations
 
+import gc
 import logging
 import time
 import warnings
@@ -95,8 +108,21 @@ class IsalSREvaluation(Evaluation):
         self.snapshots: list[BingoTrajectorySnapshot] = []
         # Set after build_bingo_pipeline returns
         self._fitness_counter: Any = None
+        # Parent-ID registry for VarAnd clone detection (fix 2026-04-01).
+        # MuPlusLambda calls evaluation(parents) then evaluation(offspring).
+        # In the parent call, every individual has fit_set=True. We record
+        # their object IDs.  In the offspring call, any individual whose ID
+        # is NOT in _parent_ids is an offspring (even if fit_set=True from
+        # AGraph.copy()) and is forced through dedup.
+        self._parent_ids: set[int] = set()
 
     def __call__(self, population: Any) -> None:
+        # Detect the parent call: all individuals already evaluated AND
+        # not the very first evaluation (initial pop has fit_set=False).
+        all_evaluated = all(indv.fit_set for indv in population)
+        if all_evaluated and self._call_count > 0:
+            self._parent_ids = {id(indv) for indv in population}
+
         super().__call__(population)
         # MuPlusLambda calls __call__ 2x per generation (parents + offspring)
         self._call_count += 1
@@ -118,75 +144,95 @@ class IsalSREvaluation(Evaluation):
                     )
                 )
 
+    # Periodic GC to combat CPython heap fragmentation on long runs.
+    # Without this, 12h runs on hard problems (I.10.7, I.48.20) with
+    # 70M+ adapter conversions fragment the heap beyond 32GB.
+    _GC_INTERVAL = 100_000
+
     def _serial_eval(self, population):  # type: ignore[override]
         for indv in population:
-            if self._redundant or not indv.fit_set:
-                self.dedup.n_total += 1
+            is_parent = id(indv) in self._parent_ids
 
-                # Convert AGraph → LabeledDAG
-                try:
-                    dag = agraph_to_labeled_dag(indv)
-                except Exception:  # noqa: BLE001
-                    # Conversion failed: evaluate normally
+            # Process if: (a) standard unevaluated individual, OR
+            # (b) NOT a known parent (catches VarAnd clones that
+            #     inherited fit_set=True from parent via AGraph.copy()).
+            should_process = self._redundant or not indv.fit_set or not is_parent
+            if not should_process:
+                continue
+
+            self.dedup.n_total += 1
+
+            # Periodic garbage collection
+            if self.dedup.n_total % self._GC_INTERVAL == 0:
+                gc.collect()
+
+            # Convert AGraph → LabeledDAG
+            try:
+                dag = agraph_to_labeled_dag(indv)
+            except Exception:  # noqa: BLE001
+                # Conversion failed: evaluate normally (only if unevaluated)
+                if not indv.fit_set:
                     indv.fitness = self.fitness_function(indv)
                     if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                         self._best_fitness = indv.fitness
-                    continue
+                continue
 
-                # Resolve canonical hash: atlas fast-path or online fallback
-                t0 = time.perf_counter()
-                canon_hash: int | None = None
+            # Resolve canonical hash: atlas fast-path or online fallback
+            t0 = time.perf_counter()
+            canon_hash: int | None = None
 
-                if self.dedup.atlas is not None:
-                    canon_hash, was_hit = self.dedup.atlas.lookup_dag(dag)
-                    dt = time.perf_counter() - t0
-                    self.dedup.atlas_lookup_time += dt
-                    if was_hit:
-                        self.dedup.atlas_hits += 1
+            if self.dedup.atlas is not None:
+                canon_hash, was_hit = self.dedup.atlas.lookup_dag(dag)
+                dt = time.perf_counter() - t0
+                self.dedup.atlas_lookup_time += dt
+                if was_hit:
+                    self.dedup.atlas_hits += 1
+                else:
+                    self.dedup.atlas_misses += 1
+
+            if canon_hash is None:
+                # No atlas or atlas miss: compute canonical string
+                t0_canon = time.perf_counter()
+                try:
+                    if self.dedup.use_fast_canonical:
+                        from isalsr.core.canonical import fast_canonical_string
+
+                        canonical = fast_canonical_string(
+                            dag,
+                            timeout=self.dedup.timeout,
+                        )
                     else:
-                        self.dedup.atlas_misses += 1
+                        from isalsr.core.canonical import canonical_string
 
-                if canon_hash is None:
-                    # No atlas or atlas miss: compute canonical string
-                    t0_canon = time.perf_counter()
-                    try:
-                        if self.dedup.use_fast_canonical:
-                            from isalsr.core.canonical import fast_canonical_string
-
-                            canonical = fast_canonical_string(
-                                dag,
-                                timeout=self.dedup.timeout,
-                            )
-                        else:
-                            from isalsr.core.canonical import canonical_string
-
-                            canonical = canonical_string(
-                                dag,
-                                timeout=self.dedup.timeout,
-                            )
-                    except Exception:  # noqa: BLE001
-                        self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
-                        self.dedup.canon_time_total += time.perf_counter() - t0
+                        canonical = canonical_string(
+                            dag,
+                            timeout=self.dedup.timeout,
+                        )
+                except Exception:  # noqa: BLE001
+                    self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
+                    self.dedup.canon_time_total += time.perf_counter() - t0
+                    if not indv.fit_set:
                         indv.fitness = self.fitness_function(indv)
                         if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                             self._best_fitness = indv.fitness
-                        continue
-                    self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
-                    canon_hash = hash(canonical)
-
-                self.dedup.canon_time_total += time.perf_counter() - t0
-
-                # Deduplication check (hash-based for memory efficiency)
-                if canon_hash in self.dedup.canonical_seen:
-                    self.dedup.n_skipped += 1
-                    indv.fitness = np.inf  # Sets fit_set=True, worst fitness
                     continue
+                self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
+                canon_hash = hash(canonical)
 
-                self.dedup.canonical_seen.add(canon_hash)
-                self.dedup.n_unique += 1
+            self.dedup.canon_time_total += time.perf_counter() - t0
+
+            # Deduplication check (hash-based for memory efficiency)
+            if canon_hash in self.dedup.canonical_seen:
+                self.dedup.n_skipped += 1
+                indv.fitness = np.inf  # Sets fit_set=True, worst fitness
+                continue
+
+            self.dedup.canonical_seen.add(canon_hash)
+            self.dedup.n_unique += 1
+            if not indv.fit_set:
                 indv.fitness = self.fitness_function(indv)
-                if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
-                    self._best_fitness = indv.fitness
+            if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
+                self._best_fitness = indv.fitness
 
 
 class IsalSRBingoRunner(ModelRunner):
