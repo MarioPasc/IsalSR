@@ -1,0 +1,118 @@
+- generic [active] [ref=e1]:
+  - link "Skip to main content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - navigation "Main navigation" [ref=e3]:
+    - generic [ref=e4]:
+      - link "IsalSR Home" [ref=e5] [cursor=pointer]:
+        - /url: index.html
+        - img [ref=e6]:
+          - generic [ref=e8]: +
+          - generic [ref=e10]: x
+        - generic [ref=e13]: IsalSR
+      - generic [ref=e14]:
+        - button "Learn" [ref=e16] [cursor=pointer]:
+          - text: Learn
+          - img [ref=e17]
+        - link "Publications" [ref=e19] [cursor=pointer]:
+          - /url: publications.html
+        - button "Interactive" [ref=e21] [cursor=pointer]:
+          - text: Interactive
+          - img [ref=e22]
+        - link "Team" [ref=e24] [cursor=pointer]:
+          - /url: team.html
+      - generic [ref=e25]:
+        - button "Toggle theme" [ref=e26] [cursor=pointer]:
+          - img [ref=e27]
+        - link "GitHub Repository" [ref=e33] [cursor=pointer]:
+          - /url: https://github.com/MarioPasc/IsalSR
+          - img [ref=e34]
+  - main [ref=e36]:
+    - generic [ref=e37]:
+      - heading "Team" [level=1] [ref=e38]
+      - paragraph [ref=e39]: The researchers behind IsalSR at the University of Málaga.
+    - generic [ref=e40]:
+      - article [ref=e41]:
+        - img "Photo of Ezequiel López-Rubio" [ref=e42]
+        - heading "Ezequiel López-Rubio" [level=2] [ref=e43]
+        - paragraph [ref=e44]: Full Professor
+        - paragraph [ref=e45]:
+          - text: Full Professor
+          - text: Dept. of Computer Languages and Computer Science
+          - text: University of Málaga
+        - paragraph [ref=e46]: Ezequiel López-Rubio is a Full Professor at the University of Málaga. His research interests include graph theory, machine learning, computer vision, and neural network architectures. He is the creator of the IsalGraph and IsalSR frameworks and the principal investigator of the ICAI research group.
+        - generic [ref=e47]:
+          - link "Email" [ref=e48] [cursor=pointer]:
+            - /url: mailto:ezeqlr@lcc.uma.es
+          - link "Scholar" [ref=e49] [cursor=pointer]:
+            - /url: https://scholar.google.es/citations?user=5u0UlxsAAAAJ&hl=es
+          - link "GitHub" [ref=e50] [cursor=pointer]:
+            - /url: https://github.com/ezequiel-lopez-rubio
+          - link "ORCID" [ref=e51] [cursor=pointer]:
+            - /url: https://orcid.org/0000-0001-8231-5687
+      - article [ref=e52]:
+        - img "Photo of Mario Pascual González" [ref=e53]
+        - heading "Mario Pascual González" [level=2] [ref=e54]
+        - paragraph [ref=e55]: Research Assistant
+        - paragraph [ref=e56]:
+          - text: Dept. of Computer Languages and Computer Science
+          - text: University of Málaga
+        - paragraph [ref=e57]: Mario Pascual González is a PhD student at the University of Málaga working on graph representation learning and the IsalSR framework. His research focuses on canonical string representations for symbolic regression, search space reduction, and integration of graph-theoretic methods with existing SR algorithms.
+        - generic [ref=e58]:
+          - link "Email" [ref=e59] [cursor=pointer]:
+            - /url: mailto:mpascual@uma.es
+          - link "Scholar" [ref=e60] [cursor=pointer]:
+            - /url: https://scholar.google.es/citations?user=47ei0IcAAAAJ&hl=es
+          - link "GitHub" [ref=e61] [cursor=pointer]:
+            - /url: https://github.com/MarioPasc
+          - link "ORCID" [ref=e62] [cursor=pointer]:
+            - /url: https://orcid.org/0009-0001-2178-4647
+      - article [ref=e63]:
+        - img "Photo of Karl Thurnhofer-Hemsi" [ref=e64]
+        - heading "Karl Thurnhofer-Hemsi" [level=2] [ref=e65]
+        - paragraph [ref=e66]: Associate Professor
+        - paragraph [ref=e67]:
+          - text: Dept. of Computer Languages and Computer Science
+          - text: University of Málaga
+        - paragraph [ref=e68]: Karl Thurnhofer-Hemsi is a researcher at the University of Málaga. His research interests include image processing, deep learning, and molecular graph representations. He is the lead author of IsalChem, which applies instruction string encoding to molecular graphs.
+        - generic [ref=e69]:
+          - link "Scholar" [ref=e70] [cursor=pointer]:
+            - /url: https://scholar.google.es/citations?user=XiXbfXkAAAAJ&hl=es
+          - link "GitHub" [ref=e71] [cursor=pointer]:
+            - /url: https://portaldelainvestigacion.uma.es/investigadores/1106657/detalle
+          - link "ORCID" [ref=e72] [cursor=pointer]:
+            - /url: https://orcid.org/0000-0003-1494-8029
+    - generic [ref=e74]:
+      - img "ICAI Research Group logo" [ref=e75]
+      - heading "ICAI Research Group" [level=2] [ref=e76]
+      - paragraph [ref=e77]: The ICAI (Inteligencia Computacional y Análisis de Imágenes) research group at the University of Málaga focuses on machine learning, computer vision, graph theory, and neural network architectures.
+  - contentinfo [ref=e79]:
+    - generic [ref=e80]:
+      - generic [ref=e81]:
+        - generic [ref=e82]:
+          - heading "IsalSR" [level=3] [ref=e83]
+          - paragraph [ref=e84]: Instruction Set and Language for Symbolic Regression. Isomorphism-invariant canonical string representations for expression DAGs.
+        - generic [ref=e85]:
+          - heading "Learn" [level=4] [ref=e86]
+          - link "How It Works" [ref=e87] [cursor=pointer]:
+            - /url: how-it-works.html
+          - link "Math Foundations" [ref=e88] [cursor=pointer]:
+            - /url: math.html
+          - link "Results" [ref=e89] [cursor=pointer]:
+            - /url: results.html
+        - generic [ref=e90]:
+          - heading "Resources" [level=4] [ref=e91]
+          - link "Publications" [ref=e92] [cursor=pointer]:
+            - /url: publications.html
+          - link "Playground" [ref=e93] [cursor=pointer]:
+            - /url: playground.html
+          - link "GitHub" [ref=e94] [cursor=pointer]:
+            - /url: https://github.com/MarioPasc/IsalSR
+        - generic [ref=e95]:
+          - heading "Contact" [level=4] [ref=e96]
+          - link "ezeqlr@lcc.uma.es" [ref=e97] [cursor=pointer]:
+            - /url: mailto:ezeqlr@lcc.uma.es
+          - link "mpascual@uma.es" [ref=e98] [cursor=pointer]:
+            - /url: mailto:mpascual@uma.es
+          - link "Team" [ref=e99] [cursor=pointer]:
+            - /url: team.html
+      - paragraph [ref=e101]: © 2025–2026 ICAI Research Group, University of Málaga. Built for science.

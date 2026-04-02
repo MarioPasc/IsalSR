@@ -1,8 +1,8 @@
 /**
  * IsalSR — D3 Labeled DAG Renderer
  *
- * Renders a LabeledDAG into an SVG element using D3 force layout
- * with hierarchical (top-down) positioning.
+ * Renders a LabeledDAG into an SVG element using deterministic
+ * layered layout (nodes evenly spaced per depth layer).
  * Features: directed edges with arrowheads, labeled nodes colored by
  * operation category, pointer indicators.
  */
@@ -65,11 +65,7 @@
    * Render a LabeledDAG or D3 data object in an SVG element.
    * @param {string} svgId - ID of the target SVG element
    * @param {Object} d3Data - { nodes: [{id, label, metadata}], edges: [{source, target}] }
-   * @param {Object} [options] - highlight options
-   * @param {number} [options.primaryNode] - graph node ID of primary pointer
-   * @param {number} [options.secondaryNode] - graph node ID of secondary pointer
-   * @param {Set} [options.highlightEdges] - set of "source-target" edge keys to highlight
-   * @param {number} [options.newNode] - node ID just inserted (for animation)
+   * @param {Object} [options]
    */
   IsalSR.renderDAG = function (svgId, d3Data, options) {
     if (typeof d3 === 'undefined') return;
@@ -92,28 +88,30 @@
 
     if (!d3Data.nodes || d3Data.nodes.length === 0) return;
 
-    // Arrowhead marker
+    // Marker size constant — the arrowhead path spans 0..8 on x-axis
+    var MARKER_LEN = 8;
+
+    // Arrowhead marker — refX=8 so the TIP of the arrow aligns with line end
     svg.append('defs').append('marker')
       .attr('id', 'dag-arrow-' + svgId)
-      .attr('viewBox', '0 0 10 10')
-      .attr('refX', 9)
-      .attr('refY', 5)
-      .attr('markerWidth', 6)
-      .attr('markerHeight', 6)
-      .attr('orient', 'auto-start-auto')
+      .attr('viewBox', '0 -4 8 8')
+      .attr('refX', MARKER_LEN)
+      .attr('refY', 0)
+      .attr('markerWidth', 8)
+      .attr('markerHeight', 8)
+      .attr('orient', 'auto')
       .append('path')
-      .attr('d', 'M 0 0 L 10 5 L 0 10 z')
-      .attr('fill', '#475569');
+      .attr('d', 'M 0,-3.5 L 8,0 L 0,3.5 Z')
+      .attr('fill', '#64748b');
 
-    // Compute depths for vertical layout
-    // Build adjacency from d3Data
-    var depthMap = {};
-    var maxDepth = 0;
+    // ---- Compute depth layers ----
     var outAdj = {};
     var inAdj = {};
+    var nodeById = {};
     d3Data.nodes.forEach(function (n) {
       outAdj[n.id] = [];
       inAdj[n.id] = [];
+      nodeById[n.id] = n;
     });
     d3Data.edges.forEach(function (e) {
       var s = typeof e.source === 'object' ? e.source.id : e.source;
@@ -122,7 +120,9 @@
       inAdj[t].push(s);
     });
 
-    // BFS from leaves (no in-edges) to compute depth
+    // BFS from source nodes (no in-edges) to compute longest-path depth
+    var depthMap = {};
+    var maxDepth = 0;
     d3Data.nodes.forEach(function (n) { depthMap[n.id] = 0; });
     var queue = [];
     d3Data.nodes.forEach(function (n) {
@@ -133,68 +133,113 @@
     });
     while (queue.length > 0) {
       var cur = queue.shift();
-      var next = depthMap[cur] + 1;
+      var nd = depthMap[cur] + 1;
       outAdj[cur].forEach(function (t) {
-        if (next > depthMap[t]) {
-          depthMap[t] = next;
-          if (next > maxDepth) maxDepth = next;
+        if (nd > depthMap[t]) {
+          depthMap[t] = nd;
+          if (nd > maxDepth) maxDepth = nd;
           queue.push(t);
         }
       });
     }
 
-    // Deep copy for D3 mutation
+    // ---- Deterministic layered layout ----
+    // Group nodes by depth
+    var layers = [];
+    for (var li = 0; li <= maxDepth; li++) layers.push([]);
+    d3Data.nodes.forEach(function (n) {
+      layers[depthMap[n.id]].push(n);
+    });
+
+    var padY = 45;
+    var layerSpacing = maxDepth > 0 ? (height - 2 * padY) / maxDepth : 0;
+    var padX = 40;
+
+    // Assign positions: each layer's nodes equally spaced horizontally
+    // Depth 0 at bottom, maxDepth at top
+    var posMap = {};
+    for (var d = 0; d <= maxDepth; d++) {
+      var row = layers[d];
+      var count = row.length;
+      var usableWidth = width - 2 * padX;
+      var spacing = count > 1 ? usableWidth / (count - 1) : 0;
+      var startX = count > 1 ? padX : width / 2;
+      for (var j = 0; j < count; j++) {
+        posMap[row[j].id] = {
+          x: startX + j * spacing,
+          y: height - padY - d * layerSpacing
+        };
+      }
+    }
+
+    // Build positioned node array
     var nodes = d3Data.nodes.map(function (n) {
-      var depth = depthMap[n.id] || 0;
+      var p = posMap[n.id];
       return {
         id: n.id,
         label: n.label,
         metadata: n.metadata,
         displayLabel: nodeDisplayLabel(n),
-        depth: depth,
-        // Initial position hint: leaves at bottom, targets at top
-        x: width / 2 + (Math.random() - 0.5) * 100,
-        y: height - 50 - (depth / Math.max(maxDepth, 1)) * (height - 100)
+        x: p.x,
+        y: p.y
       };
     });
+
+    var nodeMap = {};
+    nodes.forEach(function (n) { nodeMap[n.id] = n; });
 
     var links = d3Data.edges.map(function (e) {
-      return {
-        source: typeof e.source === 'object' ? e.source.id : e.source,
-        target: typeof e.target === 'object' ? e.target.id : e.target
-      };
+      var s = typeof e.source === 'object' ? e.source.id : e.source;
+      var t = typeof e.target === 'object' ? e.target.id : e.target;
+      return { source: nodeMap[s], target: nodeMap[t] };
     });
-
-    // Force simulation with hierarchical Y constraint
-    var simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id(function (d) { return d.id; }).distance(70).strength(0.8))
-      .force('charge', d3.forceManyBody().strength(-250))
-      .force('centerX', d3.forceX(width / 2).strength(0.1))
-      .force('depthY', d3.forceY(function (d) {
-        // Leaves/variables at bottom, root operations at top
-        return height - 50 - (d.depth / Math.max(maxDepth, 1)) * (height - 100);
-      }).strength(1.5))
-      .force('collision', d3.forceCollide(function (d) { return nodeRadius(d.label) + 8; }));
 
     var g = svg.append('g');
 
-    // Edges (lines with arrowheads)
-    var link = g.selectAll('.dag-edge')
+    // ---- Edges ----
+    // Line endpoint shortened to node border; arrowhead tip sits exactly at border
+    g.selectAll('.dag-edge')
       .data(links)
       .enter()
       .append('line')
       .attr('class', 'dag-edge')
-      .attr('stroke', '#475569')
-      .attr('stroke-width', 2)
-      .attr('stroke-opacity', 0.7)
-      .attr('marker-end', 'url(#dag-arrow-' + svgId + ')');
+      .attr('stroke', '#64748b')
+      .attr('stroke-width', 1.8)
+      .attr('stroke-opacity', 0.75)
+      .attr('marker-end', 'url(#dag-arrow-' + svgId + ')')
+      .attr('x1', function (d) {
+        var dx = d.target.x - d.source.x;
+        var dy = d.target.y - d.source.y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        return d.source.x + (dx / dist) * (nodeRadius(d.source.label) + 2);
+      })
+      .attr('y1', function (d) {
+        var dx = d.target.x - d.source.x;
+        var dy = d.target.y - d.source.y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        return d.source.y + (dy / dist) * (nodeRadius(d.source.label) + 2);
+      })
+      .attr('x2', function (d) {
+        var dx = d.target.x - d.source.x;
+        var dy = d.target.y - d.source.y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        // Shorten by target radius + gap so arrowhead tip sits just outside
+        return d.target.x - (dx / dist) * (nodeRadius(d.target.label) + 4);
+      })
+      .attr('y2', function (d) {
+        var dx = d.target.x - d.source.x;
+        var dy = d.target.y - d.source.y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        return d.target.y - (dy / dist) * (nodeRadius(d.target.label) + 4);
+      });
 
-    // Node groups
+    // ---- Node groups ----
     var node = g.selectAll('.dag-node')
       .data(nodes)
       .enter()
       .append('g')
-      .attr('class', 'dag-node');
+      .attr('class', 'dag-node')
+      .attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
 
     // Pointer glow rings
     node.append('circle')
@@ -237,42 +282,7 @@
       .attr('font-weight', '700')
       .text(function (d) { return d.displayLabel; });
 
-    // Warm up simulation
-    simulation.alpha(1).restart();
-    for (var i = 0; i < 200; i++) simulation.tick();
-    simulation.stop();
-
-    // Clamp positions to viewport
-    nodes.forEach(function (d) {
-      var r = nodeRadius(d.label) + 5;
-      d.x = Math.max(r, Math.min(width - r, d.x));
-      d.y = Math.max(r, Math.min(height - r, d.y));
-    });
-
-    // Apply final positions with edge shortening for arrowheads
-    link
-      .attr('x1', function (d) { return d.source.x; })
-      .attr('y1', function (d) { return d.source.y; })
-      .attr('x2', function (d) {
-        var dx = d.target.x - d.source.x;
-        var dy = d.target.y - d.source.y;
-        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        var r = nodeRadius(d.target.label) + 2;
-        return d.target.x - (dx / dist) * r;
-      })
-      .attr('y2', function (d) {
-        var dx = d.target.x - d.source.x;
-        var dy = d.target.y - d.source.y;
-        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        var r = nodeRadius(d.target.label) + 2;
-        return d.target.y - (dy / dist) * r;
-      });
-
-    node.attr('transform', function (d) {
-      return 'translate(' + d.x + ',' + d.y + ')';
-    });
-
-    // Pointer labels
+    // ---- Pointer legend ----
     if (primaryNode !== undefined || secondaryNode !== undefined) {
       var legend = svg.append('g')
         .attr('transform', 'translate(10, ' + (height - 30) + ')');

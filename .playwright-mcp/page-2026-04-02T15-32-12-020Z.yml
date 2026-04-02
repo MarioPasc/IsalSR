@@ -1,0 +1,145 @@
+- generic [active] [ref=e1]:
+  - link "Skip to main content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - navigation "Main navigation" [ref=e3]:
+    - generic [ref=e4]:
+      - link "IsalSR Home" [ref=e5] [cursor=pointer]:
+        - /url: index.html
+        - img [ref=e6]:
+          - generic [ref=e8]: +
+          - generic [ref=e10]: x
+        - generic [ref=e13]: IsalSR
+      - generic [ref=e14]:
+        - button "Learn" [ref=e16] [cursor=pointer]:
+          - text: Learn
+          - img [ref=e17]
+        - link "Publications" [ref=e19] [cursor=pointer]:
+          - /url: publications.html
+        - button "Interactive" [ref=e21] [cursor=pointer]:
+          - text: Interactive
+          - img [ref=e22]
+        - link "Team" [ref=e24] [cursor=pointer]:
+          - /url: team.html
+      - generic [ref=e25]:
+        - button "Toggle theme" [ref=e26] [cursor=pointer]:
+          - img [ref=e27]
+        - link "GitHub Repository" [ref=e33] [cursor=pointer]:
+          - /url: https://github.com/MarioPasc/IsalSR
+          - img [ref=e34]
+  - main [ref=e36]:
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - heading "Expression DAGs as Canonical Strings" [level=1] [ref=e40]
+        - paragraph [ref=e41]:
+          - text: IsalSR encodes symbolic regression expression DAGs as instruction strings over a 31-token alphabet using a circular doubly linked list with two mobile pointers. The canonical string is a complete labeled-DAG invariant — achieving
+          - strong [ref=e42]: O(k!)
+          - text: search space reduction.
+        - generic [ref=e43]:
+          - link "Explore How It Works →" [ref=e44] [cursor=pointer]:
+            - /url: how-it-works.html
+          - link "Try the Playground →" [ref=e45] [cursor=pointer]:
+            - /url: playground.html
+      - img "Animated DAG construction from IsalSR instruction string V+VsCV*Vk" [ref=e46]:
+        - img [ref=e47]
+        - generic [ref=e49]: canonical string w*
+    - generic [ref=e51]:
+      - generic [ref=e52]:
+        - generic [ref=e53]: ≡
+        - heading "Complete Invariant" [level=3] [ref=e54]
+        - paragraph [ref=e55]: Two expression DAGs are isomorphic if and only if their canonical strings are identical.
+      - generic [ref=e56]:
+        - generic [ref=e57]: k!
+        - heading "O(k!) Reduction" [level=3] [ref=e58]
+        - paragraph [ref=e59]: For k non-variable nodes, up to k! redundant representations collapse to a single canonical form.
+      - generic [ref=e60]:
+        - generic [ref=e61]: "31"
+        - heading "Token Alphabet" [level=3] [ref=e62]
+        - generic [ref=e64]: NPVsV+CW
+        - paragraph [ref=e65]: "Two-tier encoding: 7 single-char tokens for movement/edges, 24 compound tokens for labeled node insertion."
+    - generic [ref=e66]:
+      - generic [ref=e67]:
+        - heading "How It Works" [level=2] [ref=e68]
+        - paragraph [ref=e69]: Three steps from mathematical expression to canonical string representation.
+      - generic [ref=e70]:
+        - generic [ref=e71]:
+          - generic [ref=e72]: "1"
+          - heading "Expression DAG" [level=3] [ref=e73]
+          - paragraph [ref=e74]: Start with a mathematical expression represented as a labeled directed acyclic graph. Each node carries an operation type (ADD, SIN, MUL, ...) and edges encode data flow.
+          - text: →
+        - generic [ref=e75]:
+          - generic [ref=e76]: "2"
+          - heading "CDLL + Two Pointers" [level=3] [ref=e77]
+          - paragraph [ref=e78]: A circular doubly linked list with two mobile pointers traverses the DAG, emitting labeled tokens that encode structure and node operations.
+          - text: →
+        - generic [ref=e79]:
+          - generic [ref=e80]: "3"
+          - heading "Canonical String" [level=3] [ref=e81]
+          - paragraph [ref=e82]: The lexicographically smallest shortest encoding is a complete labeled-DAG invariant. All k! equivalent node numberings map to one representative.
+      - link "Learn More →" [ref=e84] [cursor=pointer]:
+        - /url: how-it-works.html
+    - generic [ref=e86]:
+      - generic [ref=e87]:
+        - heading "Extending IsalGraph" [level=2] [ref=e88]
+        - paragraph [ref=e89]:
+          - text: IsalSR extends the
+          - link "IsalGraph" [ref=e90] [cursor=pointer]:
+            - /url: https://mariopasc.github.io/IsalGraph/
+          - text: framework from unlabeled, undirected graphs to labeled directed acyclic graphs for symbolic regression.
+      - generic [ref=e91]:
+        - generic [ref=e92]:
+          - heading "IsalGraph" [level=3] [ref=e93]
+          - paragraph [ref=e94]: 9-character alphabet for undirected simple graphs. Unlabeled nodes, no edge direction, no acyclicity constraint. Complete graph invariant for topology.
+        - generic [ref=e95]:
+          - heading "IsalSR" [level=3] [ref=e96]
+          - paragraph [ref=e97]: 31-token alphabet for labeled DAGs. 14 operation types with arity constraints, directed edges with cycle detection, commutative encoding (SUB→ADD+NEG, DIV→MUL+INV). Complete labeled-DAG invariant for expressions.
+    - generic [ref=e98]:
+      - generic [ref=e99]:
+        - heading "Publications" [level=2] [ref=e100]
+        - paragraph [ref=e101]: Research papers from the Isal framework family.
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - generic [ref=e105]: "2026"
+          - heading "Instruction set for the representation of graphs" [level=3] [ref=e106]
+          - paragraph [ref=e107]: E. Lopez-Rubio, M. Pascual-Gonzalez
+          - link "arXiv →" [ref=e108] [cursor=pointer]:
+            - /url: https://arxiv.org/abs/2603.11039
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - generic [ref=e111]: "2026"
+            - generic [ref=e112]: In preparation
+          - heading "Representation of DAGs by Sequences of Instructions for Symbolic Regression" [level=3] [ref=e113]
+          - paragraph [ref=e114]: E. López-Rubio, M. Pascual-González, K. Thurnhofer-Hemsi
+          - text: Targeting IEEE TPAMI
+      - link "All Publications →" [ref=e116] [cursor=pointer]:
+        - /url: publications.html
+  - contentinfo [ref=e118]:
+    - generic [ref=e119]:
+      - generic [ref=e120]:
+        - generic [ref=e121]:
+          - heading "IsalSR" [level=3] [ref=e122]
+          - paragraph [ref=e123]: Instruction Set and Language for Symbolic Regression. Isomorphism-invariant canonical string representations for expression DAGs.
+        - generic [ref=e124]:
+          - heading "Learn" [level=4] [ref=e125]
+          - link "How It Works" [ref=e126] [cursor=pointer]:
+            - /url: how-it-works.html
+          - link "Math Foundations" [ref=e127] [cursor=pointer]:
+            - /url: math.html
+          - link "Results" [ref=e128] [cursor=pointer]:
+            - /url: results.html
+        - generic [ref=e129]:
+          - heading "Resources" [level=4] [ref=e130]
+          - link "Publications" [ref=e131] [cursor=pointer]:
+            - /url: publications.html
+          - link "Playground" [ref=e132] [cursor=pointer]:
+            - /url: playground.html
+          - link "GitHub" [ref=e133] [cursor=pointer]:
+            - /url: https://github.com/MarioPasc/IsalSR
+        - generic [ref=e134]:
+          - heading "Contact" [level=4] [ref=e135]
+          - link "ezeqlr@lcc.uma.es" [ref=e136] [cursor=pointer]:
+            - /url: mailto:ezeqlr@lcc.uma.es
+          - link "mpascual@uma.es" [ref=e137] [cursor=pointer]:
+            - /url: mailto:mpascual@uma.es
+          - link "Team" [ref=e138] [cursor=pointer]:
+            - /url: team.html
+      - paragraph [ref=e140]: © 2025–2026 ICAI Research Group, University of Málaga. Built for science.
