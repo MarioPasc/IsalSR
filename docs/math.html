@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Math Foundations — IsalSR</title>
+  <meta name="description" content="Mathematical foundations of IsalSR: labeled-DAG isomorphism, canonical strings, completeness theorems, and DAG distance.">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="css/variables.css?v=1">
+  <link rel="stylesheet" href="css/reset.css?v=1">
+  <link rel="stylesheet" href="css/typography.css?v=1">
+  <link rel="stylesheet" href="css/layout.css?v=1">
+  <link rel="stylesheet" href="css/components.css?v=1">
+  <link rel="stylesheet" href="css/nav.css?v=1">
+  <link rel="stylesheet" href="css/footer.css?v=1">
+  <link rel="stylesheet" href="css/math.css?v=1">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head>
+<body data-page="math">
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+  <div id="site-nav"></div>
+
+  <main id="main-content" class="container">
+    <header class="math-header">
+      <h1>Mathematical Foundations</h1>
+      <p>
+        Formal definitions, theorems, and proofs underlying the IsalSR canonical string representation.
+      </p>
+    </header>
+
+    <!-- Table of Contents -->
+    <nav class="math-toc" aria-label="Table of contents">
+      <h2 class="math-toc__title">Contents</h2>
+      <ol class="math-toc__list">
+        <li><a href="#sec-dag-iso">1. Labeled-DAG Isomorphism</a></li>
+        <li><a href="#sec-alphabet">2. The IsalSR Alphabet</a></li>
+        <li><a href="#sec-s2d">3. String-to-DAG (S2D)</a></li>
+        <li><a href="#sec-d2s">4. DAG-to-String (D2S)</a></li>
+        <li><a href="#sec-canonical">5. Canonical String</a></li>
+        <li><a href="#sec-completeness">6. Completeness Theorem</a></li>
+        <li><a href="#sec-distance">7. DAG Distance Metric</a></li>
+        <li><a href="#sec-complexity">8. Complexity Analysis</a></li>
+      </ol>
+    </nav>
+
+    <!-- ===================== SECTION 1 ===================== -->
+    <section class="math-section" id="sec-dag-iso">
+      <h2>1. Labeled-DAG Isomorphism</h2>
+
+      <div class="def-box">
+        <h4>Definition 1 (Labeled DAG)</h4>
+        <p>
+          A <strong>labeled directed acyclic graph</strong> is a tuple
+          <span class="math-inline" data-tex="D = (V, E, \ell)"></span>
+          where <span class="math-inline" data-tex="V"></span> is a finite set of nodes,
+          <span class="math-inline" data-tex="E \subseteq V \times V"></span> is a set of directed edges
+          such that the graph is acyclic, and
+          <span class="math-inline" data-tex="\ell: V \to \mathcal{L}"></span> is a labeling function
+          mapping each node to a label from the set of operation types
+          <span class="math-inline" data-tex="\mathcal{L} = \{\text{VAR}, \text{ADD}, \text{MUL}, \text{SIN}, \text{COS}, \ldots, \text{CONST}\}"></span>.
+        </p>
+      </div>
+
+      <div class="def-box">
+        <h4>Definition 2 (Labeled-DAG Isomorphism)</h4>
+        <p>
+          Two labeled DAGs <span class="math-inline" data-tex="D_1 = (V_1, E_1, \ell_1)"></span> and
+          <span class="math-inline" data-tex="D_2 = (V_2, E_2, \ell_2)"></span> are
+          <strong>isomorphic</strong> (<span class="math-inline" data-tex="D_1 \cong D_2"></span>)
+          if there exists a bijection
+          <span class="math-inline" data-tex="\varphi: V_1 \to V_2"></span> such that:
+        </p>
+        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
+          <li><span class="math-inline" data-tex="(u, v) \in E_1 \iff (\varphi(u), \varphi(v)) \in E_2"></span> (edge preservation)</li>
+          <li><span class="math-inline" data-tex="\ell_1(v) = \ell_2(\varphi(v))"></span> for all <span class="math-inline" data-tex="v \in V_1"></span> (label preservation)</li>
+          <li><span class="math-inline" data-tex="\varphi(x_i) = x_i"></span> for all variable nodes (variable anchoring)</li>
+        </ol>
+      </div>
+
+      <div class="remark-box">
+        <h4>Remark</h4>
+        <p>
+          The variable anchoring condition (3) is crucial: input variables are pre-numbered and
+          distinguishable under isomorphism. This means the isomorphism permutation
+          <span class="math-inline" data-tex="\varphi"></span> can only rearrange <em>internal</em> (non-variable) nodes.
+          For k internal nodes, there are at most k! such permutations.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== SECTION 2 ===================== -->
+    <section class="math-section" id="sec-alphabet">
+      <h2>2. The IsalSR Alphabet</h2>
+
+      <div class="def-box">
+        <h4>Definition 3 (IsalSR Alphabet)</h4>
+        <p>
+          The alphabet <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}"></span> consists of:
+        </p>
+        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
+          <li><strong>Movement</strong> (single-char): <span class="math-inline" data-tex="\{N, P, n, p\}"></span></li>
+          <li><strong>Edge creation</strong> (single-char): <span class="math-inline" data-tex="\{C, c\}"></span> with DAG cycle check</li>
+          <li><strong>No-op</strong> (single-char): <span class="math-inline" data-tex="\{W\}"></span></li>
+          <li><strong>Node insertion</strong> (two-char): <span class="math-inline" data-tex="V\ell"></span> or <span class="math-inline" data-tex="v\ell"></span>
+            where <span class="math-inline" data-tex="\ell \in \{+, *, -, /, s, c, e, l, r, \hat{\phantom{x}}, a, k\}"></span></li>
+        </ul>
+        <p style="margin-top: var(--space-sm);">
+          Total vocabulary: 7 single-char + 24 compound = <strong>31 tokens</strong>.
+        </p>
+      </div>
+
+      <p>
+        The tokenizer is deterministic: bare <code>c</code> is always an edge instruction;
+        <code>c</code> after <code>V</code>/<code>v</code> is always a COS label.
+        The two-character tokens <span class="math-inline" data-tex="V\ell"></span> are atomic &mdash;
+        they cannot be split into separate instructions.
+      </p>
+    </section>
+
+    <!-- ===================== SECTION 3 ===================== -->
+    <section class="math-section" id="sec-s2d">
+      <h2>3. String-to-DAG (S2D)</h2>
+
+      <div class="def-box">
+        <h4>Definition 4 (S2D Execution)</h4>
+        <p>
+          Given <em>m</em> input variables and an instruction string
+          <span class="math-inline" data-tex="w \in \Sigma_{\mathrm{SR}}^*"></span>,
+          the S2D algorithm produces a labeled DAG by executing each token sequentially,
+          maintaining a machine state
+          <span class="math-inline" data-tex="(D, L, \pi, \sigma)"></span>
+          where D is the current DAG, L is the CDLL, and
+          <span class="math-inline" data-tex="\pi, \sigma"></span> are the primary and secondary pointer positions.
+        </p>
+      </div>
+
+      <p>
+        Each token induces a deterministic state transition:
+      </p>
+      <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-bottom: var(--space-lg);">
+        <li><strong>N/P</strong>: Advance/retreat the primary pointer in the CDLL</li>
+        <li><strong>n/p</strong>: Advance/retreat the secondary pointer in the CDLL</li>
+        <li><strong>C</strong>: Add edge from node at <span class="math-inline" data-tex="\pi"></span> to node at <span class="math-inline" data-tex="\sigma"></span> (if acyclic)</li>
+        <li><strong>c</strong>: Add edge from node at <span class="math-inline" data-tex="\sigma"></span> to node at <span class="math-inline" data-tex="\pi"></span> (if acyclic)</li>
+        <li><strong>V&ell;</strong>: Create node with label &ell;, add to CDLL after <span class="math-inline" data-tex="\pi"></span>, add edge from node at <span class="math-inline" data-tex="\pi"></span> to new node</li>
+        <li><strong>v&ell;</strong>: Same as V&ell; but from the secondary pointer <span class="math-inline" data-tex="\sigma"></span></li>
+        <li><strong>W</strong>: No operation</li>
+      </ul>
+
+      <div class="thm-box">
+        <h4>Property P2 (DAG Acyclicity)</h4>
+        <p>
+          For any string <span class="math-inline" data-tex="w \in \Sigma_{\mathrm{SR}}^*"></span>,
+          the output of S2D(w) is always a valid directed acyclic graph.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== SECTION 4 ===================== -->
+    <section class="math-section" id="sec-d2s">
+      <h2>4. DAG-to-String (D2S)</h2>
+
+      <p>
+        The D2S algorithm encodes a labeled DAG as the shortest instruction string that,
+        when decoded by S2D, produces an isomorphic DAG. Starting from a given variable node,
+        it greedily selects displacement pairs (a, b) to minimize the total number of
+        movement tokens.
+      </p>
+
+      <div class="thm-box">
+        <h4>Property P1 (Round-Trip Fidelity)</h4>
+        <p>
+          For any valid IsalSR string w:
+        </p>
+        <div style="text-align: center; margin: var(--space-md) 0;">
+          <span class="math-display" data-tex="\text{S2D}(w) \cong \text{S2D}(\text{D2S}(\text{S2D}(w), x_1))"></span>
+        </div>
+        <p>
+          That is, encoding and decoding preserves labeled-DAG isomorphism.
+        </p>
+      </div>
+
+      <div class="thm-box">
+        <h4>Property P4 (Evaluation Preservation)</h4>
+        <p>
+          Round-tripped DAGs evaluate identically: for any input values,
+          the numerical output of the original and reconstructed DAGs agree within
+          <span class="math-inline" data-tex="10^{-8}"></span> tolerance.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== SECTION 5 ===================== -->
+    <section class="math-section" id="sec-canonical">
+      <h2>5. Canonical String</h2>
+
+      <div class="def-box">
+        <h4>Definition 5 (Canonical String)</h4>
+        <p>
+          The <strong>canonical string</strong> of a labeled DAG D is:
+        </p>
+        <div style="text-align: center; margin: var(--space-md) 0;">
+          <span class="math-display" data-tex="w^*_D = \text{lexmin} \{ w \in \arg\min_{w' \in W(D)} |w'| \}"></span>
+        </div>
+        <p>
+          where <span class="math-inline" data-tex="W(D)"></span> is the set of all valid instruction strings
+          that decode to a DAG isomorphic to D. The canonical string is the
+          <em>lexicographically smallest among the shortest</em> such strings.
+        </p>
+      </div>
+
+      <h3 style="margin-top: var(--space-xl);">Computation Algorithms</h3>
+
+      <p>Three algorithms are implemented with different trade-offs:</p>
+
+      <div class="card" style="padding: var(--space-xl); margin: var(--space-lg) 0;">
+        <h4 style="color: var(--accent-primary); margin-bottom: var(--space-sm);">Exhaustive (Reference)</h4>
+        <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+          Explores all k! permutations of internal node IDs, computing D2S for each.
+          Complexity: <span class="math-inline" data-tex="O(k!)"></span>.
+          Correct but impractical for large k.
+        </p>
+      </div>
+
+      <div class="card" style="padding: var(--space-xl); margin: var(--space-lg) 0;">
+        <h4 style="color: var(--accent-secondary); margin-bottom: var(--space-sm);">Pruned Exhaustive</h4>
+        <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+          Uses a 6-component structural tuple to prune the permutation tree.
+          Partitions candidates by label before pruning (label-aware, invariant B13).
+          Worst-case <span class="math-inline" data-tex="O(k!)"></span>, typically much faster.
+        </p>
+      </div>
+
+      <div class="card" style="padding: var(--space-xl); margin: var(--space-lg) 0; border-color: var(--accent-primary);">
+        <h4 style="color: var(--accent-primary); margin-bottom: var(--space-sm);">Fast Canonical (Preferred)</h4>
+        <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+          Greedy-invariant algorithm using 1-Weisfeiler-Leman subtree hashing.
+          At each decision point, candidates are sorted by an isomorphism-invariant key.
+          Unique best candidates are taken greedily (no backtracking); ties are resolved
+          by lexmin backtracking over tied candidates only.
+          Mean <strong>1.43&times; speedup</strong> over pruned exhaustive on evolved Bingo DAGs.
+        </p>
+      </div>
+
+      <div class="remark-box">
+        <h4>WL Hash Justification</h4>
+        <p>
+          The 1-WL subtree hash
+          <span class="math-inline" data-tex="h(v) = \text{hash}(\ell(v), \{\!| h(c) : c \in \text{children}(v) |\!\})"></span>
+          captures the full rooted subtree structure. It is strictly more discriminative than
+          the 6-component structural tuple
+          (Weisfeiler &amp; Leman, 1968; Shervashidze et al., JMLR 2011),
+          which only captures depth-3 neighborhood counts.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== SECTION 6 ===================== -->
+    <section class="math-section" id="sec-completeness">
+      <h2>6. Completeness Theorem</h2>
+
+      <div class="thm-box">
+        <h4>Property P3 (Canonical Invariance)</h4>
+        <p>
+          The canonical string is a <strong>complete labeled-DAG isomorphism invariant</strong>:
+        </p>
+        <div style="text-align: center; margin: var(--space-md) 0;">
+          <span class="math-display" data-tex="w^*_{D_1} = w^*_{D_2} \iff D_1 \cong D_2"></span>
+        </div>
+      </div>
+
+      <div class="proof-box">
+        <h4>Proof sketch</h4>
+        <p>
+          (<span class="math-inline" data-tex="\Leftarrow"></span>) If
+          <span class="math-inline" data-tex="D_1 \cong D_2"></span>, any permutation producing the
+          lexmin string for D<sub>1</sub> has an isomorphic counterpart for D<sub>2</sub>,
+          yielding the same string.
+        </p>
+        <p>
+          (<span class="math-inline" data-tex="\Rightarrow"></span>) If
+          <span class="math-inline" data-tex="w^*_{D_1} = w^*_{D_2} = w^*"></span>,
+          then <span class="math-inline" data-tex="\text{S2D}(w^*) \cong D_1"></span> and
+          <span class="math-inline" data-tex="\text{S2D}(w^*) \cong D_2"></span> by round-trip fidelity,
+          so <span class="math-inline" data-tex="D_1 \cong D_2"></span> by transitivity of isomorphism.
+        </p>
+      </div>
+
+      <div class="figure-container" style="margin-top: var(--space-xl);">
+        <figure>
+          <img src="images/P3_canonical_invariance.png" alt="Canonical invariance property validation" loading="lazy">
+          <figcaption>Empirical validation of canonical invariance across all k! permutations for k = 1..8.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===================== SECTION 7 ===================== -->
+    <section class="math-section" id="sec-distance">
+      <h2>7. DAG Distance Metric</h2>
+
+      <div class="def-box">
+        <h4>Definition 6 (DAG Distance)</h4>
+        <p>
+          The <strong>canonical string distance</strong> between two labeled DAGs D<sub>1</sub> and D<sub>2</sub> is:
+        </p>
+        <div style="text-align: center; margin: var(--space-md) 0;">
+          <span class="math-display" data-tex="d(D_1, D_2) = \text{Lev}(w^*_{D_1}, w^*_{D_2})"></span>
+        </div>
+        <p>
+          where Lev is the Levenshtein (edit) distance. Since the canonical string is a
+          complete invariant, this distance is well-defined on isomorphism classes.
+        </p>
+      </div>
+
+      <div class="remark-box">
+        <h4>Remark</h4>
+        <p>
+          This distance serves as a polynomial-time proxy for labeled DAG edit distance.
+          It is a metric on the quotient space of labeled DAGs modulo isomorphism,
+          inheriting the metric properties of Levenshtein distance.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== SECTION 8 ===================== -->
+    <section class="math-section" id="sec-complexity">
+      <h2>8. Complexity Analysis</h2>
+
+      <div class="thm-box">
+        <h4>Property P5 (Search Space Reduction)</h4>
+        <p>
+          For a labeled DAG with k internal (non-variable) nodes, the canonical string
+          representation reduces the effective search space by a factor of
+          <span class="math-inline" data-tex="\Theta(k!)"></span>.
+        </p>
+        <p style="margin-top: var(--space-sm);">
+          Precisely, each structural class has
+          <span class="math-inline" data-tex="k! / |\text{Aut}(D)|"></span> distinct node-numberings,
+          where <span class="math-inline" data-tex="|\text{Aut}(D)|"></span> is the automorphism group order.
+          For generic DAGs, <span class="math-inline" data-tex="|\text{Aut}(D)| = 1"></span> and the
+          reduction is exactly k!.
+        </p>
+      </div>
+
+      <div class="figure-container">
+        <figure>
+          <img src="images/P5_search_space_reduction.png" alt="Search space reduction validation" loading="lazy">
+          <figcaption>Empirical search space reduction for k = 1..8, showing n_distinct = k!/|Aut(D)|.</figcaption>
+        </figure>
+      </div>
+
+      <h3 style="margin-top: var(--space-xl);">Algorithm Complexities</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: var(--text-sm); margin: var(--space-lg) 0;">
+        <thead>
+          <tr>
+            <th style="background: var(--bg-surface); padding: var(--space-sm) var(--space-md); text-align: left; border-bottom: 1px solid var(--border-default); font-family: var(--font-display); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary);">Algorithm</th>
+            <th style="background: var(--bg-surface); padding: var(--space-sm) var(--space-md); text-align: left; border-bottom: 1px solid var(--border-default); font-family: var(--font-display); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary);">Complexity</th>
+            <th style="background: var(--bg-surface); padding: var(--space-sm) var(--space-md); text-align: left; border-bottom: 1px solid var(--border-default); font-family: var(--font-display); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary);">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); font-weight: 600;">Exhaustive</td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);"><span class="math-inline" data-tex="O(k!)"></span></td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);">Reference implementation</td>
+          </tr>
+          <tr>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); font-weight: 600;">Pruned</td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);"><span class="math-inline" data-tex="O(k! \text{ pruned})"></span></td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);">6-tuple structural pruning</td>
+          </tr>
+          <tr>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); font-weight: 600;">Fast (WL)</td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);">Near-<span class="math-inline" data-tex="O(k^2)"></span></td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);">Greedy-invariant, 1.43x speedup (preferred)</td>
+          </tr>
+          <tr>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); font-weight: 600;">S2D</td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);"><span class="math-inline" data-tex="O(|w| \cdot (V + E))"></span></td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);">Decoding (cycle check per C/c)</td>
+          </tr>
+          <tr>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); font-weight: 600;">D2S</td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);"><span class="math-inline" data-tex="O(k^2)"></span></td>
+            <td style="padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);">Greedy encoding</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="js/theme.js"></script>
+  <script src="js/components.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var interval = setInterval(function () {
+        if (window.katex) {
+          clearInterval(interval);
+
+          // Render all inline math
+          var inlines = document.querySelectorAll('.math-inline');
+          for (var i = 0; i < inlines.length; i++) {
+            var tex = inlines[i].getAttribute('data-tex');
+            if (tex) {
+              katex.render(tex, inlines[i], { displayMode: false, throwOnError: false });
+            }
+          }
+
+          // Render all display math
+          var displays = document.querySelectorAll('.math-display');
+          for (var j = 0; j < displays.length; j++) {
+            var dtex = displays[j].getAttribute('data-tex');
+            if (dtex) {
+              katex.render(dtex, displays[j], { displayMode: true, throwOnError: false });
+            }
+          }
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>

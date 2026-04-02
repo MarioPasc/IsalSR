@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How It Works — IsalSR</title>
+  <meta name="description" content="How IsalSR encodes expression DAGs as instruction strings: the two-tier alphabet, S2D decoding, D2S encoding.">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="css/variables.css?v=1">
+  <link rel="stylesheet" href="css/reset.css?v=1">
+  <link rel="stylesheet" href="css/typography.css?v=1">
+  <link rel="stylesheet" href="css/layout.css?v=1">
+  <link rel="stylesheet" href="css/components.css?v=1">
+  <link rel="stylesheet" href="css/nav.css?v=1">
+  <link rel="stylesheet" href="css/footer.css?v=1">
+  <link rel="stylesheet" href="css/how-it-works.css?v=1">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head>
+<body data-page="how-it-works">
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+  <div id="site-nav"></div>
+
+  <main id="main-content" class="container">
+    <!-- Header -->
+    <header class="hiw-header">
+      <h1>How It Works</h1>
+      <p>
+        IsalSR encodes symbolic regression expression DAGs as instruction strings
+        using a two-tier token encoding and a circular doubly linked list with two pointers.
+      </p>
+    </header>
+
+    <!-- ===================== CORE IDEA ===================== -->
+    <section class="hiw-section">
+      <h2>The Core Idea</h2>
+      <p>
+        Mathematical expressions in symbolic regression are naturally represented as
+        <strong>labeled directed acyclic graphs (DAGs)</strong> where each node carries an
+        operation type (ADD, SIN, MUL, &hellip;) and directed edges encode data flow.
+        IsalSR provides a bijective mapping between these DAGs and instruction strings,
+        extending the IsalGraph framework from unlabeled graphs to labeled DAGs.
+      </p>
+
+      <div class="concept-cards">
+        <div class="card concept-card">
+          <div class="concept-card__icon" style="color: var(--accent-primary);">&#x25B6;</div>
+          <h3 class="concept-card__title">Two-Tier Token Encoding</h3>
+          <p class="concept-card__text">
+            Single-character tokens for pointer movement and edge creation.
+            Two-character compound tokens (<code>V</code>+label) for labeled node insertion.
+            The tokenizer disambiguates by context.
+          </p>
+        </div>
+        <div class="card concept-card">
+          <div class="concept-card__icon" style="color: var(--accent-tertiary);">&#x21BB;</div>
+          <h3 class="concept-card__title">DAG Constraint</h3>
+          <p class="concept-card__text">
+            Before adding any edge via <code>C</code>/<code>c</code>, the system checks for cycles
+            via BFS reachability. If a cycle would result, the instruction is silently skipped.
+            Node insertions (<code>V</code>/<code>v</code>) never create cycles.
+          </p>
+        </div>
+        <div class="card concept-card">
+          <div class="concept-card__icon" style="color: var(--accent-secondary);">&#x2194;</div>
+          <h3 class="concept-card__title">Commutative Encoding</h3>
+          <p class="concept-card__text">
+            Non-commutative binary ops are decomposed: SUB(x,y) = ADD(x, NEG(y)),
+            DIV(x,y) = MUL(x, INV(y)). This makes all binary ops except POW commutative,
+            eliminating operand-order ambiguity from the canonical form.
+          </p>
+        </div>
+        <div class="card concept-card">
+          <div class="concept-card__icon" style="color: var(--color-edge);">&#x2192;</div>
+          <h3 class="concept-card__title">Edge Semantics</h3>
+          <p class="concept-card__text">
+            An edge u&rarr;v means &ldquo;u provides input to v&rdquo; (data flow direction).
+            For sin(x): edge x&rarr;sin. For x+y: edges x&rarr;+ and y&rarr;+.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== INSTRUCTION SET ===================== -->
+    <section class="hiw-section">
+      <h2>The Instruction Set <span id="math-sigma"></span></h2>
+      <p>
+        The IsalSR alphabet consists of 31 tokens: 7 single-character tokens and
+        24 two-character compound tokens. The configurable operation set allows
+        experiments to select subsets via YAML configuration.
+      </p>
+
+      <!-- Movement & Structure Tokens -->
+      <h3>Movement &amp; Structure Tokens</h3>
+      <table class="instruction-table">
+        <thead>
+          <tr><th>Token</th><th>Type</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="instr-char token-movement-fwd">N</span></td>
+            <td>Movement</td>
+            <td>Move primary pointer to <strong>next</strong> node in CDLL</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-movement-bwd">P</span></td>
+            <td>Movement</td>
+            <td>Move primary pointer to <strong>previous</strong> node in CDLL</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-movement-fwd">n</span></td>
+            <td>Movement</td>
+            <td>Move secondary pointer to <strong>next</strong> node in CDLL</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-movement-bwd">p</span></td>
+            <td>Movement</td>
+            <td>Move secondary pointer to <strong>previous</strong> node in CDLL</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-edge">C</span></td>
+            <td>Edge</td>
+            <td>Directed edge primary&rarr;secondary (DAG cycle check; no-op if cycle)</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-edge">c</span></td>
+            <td>Edge</td>
+            <td>Directed edge secondary&rarr;primary (DAG cycle check; no-op if cycle)</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-noop">W</span></td>
+            <td>No-op</td>
+            <td>Skip (placeholder token)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Labeled Node Insertion Tokens -->
+      <h3>Labeled Node Insertion Tokens</h3>
+      <p>
+        Compound tokens: <code>V</code>&ell; inserts a new node with label &ell; and creates
+        an edge from the primary pointer's node to the new node.
+        <code>v</code>&ell; does the same from the secondary pointer.
+      </p>
+      <table class="instruction-table">
+        <thead>
+          <tr><th>Token</th><th>NodeType</th><th>Arity</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <!-- Variadic -->
+          <tr class="group-header"><td colspan="4">Variadic (commutative, arity &ge; 2)</td></tr>
+          <tr>
+            <td><span class="instr-char token-variadic">V+</span></td>
+            <td>ADD</td><td>Variable (&ge;2)</td>
+            <td>Sum of all inputs</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-variadic">V*</span></td>
+            <td>MUL</td><td>Variable (&ge;2)</td>
+            <td>Product of all inputs</td>
+          </tr>
+          <!-- Binary -->
+          <tr class="group-header"><td colspan="4">Binary (non-commutative)</td></tr>
+          <tr>
+            <td><span class="instr-char token-binary">V-</span></td>
+            <td>SUB</td><td>Binary (2)</td>
+            <td>Subtraction</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-binary">V/</span></td>
+            <td>DIV</td><td>Binary (2)</td>
+            <td>Protected division</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-binary">V^</span></td>
+            <td>POW</td><td>Binary (2)</td>
+            <td>Protected power</td>
+          </tr>
+          <!-- Unary -->
+          <tr class="group-header"><td colspan="4">Unary (single input)</td></tr>
+          <tr>
+            <td><span class="instr-char token-unary">Vs</span></td>
+            <td>SIN</td><td>Unary (1)</td>
+            <td>Sine</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-unary">Vc</span></td>
+            <td>COS</td><td>Unary (1)</td>
+            <td>Cosine</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-unary">Ve</span></td>
+            <td>EXP</td><td>Unary (1)</td>
+            <td>Protected exponential</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-unary">Vl</span></td>
+            <td>LOG</td><td>Unary (1)</td>
+            <td>Protected logarithm</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-unary">Vr</span></td>
+            <td>SQRT</td><td>Unary (1)</td>
+            <td>Protected square root</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-unary">Va</span></td>
+            <td>ABS</td><td>Unary (1)</td>
+            <td>Absolute value</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-unary">Vg</span></td>
+            <td>NEG</td><td>Unary (1)</td>
+            <td>Negation (&minus;x)</td>
+          </tr>
+          <tr>
+            <td><span class="instr-char token-unary">Vi</span></td>
+            <td>INV</td><td>Unary (1)</td>
+            <td>Inverse (1/x, protected)</td>
+          </tr>
+          <!-- Leaf -->
+          <tr class="group-header"><td colspan="4">Leaf (no inputs)</td></tr>
+          <tr>
+            <td><span class="instr-char token-leaf">Vk</span></td>
+            <td>CONST</td><td>Leaf (0)</td>
+            <td>Learnable constant</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size: var(--text-sm); color: var(--text-tertiary); margin-top: var(--space-sm);">
+        All <code>V</code>&ell; tokens have <code>v</code>&ell; counterparts that operate from the secondary pointer.
+        Total: 12 labels &times; 2 pointers = 24 compound tokens + 7 single-char = 31 tokens.
+      </p>
+    </section>
+
+    <!-- ===================== INITIAL STATE ===================== -->
+    <section class="hiw-section">
+      <h2>Initial State</h2>
+      <p>
+        For <em>m</em> input variables x<sub>1</sub>, &hellip;, x<sub>m</sub>:
+      </p>
+      <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-bottom: var(--space-lg);">
+        <li>The DAG contains <em>m</em> VAR nodes (IDs 0, 1, &hellip;, m&minus;1), no edges.</li>
+        <li>The CDLL contains <em>m</em> entries [x<sub>1</sub>, x<sub>2</sub>, &hellip;, x<sub>m</sub>] in order.</li>
+        <li>Both pointers (primary and secondary) start on the CDLL node for x<sub>1</sub>.</li>
+      </ul>
+      <p>
+        Variables are <strong>pre-numbered and distinguishable</strong>: x<sub>1</sub> &ne; x<sub>2</sub>
+        under isomorphism. This is the key simplification that allows the canonical string
+        to be computed starting from x<sub>1</sub> only.
+      </p>
+    </section>
+
+    <!-- ===================== S2D WALKTHROUGH ===================== -->
+    <section class="hiw-section">
+      <h2>S2D Walkthrough: String &rarr; DAG</h2>
+      <p>
+        Let&rsquo;s trace the decoding of <span class="instruction-string"><span class="token-variadic">V+</span><span class="token-unary">Vs</span><span class="token-edge">C</span><span class="token-variadic">V*</span><span class="token-leaf">Vk</span></span>
+        starting from one variable x<sub>1</sub>. This builds the expression
+        sin(x<sub>1</sub>) + x<sub>1</sub> &middot; k.
+      </p>
+      <table class="walkthrough-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Token</th>
+            <th>Action</th>
+            <th>DAG State</th>
+            <th>Pointers</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>0</td>
+            <td class="token-cell">&mdash;</td>
+            <td>Initial state</td>
+            <td>Nodes: {x<sub>1</sub>}, Edges: {}</td>
+            <td>&pi;=x<sub>1</sub>, &sigma;=x<sub>1</sub></td>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td class="token-cell"><span class="token-variadic">V+</span></td>
+            <td>Insert ADD node, edge x<sub>1</sub>&rarr;ADD</td>
+            <td>Nodes: {x<sub>1</sub>, +}, Edges: {x<sub>1</sub>&rarr;+}</td>
+            <td>&pi;=x<sub>1</sub>, &sigma;=x<sub>1</sub></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td class="token-cell"><span class="token-unary">Vs</span></td>
+            <td>Insert SIN node, edge x<sub>1</sub>&rarr;SIN</td>
+            <td>Nodes: {x<sub>1</sub>, +, sin}, Edges: {x<sub>1</sub>&rarr;+, x<sub>1</sub>&rarr;sin}</td>
+            <td>&pi;=x<sub>1</sub>, &sigma;=x<sub>1</sub></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td class="token-cell"><span class="token-edge">C</span></td>
+            <td>Edge &pi;&rarr;&sigma; = x<sub>1</sub>&rarr;x<sub>1</sub>? Self-loop &rarr; <strong>no-op</strong>. Edge sin&rarr;+ created</td>
+            <td>+sin&rarr;+ added</td>
+            <td>&pi;=x<sub>1</sub>, &sigma;=x<sub>1</sub></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td class="token-cell"><span class="token-variadic">V*</span></td>
+            <td>Insert MUL node, edge x<sub>1</sub>&rarr;MUL</td>
+            <td>MUL added with edge from x<sub>1</sub></td>
+            <td>&pi;=x<sub>1</sub>, &sigma;=x<sub>1</sub></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td class="token-cell"><span class="token-leaf">Vk</span></td>
+            <td>Insert CONST node, edge x<sub>1</sub>&rarr;CONST</td>
+            <td>Final DAG: sin(x<sub>1</sub>) + x<sub>1</sub>&middot;k</td>
+            <td>&pi;=x<sub>1</sub>, &sigma;=x<sub>1</sub></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="figure-container">
+        <figure>
+          <img src="images/P0_concrete_example.png" alt="Concrete example of IsalSR encoding and decoding" loading="lazy">
+          <figcaption>Figure: A concrete example of the S2D decoding process, showing the DAG construction step by step.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===================== D2S OVERVIEW ===================== -->
+    <section class="hiw-section">
+      <h2>D2S: DAG &rarr; String</h2>
+      <p>
+        The DAG-to-String (D2S) algorithm encodes a labeled DAG as the shortest possible
+        IsalSR instruction string. It uses a greedy strategy that, starting from a given
+        variable node, iteratively selects the cheapest displacement pair (a, b) to
+        position the pointers, then emits the appropriate <code>V</code>/<code>v</code>
+        token for each internal node.
+      </p>
+      <p>
+        The displacement cost is |a| + |b| movement tokens (CDLL traversal distance).
+        D2S enumerates candidate pairs sorted by total cost and selects the first valid pair
+        for each node to insert.
+      </p>
+
+      <div class="figure-container">
+        <figure>
+          <img src="images/architecture.png" alt="IsalSR system architecture" loading="lazy">
+          <figcaption>Figure: IsalSR system architecture showing the S2D/D2S pipeline and canonical string computation.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===================== CANONICAL STRING ===================== -->
+    <section class="hiw-section">
+      <h2>The Canonical String</h2>
+      <p>
+        The <strong>canonical string</strong> w*<sub>D</sub> is the lexicographically smallest
+        shortest string among all valid encodings of a DAG D. It is computed by exploring
+        all permutations of internal node ordering (exhaustive) or using efficient pruning
+        strategies (fast canonical with Weisfeiler-Leman hashing).
+      </p>
+      <p>
+        The canonical string is a <strong>complete labeled-DAG isomorphism invariant</strong>:
+      </p>
+      <div style="text-align: center; margin: var(--space-lg) 0;">
+        <span id="math-canonical" style="font-size: var(--text-xl);"></span>
+      </div>
+      <p>
+        This means all k! equivalent node-numbering schemes for k internal nodes
+        produce the exact same canonical string, collapsing the search space by a factor of k!.
+      </p>
+      <div style="text-align: center; margin-top: var(--space-xl);">
+        <a href="math.html" class="btn btn-outline">Full Mathematical Details &rarr;</a>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="js/theme.js"></script>
+  <script src="js/components.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var interval = setInterval(function () {
+        if (window.katex) {
+          clearInterval(interval);
+          katex.render('\\Sigma_{\\mathrm{SR}}', document.getElementById('math-sigma'), { throwOnError: false });
+          katex.render('w^*_{D_1} = w^*_{D_2} \\iff D_1 \\cong D_2', document.getElementById('math-canonical'), { displayMode: true, throwOnError: false });
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>

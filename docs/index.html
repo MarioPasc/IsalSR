@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IsalSR — Canonical Strings for Symbolic Regression</title>
+  <meta name="description" content="IsalSR encodes symbolic regression expression DAGs as isomorphism-invariant canonical instruction strings, achieving O(k!) search space reduction.">
+  <meta name="keywords" content="symbolic regression, DAG isomorphism, canonical string, search space reduction, instruction set, expression trees">
+  <meta name="author" content="Ezequiel López-Rubio, Mario Pascual González, Karl Thurnhofer-Hemsi">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="IsalSR — Canonical Strings for Symbolic Regression">
+  <meta property="og:description" content="Isomorphism-invariant canonical string representations for expression DAGs. O(k!) search space reduction.">
+  <meta property="og:url" content="https://mariopasc.github.io/IsalSR/">
+  <meta property="og:type" content="website">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="IsalSR — Canonical Strings for Symbolic Regression">
+  <meta name="twitter:description" content="Isomorphism-invariant canonical string representations for expression DAGs. O(k!) search space reduction.">
+
+  <!-- Preconnects -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Favicon -->
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/variables.css?v=1">
+  <link rel="stylesheet" href="css/reset.css?v=1">
+  <link rel="stylesheet" href="css/typography.css?v=1">
+  <link rel="stylesheet" href="css/layout.css?v=1">
+  <link rel="stylesheet" href="css/components.css?v=1">
+  <link rel="stylesheet" href="css/nav.css?v=1">
+  <link rel="stylesheet" href="css/footer.css?v=1">
+  <link rel="stylesheet" href="css/index.css?v=1">
+
+  <!-- KaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head>
+<body data-page="home">
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+  <div id="site-nav"></div>
+
+  <main id="main-content">
+    <!-- ===================== HERO ===================== -->
+    <section class="hero">
+      <div class="hero__inner">
+        <div class="hero__content">
+          <h1 class="hero__title">
+            Expression DAGs as <span class="gradient-text">Canonical Strings</span>
+          </h1>
+          <p class="hero__subtitle">
+            IsalSR encodes symbolic regression expression DAGs as instruction strings
+            over a 31-token alphabet using a circular doubly linked list with two
+            mobile pointers. The canonical string is a complete labeled-DAG invariant
+            &mdash; achieving <strong>O(k!)</strong> search space reduction.
+          </p>
+          <div class="hero__ctas">
+            <a href="how-it-works.html" class="btn btn-primary">Explore How It Works &rarr;</a>
+            <a href="playground.html" class="btn btn-outline">Try the Playground &rarr;</a>
+          </div>
+        </div>
+        <div class="hero__viz" role="img" aria-label="Labeled DAG representing sin(x) + x * k and its canonical string encoding">
+          <!-- Static hero SVG: a labeled expression DAG -->
+          <svg viewBox="0 0 420 420" aria-hidden="true">
+            <!-- Background glow -->
+            <defs>
+              <radialGradient id="glow-amber" cx="50%" cy="40%" r="50%">
+                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.08"/>
+                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+              </radialGradient>
+              <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+              </marker>
+            </defs>
+            <rect width="420" height="420" fill="url(#glow-amber)" rx="16"/>
+
+            <!-- Edges (data flow: source → target) -->
+            <line x1="140" y1="175" x2="210" y2="115" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+            <line x1="280" y1="175" x2="210" y2="115" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+            <line x1="100" y1="280" x2="140" y2="200" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+            <line x1="210" y1="280" x2="280" y2="200" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+            <line x1="340" y1="280" x2="280" y2="200" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+            <line x1="100" y1="280" x2="140" y2="200" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+            <!-- Nodes -->
+            <!-- ADD (+) root -->
+            <circle cx="210" cy="100" r="28" fill="#1a2235" stroke="#fb923c" stroke-width="2.5"/>
+            <text x="210" y="100" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="22" font-weight="700" fill="#fb923c">+</text>
+
+            <!-- SIN -->
+            <circle cx="140" cy="190" r="24" fill="#1a2235" stroke="#34d399" stroke-width="2"/>
+            <text x="140" y="190" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600" fill="#34d399">sin</text>
+
+            <!-- MUL (*) -->
+            <circle cx="280" cy="190" r="24" fill="#1a2235" stroke="#fb923c" stroke-width="2"/>
+            <text x="280" y="190" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="700" fill="#fb923c">*</text>
+
+            <!-- x₁ (shared input) -->
+            <circle cx="100" cy="290" r="20" fill="#1a2235" stroke="#f59e0b" stroke-width="2"/>
+            <text x="100" y="290" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600" fill="#f59e0b">x&#x2081;</text>
+
+            <!-- x₂ -->
+            <circle cx="210" cy="290" r="20" fill="#1a2235" stroke="#f59e0b" stroke-width="2"/>
+            <text x="210" y="290" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600" fill="#f59e0b">x&#x2082;</text>
+
+            <!-- k (constant) -->
+            <circle cx="340" cy="290" r="20" fill="#1a2235" stroke="#94a3b8" stroke-width="2"/>
+            <text x="340" y="290" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600" fill="#94a3b8">k</text>
+
+            <!-- Canonical string display -->
+            <rect x="60" y="350" width="300" height="40" rx="8" fill="#0d1117" stroke="#243049" stroke-width="1"/>
+            <text x="210" y="370" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="700">
+              <tspan fill="#fb923c">V+</tspan><tspan fill="#34d399">Vs</tspan><tspan fill="#f472b6">C</tspan><tspan fill="#fb923c">V*</tspan><tspan fill="#94a3b8">Vk</tspan>
+            </text>
+            <text x="210" y="405" text-anchor="middle" font-family="'Source Sans 3', sans-serif" font-size="11" fill="#7a8599">canonical string w*</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== KEY RESULTS STRIP ============== -->
+    <section class="results-strip bg-secondary">
+      <div class="results-strip__grid">
+        <div class="card result-card">
+          <div class="result-card__icon" aria-hidden="true">&#x2261;</div>
+          <h3 class="result-card__title">Complete Invariant</h3>
+          <div class="result-card__math" id="math-invariant"></div>
+          <p class="result-card__text">
+            Two expression DAGs are isomorphic if and only if their canonical strings are identical.
+          </p>
+        </div>
+        <div class="card result-card">
+          <div class="result-card__icon" aria-hidden="true">k!</div>
+          <h3 class="result-card__title">O(k!) Reduction</h3>
+          <div class="result-card__math" id="math-reduction"></div>
+          <p class="result-card__text">
+            For k non-variable nodes, up to k! redundant representations collapse to a single canonical form.
+          </p>
+        </div>
+        <div class="card result-card">
+          <div class="result-card__icon" aria-hidden="true">31</div>
+          <h3 class="result-card__title">Token Alphabet</h3>
+          <div class="result-card__math">
+            <span class="instruction-string">
+              <span style="color: var(--color-movement-fwd);">N</span><span style="color: var(--color-movement-bwd);">P</span><span style="color: var(--color-insert-unary);">Vs</span><span style="color: var(--color-insert-variadic);">V+</span><span style="color: var(--color-edge);">C</span><span style="color: var(--color-noop);">W</span>
+            </span>
+          </div>
+          <p class="result-card__text">
+            Two-tier encoding: 7 single-char tokens for movement/edges, 24 compound tokens for labeled node insertion.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HOW IT WORKS TEASER ============ -->
+    <section class="teaser container">
+      <div class="teaser__header">
+        <h2>How It Works</h2>
+        <p>Three steps from mathematical expression to canonical string representation.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step__number">1</div>
+          <h3 class="step__title">Expression DAG</h3>
+          <p class="step__text">
+            Start with a mathematical expression represented as a labeled directed acyclic graph.
+            Each node carries an operation type (ADD, SIN, MUL, ...) and edges encode data flow.
+          </p>
+        </div>
+        <div class="step">
+          <div class="step__number">2</div>
+          <h3 class="step__title">CDLL + Two Pointers</h3>
+          <p class="step__text">
+            A circular doubly linked list with two mobile pointers traverses the DAG,
+            emitting labeled tokens that encode structure and node operations.
+          </p>
+        </div>
+        <div class="step">
+          <div class="step__number">3</div>
+          <h3 class="step__title">Canonical String</h3>
+          <p class="step__text">
+            The lexicographically smallest shortest encoding is a complete labeled-DAG invariant.
+            All k! equivalent node numberings map to one representative.
+          </p>
+        </div>
+      </div>
+      <div style="text-align: center; margin-top: var(--space-2xl);">
+        <a href="how-it-works.html" class="btn btn-outline">Learn More &rarr;</a>
+      </div>
+    </section>
+
+    <!-- ============ RELATIONSHIP TO ISALGRAPH ============ -->
+    <section class="teaser bg-secondary">
+      <div class="container">
+        <div class="teaser__header">
+          <h2>Extending IsalGraph</h2>
+          <p>
+            IsalSR extends the <a href="https://mariopasc.github.io/IsalGraph/" style="color: var(--accent-primary);">IsalGraph</a>
+            framework from unlabeled, undirected graphs to labeled directed acyclic graphs for symbolic regression.
+          </p>
+        </div>
+        <div class="pub-teaser">
+          <div class="card concept-card" style="padding: var(--space-xl);">
+            <h3 style="color: var(--text-primary); font-size: var(--text-lg); margin-bottom: var(--space-sm);">IsalGraph</h3>
+            <p style="color: var(--text-secondary); font-size: var(--text-sm);">
+              9-character alphabet for undirected simple graphs.
+              Unlabeled nodes, no edge direction, no acyclicity constraint.
+              Complete graph invariant for topology.
+            </p>
+          </div>
+          <div class="card concept-card" style="padding: var(--space-xl); border-color: var(--accent-primary);">
+            <h3 style="color: var(--accent-primary); font-size: var(--text-lg); margin-bottom: var(--space-sm);">IsalSR</h3>
+            <p style="color: var(--text-secondary); font-size: var(--text-sm);">
+              31-token alphabet for labeled DAGs.
+              14 operation types with arity constraints, directed edges with cycle detection,
+              commutative encoding (SUB&rarr;ADD+NEG, DIV&rarr;MUL+INV).
+              Complete labeled-DAG invariant for expressions.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PUBLICATION TEASER ============ -->
+    <section class="teaser container">
+      <div class="teaser__header">
+        <h2>Publications</h2>
+        <p>Research papers from the Isal framework family.</p>
+      </div>
+      <div class="pub-teaser">
+        <div class="card pub-teaser__card">
+          <div class="pub-teaser__year"><span class="badge badge--green">2026</span></div>
+          <h3 class="pub-teaser__title">Instruction set for the representation of graphs</h3>
+          <p class="pub-teaser__authors">E. Lopez-Rubio, M. Pascual-Gonzalez</p>
+          <a href="https://arxiv.org/abs/2603.11039" class="pub-teaser__link" target="_blank" rel="noopener noreferrer">arXiv &rarr;</a>
+        </div>
+        <div class="card pub-teaser__card">
+          <div class="pub-teaser__year"><span class="badge badge--amber">2026</span> <span class="badge badge--amber">In preparation</span></div>
+          <h3 class="pub-teaser__title">Representation of DAGs by Sequences of Instructions for Symbolic Regression</h3>
+          <p class="pub-teaser__authors">E. López-Rubio, M. Pascual-González, K. Thurnhofer-Hemsi</p>
+          <span style="color: var(--text-tertiary); font-size: var(--text-sm);">Targeting IEEE TPAMI</span>
+        </div>
+      </div>
+      <div style="text-align: center; margin-top: var(--space-xl);">
+        <a href="publications.html" class="btn btn-outline">All Publications &rarr;</a>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <!-- Scripts -->
+  <script src="js/theme.js"></script>
+  <script src="js/components.js"></script>
+
+  <!-- KaTeX -->
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      function renderMath(id, tex) {
+        var el = document.getElementById(id);
+        if (el && window.katex) {
+          katex.render(tex, el, { displayMode: false, throwOnError: false });
+        }
+      }
+      // Wait for KaTeX to load
+      var interval = setInterval(function () {
+        if (window.katex) {
+          clearInterval(interval);
+          renderMath('math-invariant', 'w^*_{D_1} = w^*_{D_2} \\iff D_1 \\cong D_2');
+          renderMath('math-reduction', '\\text{Reduction factor} = \\Theta(k!)');
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>

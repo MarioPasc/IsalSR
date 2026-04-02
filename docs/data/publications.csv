@@ -1,0 +1,30 @@
+id,year,type,badge_color,title,authors,abstract,arxiv,doi,pdf,bibtex
+bib-isalchem,2025,Journal,amber,Representation of Molecules by Sequences of Instructions,"Karl Thurnhofer-Hemsi, Iván García-Aguilar, José David Fernández-Rodriguez, Ezequiel López-Rubio","IsalChem applies instruction string encoding to molecular graphs. Molecules are represented as labeled graphs where atoms are nodes and bonds are edges. The encoding framework produces compact string representations that capture molecular topology, enabling string-based techniques for molecular comparison, generation, and classification. Published in the Journal of Chemical Information and Modeling (ACS Publications).",,https://doi.org/10.1021/acs.jcim.5c00572,,"@article{thurnhofer2025representation,
+  title={Representation of Molecules by Sequences of Instructions},
+  author={Thurnhofer-Hemsi, Karl and Garc{\'\\i}a-Aguilar, Iv{\\'a}n and Fern{\\'a}ndez-Rodriguez, Jos{\\'e} David and L{\\'o}pez-Rubio, Ezequiel},
+  journal={Journal of Chemical Information and Modeling},
+  volume={65},
+  number={15},
+  pages={7936--7955},
+  year={2025},
+  publisher={ACS Publications}
+}"
+bib-isalgraph-2025,2025,arXiv preprint,green,Representation of the structure of graphs by sequences of instructions,Ezequiel Lopez-Rubio,"This paper presents the foundational theory for representing graph structures using instruction sequences. A graph is encoded as a string over a finite alphabet by traversing it with a circular doubly linked list equipped with two pointers. The encoding procedure is reversible: the original graph can be reconstructed from its string representation.",https://arxiv.org/abs/2512.10429,,https://arxiv.org/pdf/2512.10429,"@misc{lopezrubio2025representationstructuregraphssequences,
+      title={Representation of the structure of graphs by sequences of instructions},
+      author={Ezequiel Lopez-Rubio},
+      year={2025},
+      eprint={2512.10429},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2512.10429},
+}"
+bib-isalgraph-2026,2026,arXiv preprint,green,Instruction set for the representation of graphs,"Ezequiel Lopez-Rubio, Mario Pascual-Gonzalez","IsalGraph: a framework for representing the structure of finite simple graphs as strings over a 9-character instruction alphabet. Using a circular doubly linked list (CDLL) with two mobile pointers, any graph can be encoded into a compact instruction sequence and faithfully decoded back. The canonical string is a complete graph invariant: two graphs are isomorphic if and only if their canonical strings coincide.",https://arxiv.org/abs/2603.11039,,https://arxiv.org/pdf/2603.11039,"@misc{lopezrubio2026instructionsetrepresentationgraphs,
+      title={Instruction set for the representation of graphs},
+      author={Ezequiel Lopez-Rubio and Mario Pascual-Gonzalez},
+      year={2026},
+      eprint={2603.11039},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2603.11039},
+}"
+bib-isalsr,2026,In preparation,amber,Representation of Directed Acyclic Graphs by Sequences of Instructions for Symbolic Regression,"Ezequiel López-Rubio, Mario Pascual-González, Karl Thurnhofer-Hemsi","IsalSR extends IsalGraph to labeled directed acyclic graphs (DAGs) for symbolic regression. A two-tier 31-token alphabet encodes expression DAGs as instruction strings. The canonical string is a complete labeled-DAG isomorphism invariant, achieving O(k!) search space reduction for expressions with k internal nodes. Integrated as a plug-and-play representation layer into existing SR methods (Bingo, UDFS).",,,,,

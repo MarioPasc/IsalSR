@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playground — IsalSR</title>
+  <meta name="description" content="Interactive playground for decoding IsalSR instruction strings into labeled expression DAGs.">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="css/variables.css?v=1">
+  <link rel="stylesheet" href="css/reset.css?v=1">
+  <link rel="stylesheet" href="css/typography.css?v=1">
+  <link rel="stylesheet" href="css/layout.css?v=1">
+  <link rel="stylesheet" href="css/components.css?v=1">
+  <link rel="stylesheet" href="css/nav.css?v=1">
+  <link rel="stylesheet" href="css/footer.css?v=1">
+  <link rel="stylesheet" href="css/playground.css?v=1">
+</head>
+<body data-page="playground">
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+  <div id="site-nav"></div>
+
+  <main id="main-content" class="container">
+    <!-- Header -->
+    <header class="playground-header">
+      <h1>Playground</h1>
+      <p>
+        Decode IsalSR instruction strings into labeled expression DAGs.
+        Enter a string or select a preset to see the resulting expression.
+      </p>
+    </header>
+
+    <!-- Main layout -->
+    <div class="playground-layout">
+      <!-- Input panel -->
+      <div class="playground-input">
+        <label class="playground-input__label" for="s2d-input">String &rarr; DAG (S2D)</label>
+        <input
+          type="text"
+          id="s2d-input"
+          class="playground-input__string"
+          placeholder="e.g. V+VsCV*Vk"
+          spellcheck="false"
+          autocomplete="off"
+        >
+        <div class="playground-input__info">
+          Variables: 1 (x<sub>1</sub>). Alphabet: N P n p C c W V&ell; v&ell;
+        </div>
+        <div id="s2d-error" class="playground-input__error"></div>
+
+        <div style="margin-top: var(--space-lg);">
+          <button class="btn btn-primary" id="s2d-decode-btn" onclick="IsalSR.decodeString()">
+            Decode &rarr;
+          </button>
+        </div>
+
+        <!-- Presets -->
+        <div class="playground-presets">
+          <span class="playground-presets__label">Presets</span>
+          <div class="playground-presets__grid">
+            <button class="preset-btn" onclick="IsalSR.loadPreset('V+', 'x + new_node')">
+              <span class="token-variadic">V+</span> &nbsp;simple add
+            </button>
+            <button class="preset-btn" onclick="IsalSR.loadPreset('V+Vs', 'add + sin')">
+              <span class="token-variadic">V+</span><span class="token-unary">Vs</span> &nbsp;add &amp; sin
+            </button>
+            <button class="preset-btn" onclick="IsalSR.loadPreset('V+VsCV*Vk', 'sin(x)+x*k')">
+              <span class="token-variadic">V+</span><span class="token-unary">Vs</span><span class="token-edge">C</span><span class="token-variadic">V*</span><span class="token-leaf">Vk</span>
+            </button>
+            <button class="preset-btn" onclick="IsalSR.loadPreset('V*NV+nCNVs', 'complex')">
+              <span class="token-variadic">V*</span><span class="token-movement-fwd">N</span><span class="token-variadic">V+</span><span class="token-movement-fwd">n</span><span class="token-edge">C</span><span class="token-movement-fwd">N</span><span class="token-unary">Vs</span>
+            </button>
+            <button class="preset-btn" onclick="IsalSR.loadPreset('VsV+VkNV*', 'multi-op')">
+              <span class="token-unary">Vs</span><span class="token-variadic">V+</span><span class="token-leaf">Vk</span><span class="token-movement-fwd">N</span><span class="token-variadic">V*</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Output panel -->
+      <div class="playground-output">
+        <div class="playground-output__viz" id="s2d-output">
+          <div class="playground-output__placeholder">
+            <div class="playground-output__placeholder-icon">&#x25C9;</div>
+            <p>
+              <strong>Interactive DAG visualization</strong><br>
+              Enter an instruction string and click <em>Decode</em> to see the resulting
+              expression DAG rendered here.
+            </p>
+            <p style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--text-tertiary);">
+              Full step-by-step visualization with D3.js is coming in the next release.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trace section (scaffold) -->
+    <section class="playground-trace">
+      <div class="card" style="padding: var(--space-xl);">
+        <h3 style="margin-bottom: var(--space-md);">Execution Trace</h3>
+        <div id="s2d-trace" style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-tertiary);">
+          <p>Decode an instruction string to see the step-by-step execution trace.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reference -->
+    <section style="max-width: 700px; margin: var(--space-3xl) auto 0; text-align: center;">
+      <p style="color: var(--text-tertiary); font-size: var(--text-sm);">
+        The playground implements the S2D (String-to-DAG) algorithm described in
+        <a href="how-it-works.html" style="color: var(--accent-primary);">How It Works</a>.
+        For the full mathematical specification, see
+        <a href="math.html" style="color: var(--accent-primary);">Math Foundations</a>.
+      </p>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="js/theme.js"></script>
+  <script src="js/components.js"></script>
+  <script>
+    // Playground controller (scaffold — full S2D port deferred)
+    (function () {
+      'use strict';
+      window.IsalSR = window.IsalSR || {};
+
+      // Valid single-char tokens
+      var SINGLE_TOKENS = 'NPnpCcW';
+      // Valid label chars after V/v
+      var LABEL_CHARS = '+*-/screlka^gi';
+
+      IsalSR.loadPreset = function (str, name) {
+        var input = document.getElementById('s2d-input');
+        if (input) {
+          input.value = str;
+          document.getElementById('s2d-error').textContent = '';
+        }
+      };
+
+      IsalSR.decodeString = function () {
+        var input = document.getElementById('s2d-input');
+        var errorEl = document.getElementById('s2d-error');
+        var traceEl = document.getElementById('s2d-trace');
+        var outputEl = document.getElementById('s2d-output');
+        if (!input) return;
+
+        var str = input.value.trim();
+        errorEl.textContent = '';
+
+        if (!str) {
+          errorEl.textContent = 'Please enter an instruction string.';
+          return;
+        }
+
+        // Tokenize and validate
+        var tokens = [];
+        var i = 0;
+        while (i < str.length) {
+          var ch = str[i];
+          if (ch === 'V' || ch === 'v') {
+            if (i + 1 >= str.length) {
+              errorEl.textContent = 'Error: ' + ch + ' at position ' + i + ' missing label character.';
+              return;
+            }
+            var label = str[i + 1];
+            if (LABEL_CHARS.indexOf(label) === -1) {
+              errorEl.textContent = 'Error: Invalid label "' + label + '" after ' + ch + ' at position ' + i + '.';
+              return;
+            }
+            tokens.push(ch + label);
+            i += 2;
+          } else if (SINGLE_TOKENS.indexOf(ch) !== -1) {
+            tokens.push(ch);
+            i++;
+          } else {
+            errorEl.textContent = 'Error: Unknown character "' + ch + '" at position ' + i + '.';
+            return;
+          }
+        }
+
+        // Show tokenization trace
+        var traceHTML = '<div style="margin-bottom: var(--space-md);">';
+        traceHTML += '<strong style="color: var(--text-primary);">Tokens (' + tokens.length + '):</strong> ';
+        for (var t = 0; t < tokens.length; t++) {
+          var tok = tokens[t];
+          var cls = 'token-noop';
+          if (tok === 'N' || tok === 'n') cls = 'token-movement-fwd';
+          else if (tok === 'P' || tok === 'p') cls = 'token-movement-bwd';
+          else if (tok === 'C' || tok === 'c') cls = 'token-edge';
+          else if (tok === 'W') cls = 'token-noop';
+          else if (tok.length === 2) {
+            var lbl = tok[1];
+            if (lbl === '+' || lbl === '*') cls = 'token-variadic';
+            else if (lbl === '-' || lbl === '/' || lbl === '^') cls = 'token-binary';
+            else if (lbl === 'k') cls = 'token-leaf';
+            else cls = 'token-unary';
+          }
+          traceHTML += '<span class="' + cls + '" style="font-weight:700;">' + tok + '</span>';
+          if (t < tokens.length - 1) traceHTML += ' ';
+        }
+        traceHTML += '</div>';
+
+        // Token breakdown
+        var counts = { movement: 0, edge: 0, insert: 0, noop: 0 };
+        for (var j = 0; j < tokens.length; j++) {
+          var tk = tokens[j];
+          if ('NPnp'.indexOf(tk) !== -1) counts.movement++;
+          else if ('Cc'.indexOf(tk) !== -1) counts.edge++;
+          else if (tk === 'W') counts.noop++;
+          else counts.insert++;
+        }
+        traceHTML += '<div style="color: var(--text-secondary);">';
+        traceHTML += 'Movement: ' + counts.movement + ' | ';
+        traceHTML += 'Edge: ' + counts.edge + ' | ';
+        traceHTML += 'Insert: ' + counts.insert + ' | ';
+        traceHTML += 'No-op: ' + counts.noop;
+        traceHTML += '</div>';
+        traceHTML += '<div style="color: var(--text-tertiary); margin-top: var(--space-sm); font-size: var(--text-xs);">';
+        traceHTML += 'Expected DAG: 1 variable + ' + counts.insert + ' internal nodes = ' + (1 + counts.insert) + ' total nodes.';
+        traceHTML += '</div>';
+
+        traceEl.innerHTML = traceHTML;
+
+        // Update output placeholder with parsed info
+        outputEl.innerHTML =
+          '<div class="playground-output__placeholder">' +
+            '<div style="font-size: 2rem; margin-bottom: var(--space-md); color: var(--accent-primary);">&#x2713;</div>' +
+            '<p><strong>Valid string parsed</strong></p>' +
+            '<p style="margin-top: var(--space-sm);">' + tokens.length + ' tokens &rarr; ' + (1 + counts.insert) + ' DAG nodes</p>' +
+            '<p style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--text-tertiary);">' +
+              'Full D3.js DAG rendering coming in the next release.</p>' +
+          '</div>';
+      };
+    })();
+  </script>
+</body>
+</html>

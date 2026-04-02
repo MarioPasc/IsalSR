@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results — IsalSR</title>
+  <meta name="description" content="Experimental methodology and results for IsalSR search space reduction in symbolic regression.">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="css/variables.css?v=1">
+  <link rel="stylesheet" href="css/reset.css?v=1">
+  <link rel="stylesheet" href="css/typography.css?v=1">
+  <link rel="stylesheet" href="css/layout.css?v=1">
+  <link rel="stylesheet" href="css/components.css?v=1">
+  <link rel="stylesheet" href="css/nav.css?v=1">
+  <link rel="stylesheet" href="css/footer.css?v=1">
+  <link rel="stylesheet" href="css/results.css?v=1">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head>
+<body data-page="results">
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+  <div id="site-nav"></div>
+
+  <main id="main-content" class="container">
+    <header class="results-header">
+      <h1>Results</h1>
+      <p>
+        Experimental methodology for validating the O(k!) search space reduction
+        and its impact on existing symbolic regression methods.
+      </p>
+    </header>
+
+    <!-- Coming soon banner -->
+    <div class="coming-soon-banner">
+      <div class="coming-soon-banner__icon">&#x23F3;</div>
+      <h2 class="coming-soon-banner__title">Experimental Results Coming Soon</h2>
+      <p class="coming-soon-banner__text">
+        Comprehensive experimental results are being finalized for the upcoming publication.
+        This page describes the evaluation methodology. Full results, figures, and
+        statistical analysis will appear here upon paper completion.
+      </p>
+    </div>
+
+    <!-- ===================== METHODOLOGY ===================== -->
+    <section class="methodology-section">
+      <h2>Evaluation Methodology</h2>
+
+      <h3 style="margin-bottom: var(--space-md);">Search Space Reduction</h3>
+      <p>
+        The central claim of IsalSR is that for an expression DAG with k internal nodes,
+        there exist &Theta;(k!) structurally equivalent but differently-labeled variants occupying
+        separate points in the search space. IsalSR collapses these redundancies into a single
+        canonical string, reducing the effective search space by a factor of k!.
+      </p>
+      <p>
+        The <strong>empirical reduction factor</strong> is measured as:
+      </p>
+      <div style="text-align: center; margin: var(--space-lg) 0;">
+        <span id="math-rf" style="font-size: var(--text-xl);"></span>
+      </div>
+
+      <div class="figure-container">
+        <figure>
+          <img src="images/search_space_reduction.png" alt="Search space reduction visualization" loading="lazy">
+          <figcaption>Visualization of the O(k!) search space reduction achieved by canonical string representation.</figcaption>
+        </figure>
+      </div>
+
+      <h3 style="margin-top: var(--space-2xl); margin-bottom: var(--space-md);">Three-Axis Evaluation</h3>
+      <p>
+        IsalSR is evaluated along three orthogonal axes using a paired comparison design
+        (baseline vs. IsalSR variant, 30 seeds per configuration):
+      </p>
+      <div class="integration-cards" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="card" style="padding: var(--space-xl);">
+          <h4 style="color: var(--accent-primary); margin-bottom: var(--space-sm); font-size: var(--text-base);">Axis 1: Search Space</h4>
+          <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+            Reduction factor &rho;, redundancy rate, unique canonical strings vs. total DAGs explored.
+          </p>
+        </div>
+        <div class="card" style="padding: var(--space-xl);">
+          <h4 style="color: var(--accent-secondary); margin-bottom: var(--space-sm); font-size: var(--text-base);">Axis 2: Regression Quality</h4>
+          <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+            R&sup2;, NRMSE, solution recovery rate. IsalSR should match or improve baseline quality.
+          </p>
+        </div>
+        <div class="card" style="padding: var(--space-xl);">
+          <h4 style="color: var(--accent-tertiary); margin-bottom: var(--space-sm); font-size: var(--text-base);">Axis 3: Overhead</h4>
+          <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+            Canonicalization cost per DAG, overhead percentage relative to fitness evaluation.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== INTEGRATION ===================== -->
+    <section class="methodology-section">
+      <h2>Plug-and-Play Integration</h2>
+      <p>
+        IsalSR is <strong>not a new symbolic regression method</strong>. It is a representation
+        layer that can be integrated into any existing SR algorithm with a single
+        canonicalization step before fitness evaluation. We validate this claim by
+        integrating IsalSR into two fundamentally different SR methods:
+      </p>
+      <div class="integration-cards">
+        <div class="card integration-card">
+          <span class="integration-card__badge integration-card__badge--gp">Genetic Programming</span>
+          <h3 class="integration-card__title">Bingo (NASA)</h3>
+          <p class="integration-card__text">
+            Stochastic evolutionary approach using Pareto optimization (age-fitness).
+            Mutation and crossover frequently rediscover equivalent expression structures.
+            IsalSR deduplicates the population by canonicalizing each individual before evaluation.
+          </p>
+        </div>
+        <div class="card integration-card">
+          <span class="integration-card__badge integration-card__badge--enum">Enumeration</span>
+          <h3 class="integration-card__title">UDFS (IJCAI 2024)</h3>
+          <p class="integration-card__text">
+            Deterministic depth-first enumeration of DAG skeletons.
+            Systematic enumeration naturally produces all k! permutations of each structure.
+            IsalSR eliminates redundant evaluations by mapping each skeleton to its canonical form.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== BENCHMARKS ===================== -->
+    <section class="methodology-section">
+      <h2>Benchmark Suites</h2>
+
+      <h3 style="margin-bottom: var(--space-md);">Nguyen Benchmarks (12 problems)</h3>
+      <table class="benchmark-table">
+        <thead>
+          <tr><th>Problem</th><th>Variables</th><th>Expression</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Nguyen-1</td><td>1</td><td>x&sup3; + x&sup2; + x</td></tr>
+          <tr><td>Nguyen-2</td><td>1</td><td>x&#x2074; + x&sup3; + x&sup2; + x</td></tr>
+          <tr><td>Nguyen-3</td><td>1</td><td>x&#x2075; + x&#x2074; + x&sup3; + x&sup2; + x</td></tr>
+          <tr><td>Nguyen-4</td><td>1</td><td>x&#x2076; + x&#x2075; + x&#x2074; + x&sup3; + x&sup2; + x</td></tr>
+          <tr><td>Nguyen-5</td><td>1</td><td>sin(x&sup2;) &middot; cos(x) &minus; 1</td></tr>
+          <tr><td>Nguyen-6</td><td>1</td><td>sin(x) + sin(x + x&sup2;)</td></tr>
+          <tr><td>Nguyen-7</td><td>1</td><td>ln(x + 1) + ln(x&sup2; + 1)</td></tr>
+          <tr><td>Nguyen-8</td><td>1</td><td>&radic;x</td></tr>
+          <tr><td>Nguyen-9</td><td>2</td><td>sin(x) + sin(y&sup2;)</td></tr>
+          <tr><td>Nguyen-10</td><td>2</td><td>2 sin(x) cos(y)</td></tr>
+          <tr><td>Nguyen-11</td><td>2</td><td>x<sup>y</sup></td></tr>
+          <tr><td>Nguyen-12</td><td>2</td><td>x&#x2074; &minus; x&sup3; + y&sup2;/2 &minus; y</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: var(--space-2xl); margin-bottom: var(--space-md);">AI Feynman Benchmarks (10 physics equations)</h3>
+      <p>
+        Selected from the Feynman Symbolic Regression Database.
+        1&ndash;3 input variables, encompassing polynomial, rational, and transcendental forms
+        from the Feynman Lectures on Physics.
+        Training: 1,000 points; Testing: 250 points.
+      </p>
+    </section>
+
+    <!-- ===================== PROTOCOL ===================== -->
+    <section class="methodology-section">
+      <h2>Statistical Protocol</h2>
+      <p>
+        For each (method, problem, seed) triple, both the baseline and IsalSR variants
+        are run with identical computational budgets (same wall-clock timeout).
+        Results are aggregated over 30 random seeds and compared using:
+      </p>
+      <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-bottom: var(--space-lg);">
+        <li>Paired t-test and Wilcoxon signed-rank test (per-problem significance)</li>
+        <li>Holm-Bonferroni correction (family-wise error control)</li>
+        <li>Friedman test with Nemenyi post-hoc (cross-problem ranking)</li>
+        <li>Cohen&rsquo;s d with bootstrap confidence intervals (effect sizes)</li>
+      </ul>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="js/theme.js"></script>
+  <script src="js/components.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var interval = setInterval(function () {
+        if (window.katex) {
+          clearInterval(interval);
+          katex.render('\\rho = \\frac{N_{\\text{total}}}{N_{\\text{unique}}} \\approx k!', document.getElementById('math-rf'), { displayMode: true, throwOnError: false });
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>

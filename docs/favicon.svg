@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Target node (labeled "+") -->
+  <circle cx="22" cy="10" r="7" fill="#8b5cf6" opacity="0.9"/>
+  <text x="22" y="10" text-anchor="middle" dominant-baseline="central"
+        font-family="monospace" font-size="10" font-weight="bold" fill="#fff">+</text>
+  <!-- Source node (variable "x") -->
+  <circle cx="10" cy="22" r="5" fill="#f59e0b" opacity="0.9"/>
+  <text x="10" y="22" text-anchor="middle" dominant-baseline="central"
+        font-family="monospace" font-size="7" font-weight="bold" fill="#fff">x</text>
+  <!-- Directed edge with arrowhead -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5"
+            markerWidth="5" markerHeight="5" orient="auto-start-auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981"/>
+    </marker>
+  </defs>
+  <line x1="13.5" y1="18.5" x2="18" y2="14" stroke="#10b981" stroke-width="2.5"
+        stroke-linecap="round" marker-end="url(#arrow)"/>
+</svg>
