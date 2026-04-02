@@ -56,16 +56,14 @@
     var dag = new LabeledDAG(this._maxNodes + 1);
     var cdll = new CDLL(this._maxNodes + 1);
 
-    // Initialize: m VAR nodes
+    // Initialize: m VAR nodes in order [x₁, x₂, ..., xₘ]
     var firstCdllNode = -1;
+    var lastCdllNode = -1;
     for (var v = 0; v < this._numVars; v++) {
       dag.addNode('VAR', { varIndex: v });
-      var cdllNode = cdll.insertAfter(v === 0 ? -1 : firstCdllNode, v);
+      var cdllNode = cdll.insertAfter(lastCdllNode, v);
       if (v === 0) firstCdllNode = cdllNode;
-      // Insert after previous node to maintain order
-      if (v > 0) {
-        // Already inserted in correct position via insertAfter chain
-      }
+      lastCdllNode = cdllNode;
     }
 
     var primaryPtr = firstCdllNode;

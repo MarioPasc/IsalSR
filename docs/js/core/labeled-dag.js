@@ -185,5 +185,134 @@
     return copy;
   };
 
+  // Subscript digits for variable display
+  var SUB_DIGITS = ['\u2081','\u2082','\u2083','\u2084','\u2085','\u2086','\u2087','\u2088','\u2089'];
+
+  // Display names for expression rendering
+  var EXPR_DISPLAY = {
+    'ADD': '+', 'MUL': '\u00B7', 'SUB': '\u2212', 'DIV': '/',
+    'POW': '^', 'SIN': 'sin', 'COS': 'cos', 'EXP': 'exp',
+    'LOG': 'log', 'SQRT': '\u221A', 'ABS': 'abs', 'NEG': '\u2212',
+    'INV': '1/', 'CONST': 'k'
+  };
+
+  var BINARY_OPS = { 'ADD': true, 'MUL': true, 'SUB': true, 'DIV': true, 'POW': true };
+  var UNARY_OPS = { 'SIN': true, 'COS': true, 'EXP': true, 'LOG': true, 'SQRT': true, 'ABS': true, 'NEG': true, 'INV': true };
+
+  /**
+   * Convert this DAG to a human-readable mathematical expression string.
+   * Finds root nodes (nodes with out-edges but no in-edges from other internal nodes,
+   * or more precisely, nodes that are not inputs to any other node) and renders them.
+   * If multiple roots exist, joins them with " ; ".
+   * @returns {string} The mathematical expression.
+   */
+  LabeledDAG.prototype.toExpression = function () {
+    if (this._nodeCount === 0) return '';
+
+    var self = this;
+    var visited = {};
+
+    function renderNode(nodeId) {
+      if (visited[nodeId]) return '(...)'; // cycle guard
+      visited[nodeId] = true;
+
+      var label = self._labels[nodeId];
+      var meta = self._metadata[nodeId];
+
+      // Leaf nodes
+      if (label === 'VAR') {
+        var idx = meta ? meta.varIndex : nodeId;
+        visited[nodeId] = false;
+        return 'x' + (SUB_DIGITS[idx] || String(idx + 1));
+      }
+      if (label === 'CONST') {
+        visited[nodeId] = false;
+        return 'k';
+      }
+
+      // Get inputs in insertion order
+      var inputs = self._inputOrder[nodeId];
+      if (!inputs || inputs.length === 0) {
+        // No inputs yet — just show the operation name
+        visited[nodeId] = false;
+        return (EXPR_DISPLAY[label] || label) + '(?)';
+      }
+
+      var result;
+      var sym = EXPR_DISPLAY[label] || label;
+
+      if (UNARY_OPS[label]) {
+        var child = renderNode(inputs[0]);
+        if (label === 'NEG') {
+          result = '(\u2212' + child + ')';
+        } else if (label === 'INV') {
+          result = '(1/' + child + ')';
+        } else if (label === 'SQRT') {
+          result = '\u221A(' + child + ')';
+        } else {
+          result = sym + '(' + child + ')';
+        }
+      } else if (BINARY_OPS[label]) {
+        if (inputs.length === 1) {
+          // Partially connected binary/variadic op
+          result = sym + '(' + renderNode(inputs[0]) + ', ?)';
+        } else {
+          var parts = [];
+          for (var i = 0; i < inputs.length; i++) {
+            parts.push(renderNode(inputs[i]));
+          }
+          if (label === 'POW') {
+            result = '(' + parts[0] + '^' + parts[1] + ')';
+          } else {
+            result = '(' + parts.join(' ' + sym + ' ') + ')';
+          }
+        }
+      } else {
+        // Unknown — render generically
+        var args = [];
+        for (var j = 0; j < inputs.length; j++) {
+          args.push(renderNode(inputs[j]));
+        }
+        result = label + '(' + args.join(', ') + ')';
+      }
+
+      visited[nodeId] = false;
+      return result;
+    }
+
+    // Find root nodes: nodes with out-neighbors that are NOT inputs to any other node
+    // (i.e., nodes with no entries in any other node's _inputOrder)
+    var isInput = {};
+    for (var n = 0; n < this._nodeCount; n++) {
+      for (var k = 0; k < this._inputOrder[n].length; k++) {
+        isInput[this._inputOrder[n][k]] = true;
+      }
+    }
+
+    // Roots = non-VAR, non-CONST nodes that nobody uses as input
+    // If no such node, find the deepest nodes
+    var roots = [];
+    for (var r = 0; r < this._nodeCount; r++) {
+      if (!isInput[r] && this._labels[r] !== 'VAR' && this._labels[r] !== 'CONST') {
+        roots.push(r);
+      }
+    }
+
+    // Fallback: if only VAR/CONST nodes, just list them
+    if (roots.length === 0) {
+      var vars = [];
+      for (var v = 0; v < this._nodeCount; v++) {
+        vars.push(renderNode(v));
+      }
+      return vars.join(', ');
+    }
+
+    var exprs = [];
+    for (var e = 0; e < roots.length; e++) {
+      exprs.push(renderNode(roots[e]));
+    }
+    return exprs.join(' ; ');
+  };
+
   IsalSR.LabeledDAG = LabeledDAG;
 })();

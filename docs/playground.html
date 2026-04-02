@@ -48,15 +48,10 @@
           autocomplete="off"
         >
 
-        <!-- Variable count -->
-        <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
-          <label style="font-size: var(--text-xs); color: var(--text-tertiary);">Variables:</label>
-          <select id="s2d-vars" style="padding: 2px 6px; background: var(--bg-code); border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); font-size: var(--text-sm);">
-            <option value="1" selected>1 (x&#x2081;)</option>
-            <option value="2">2 (x&#x2081;, x&#x2082;)</option>
-            <option value="3">3 (x&#x2081;, x&#x2082;, x&#x2083;)</option>
-          </select>
+        <div id="s2d-vars-display" style="font-size: var(--text-xs); color: var(--text-tertiary); font-family: var(--font-mono); margin-bottom: var(--space-sm);">
+          Variables: 1 (x&#x2081;)
         </div>
+        <input type="hidden" id="s2d-vars" value="1">
 
         <div id="s2d-error" class="playground-input__error"></div>
 
@@ -66,24 +61,49 @@
           </button>
         </div>
 
-        <!-- Presets -->
+        <!-- Presets grouped by variable count -->
         <div class="playground-presets">
-          <span class="playground-presets__label">Presets</span>
+          <span class="playground-presets__label">1 variable (x&#x2081;)</span>
           <div class="playground-presets__grid">
-            <button class="preset-btn" data-preset="V+" data-vars="1">
-              <span class="token-variadic">V+</span>&thinsp;add
+            <button class="preset-btn" data-preset="Vs" data-vars="1">
+              <span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;)
             </button>
-            <button class="preset-btn" data-preset="V+Vs" data-vars="1">
-              <span class="token-variadic">V+</span><span class="token-unary">Vs</span>&thinsp;add+sin
+            <button class="preset-btn" data-preset="VsNVe" data-vars="1">
+              <span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span>&thinsp;exp(sin(x&#x2081;))
             </button>
-            <button class="preset-btn" data-preset="V+VsCV*Vk" data-vars="1">
-              <span class="token-variadic">V+</span><span class="token-unary">Vs</span><span class="token-edge">C</span><span class="token-variadic">V*</span><span class="token-leaf">Vk</span>
+            <button class="preset-btn" data-preset="VsNVeNVr" data-vars="1">
+              <span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span><span class="token-movement-fwd">N</span><span class="token-unary">Vr</span>&thinsp;&#x221A;(exp(sin(x&#x2081;)))
             </button>
-            <button class="preset-btn" data-preset="V*NV+nCVs" data-vars="2">
-              <span class="token-variadic">V*</span><span class="token-movement-fwd">N</span><span class="token-variadic">V+</span><span class="token-movement-fwd">n</span><span class="token-edge">C</span><span class="token-unary">Vs</span>&thinsp;2-var
+          </div>
+        </div>
+        <div class="playground-presets" style="border-top: none; padding-top: 0; margin-top: var(--space-sm);">
+          <span class="playground-presets__label">2 variables (x&#x2081;, x&#x2082;)</span>
+          <div class="playground-presets__grid">
+            <button class="preset-btn" data-preset="V+Nnnc" data-vars="2">
+              <span class="token-variadic">V+</span><span class="token-movement-fwd">N</span><span class="token-movement-fwd">nn</span><span class="token-edge">c</span>&thinsp;x&#x2081;+x&#x2082;
             </button>
-            <button class="preset-btn" data-preset="VeV+VkNVs" data-vars="1">
-              <span class="token-unary">Ve</span><span class="token-variadic">V+</span><span class="token-leaf">Vk</span><span class="token-movement-fwd">N</span><span class="token-unary">Vs</span>
+            <button class="preset-btn" data-preset="V+NnncVs" data-vars="2">
+              <span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;+x&#x2082;)
+            </button>
+            <button class="preset-btn" data-preset="V*NnncVe" data-vars="2">
+              <span class="token-variadic">V*</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-unary">Ve</span>&thinsp;exp(x&#x2081;&#xB7;x&#x2082;)
+            </button>
+            <button class="preset-btn" data-preset="V+NnncVeNVs" data-vars="2">
+              <span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-unary">Ve</span><span class="token-movement-fwd">N</span><span class="token-unary">Vs</span>&thinsp;sin(exp(x&#x2081;+x&#x2082;))
+            </button>
+          </div>
+        </div>
+        <div class="playground-presets" style="border-top: none; padding-top: 0; margin-top: var(--space-sm);">
+          <span class="playground-presets__label">3 variables (x&#x2081;, x&#x2082;, x&#x2083;)</span>
+          <div class="playground-presets__grid">
+            <button class="preset-btn" data-preset="V+Nnncnc" data-vars="3">
+              <span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-movement-fwd">n</span><span class="token-edge">c</span>&thinsp;x&#x2081;+x&#x2082;+x&#x2083;
+            </button>
+            <button class="preset-btn" data-preset="V+NnncncVs" data-vars="3">
+              <span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-movement-fwd">n</span><span class="token-edge">c</span><span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;+x&#x2082;+x&#x2083;)
+            </button>
+            <button class="preset-btn" data-preset="V*NnncncVsNVe" data-vars="3">
+              <span class="token-variadic">V*</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-movement-fwd">n</span><span class="token-edge">c</span><span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span>&thinsp;exp(sin(x&#x2081;&#xB7;x&#x2082;&#xB7;x&#x2083;))
             </button>
           </div>
         </div>
@@ -91,7 +111,12 @@
 
       <!-- Output panel: D3 DAG rendering -->
       <div class="playground-output">
-        <svg id="s2d-dag-svg" class="playground-output__viz" style="width:100%; height:400px;"></svg>
+        <!-- Expression panel -->
+        <div id="s2d-expression-panel" style="display:none; padding: var(--space-sm) var(--space-md); background: var(--bg-code); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin-bottom: var(--space-sm); text-align: center;">
+          <span style="font-size: var(--text-xs); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--font-display); font-weight: 700;">Expression</span>
+          <div id="s2d-expression" style="font-family: var(--font-mono); font-size: var(--text-lg); font-weight: 600; color: var(--accent-primary); margin-top: 2px; min-height: 1.5em;">&hellip;</div>
+        </div>
+        <svg id="s2d-dag-svg" class="playground-output__viz" style="width:100%; height:370px;"></svg>
         <div id="s2d-placeholder" class="playground-output__viz" style="display:flex;">
           <div class="playground-output__placeholder">
             <div class="playground-output__placeholder-icon">&#x25C9;</div>
@@ -175,13 +200,24 @@
         return sel ? parseInt(sel.value, 10) : 1;
       }
 
+      var VAR_LABELS = {
+        '1': '1 (x\u2081)',
+        '2': '2 (x\u2081, x\u2082)',
+        '3': '3 (x\u2081, x\u2082, x\u2083)'
+      };
+
+      function setVars(n) {
+        document.getElementById('s2d-vars').value = n;
+        document.getElementById('s2d-vars-display').textContent = 'Variables: ' + (VAR_LABELS[n] || n);
+      }
+
       // Preset buttons
       document.querySelectorAll('.preset-btn[data-preset]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var str = btn.getAttribute('data-preset');
-          var vars = btn.getAttribute('data-vars');
+          var vars = btn.getAttribute('data-vars') || '1';
           document.getElementById('s2d-input').value = str;
-          if (vars) document.getElementById('s2d-vars').value = vars;
+          setVars(vars);
           document.getElementById('s2d-error').textContent = '';
         });
       });
@@ -226,9 +262,10 @@
           return;
         }
 
-        // Show DAG SVG, hide placeholder
+        // Show DAG SVG, expression panel, hide placeholder
         document.getElementById('s2d-dag-svg').style.display = 'block';
         document.getElementById('s2d-placeholder').style.display = 'none';
+        document.getElementById('s2d-expression-panel').style.display = 'block';
 
         // Show transport controls
         document.getElementById('s2d-transport').style.display = 'flex';
@@ -241,6 +278,7 @@
           stepInfoId: 'sp-step-info',
           stepLogId: 's2d-step-log',
           stringDisplayId: 's2d-string-display',
+          expressionId: 's2d-expression',
           tokens: tokens
         });
 

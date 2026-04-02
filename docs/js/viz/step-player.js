@@ -16,6 +16,7 @@
    * @param {string} config.stepInfoId - ID for step counter text
    * @param {string} config.stepLogId - ID for step log container
    * @param {string} config.stringDisplayId - ID for string display container
+   * @param {string} [config.expressionId] - ID for expression display element
    * @param {Array} config.tokens - Parsed token array from tokenize()
    */
   IsalSR.StepPlayer = function (config) {
@@ -24,6 +25,7 @@
     this.stepInfoId = config.stepInfoId;
     this.stepLogId = config.stepLogId;
     this.stringDisplayId = config.stringDisplayId;
+    this.expressionId = config.expressionId || null;
     this.tokens = config.tokens || [];
     this.currentStep = 0;
     this.playing = false;
@@ -111,6 +113,15 @@
         primaryNode: cdll.size() > 0 ? cdll.getValue(step.primaryPtr) : undefined,
         secondaryNode: cdll.size() > 0 ? cdll.getValue(step.secondaryPtr) : undefined
       });
+    }
+
+    // Render expression
+    if (this.expressionId && step.dag) {
+      var exprEl = document.getElementById(this.expressionId);
+      if (exprEl) {
+        var expr = step.dag.toExpression();
+        exprEl.textContent = expr || '\u2026';
+      }
     }
 
     // Render token string display with current position

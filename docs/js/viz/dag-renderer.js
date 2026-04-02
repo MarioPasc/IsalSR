@@ -282,25 +282,26 @@
       .attr('font-weight', '700')
       .text(function (d) { return d.displayLabel; });
 
-    // ---- Pointer legend ----
+    // ---- Pointer legend (bottom, side by side) ----
     if (primaryNode !== undefined || secondaryNode !== undefined) {
       var legend = svg.append('g')
-        .attr('transform', 'translate(10, ' + (height - 30) + ')');
+        .attr('transform', 'translate(' + (width / 2 - 80) + ', ' + (height - 8) + ')');
 
+      var lx = 0;
       if (primaryNode !== undefined) {
-        legend.append('circle').attr('cx', 0).attr('cy', 0).attr('r', 5)
-          .attr('fill', 'none').attr('stroke', '#a78bfa').attr('stroke-width', 2);
-        legend.append('text').attr('x', 12).attr('y', 4)
-          .attr('fill', '#a78bfa').attr('font-size', '10px').attr('font-family', "'Source Sans 3', sans-serif")
+        legend.append('circle').attr('cx', lx, 0).attr('cy', 0).attr('r', 4)
+          .attr('fill', 'none').attr('stroke', '#a78bfa').attr('stroke-width', 1.5);
+        legend.append('text').attr('x', lx + 8).attr('y', 3.5)
+          .attr('fill', '#a78bfa').attr('font-size', '9px').attr('font-family', "'Source Sans 3', sans-serif")
           .text('\u03C0 primary');
+        lx += 80;
       }
       if (secondaryNode !== undefined) {
-        var yOff = primaryNode !== undefined ? 16 : 0;
-        legend.append('circle').attr('cx', 0).attr('cy', yOff).attr('r', 5)
-          .attr('fill', 'none').attr('stroke', '#60a5fa').attr('stroke-width', 2)
+        legend.append('circle').attr('cx', lx).attr('cy', 0).attr('r', 4)
+          .attr('fill', 'none').attr('stroke', '#60a5fa').attr('stroke-width', 1.5)
           .attr('stroke-dasharray', '3,2');
-        legend.append('text').attr('x', 12).attr('y', yOff + 4)
-          .attr('fill', '#60a5fa').attr('font-size', '10px').attr('font-family', "'Source Sans 3', sans-serif")
+        legend.append('text').attr('x', lx + 8).attr('y', 3.5)
+          .attr('fill', '#60a5fa').attr('font-size', '9px').attr('font-family', "'Source Sans 3', sans-serif")
           .text('\u03C3 secondary');
       }
     }

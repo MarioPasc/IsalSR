@@ -1,19 +1,110 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 32 32"
+   version="1.1"
+   id="svg17"
+   sodipodi:docname="favicon.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview19"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="26.872651"
+     inkscape:cx="6.4935907"
+     inkscape:cy="15.405997"
+     inkscape:window-width="1920"
+     inkscape:window-height="1043"
+     inkscape:window-x="1920"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg17" />
   <!-- Target node (labeled "+") -->
-  <circle cx="22" cy="10" r="7" fill="#8b5cf6" opacity="0.9"/>
-  <text x="22" y="10" text-anchor="middle" dominant-baseline="central"
-        font-family="monospace" font-size="10" font-weight="bold" fill="#fff">+</text>
+  <rect
+     style="fill:#10b981;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-dasharray:none;stroke-dashoffset:0"
+     id="rect1766"
+     width="1.3601255"
+     height="3.8437502"
+     x="22.382162"
+     y="2.2975788"
+     ry="0"
+     transform="matrix(0.77786484,0.62843161,-0.72614513,0.68754145,0,0)" />
+  <circle
+     cx="22"
+     cy="10"
+     r="7"
+     fill="#8b5cf6"
+     opacity="0.9"
+     id="circle2" />
+  <text
+     x="22"
+     y="10"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="monospace"
+     font-size="10"
+     font-weight="bold"
+     fill="#fff"
+     id="text4">+</text>
   <!-- Source node (variable "x") -->
-  <circle cx="10" cy="22" r="5" fill="#f59e0b" opacity="0.9"/>
-  <text x="10" y="22" text-anchor="middle" dominant-baseline="central"
-        font-family="monospace" font-size="7" font-weight="bold" fill="#fff">x</text>
+  <circle
+     cx="10"
+     cy="22"
+     r="5"
+     fill="#f59e0b"
+     opacity="0.9"
+     id="circle6" />
+  <text
+     x="10"
+     y="22"
+     text-anchor="middle"
+     dominant-baseline="central"
+     font-family="monospace"
+     font-size="7"
+     font-weight="bold"
+     fill="#fff"
+     id="text8">x</text>
   <!-- Directed edge with arrowhead -->
-  <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5"
-            markerWidth="5" markerHeight="5" orient="auto-start-auto">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981"/>
+  <defs
+     id="defs13">
+    <marker
+       id="arrow"
+       viewBox="0 0 10 10"
+       refX="8"
+       refY="5"
+       markerWidth="5"
+       markerHeight="5">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#10b981"
+         id="path10" />
     </marker>
   </defs>
-  <line x1="13.5" y1="18.5" x2="18" y2="14" stroke="#10b981" stroke-width="2.5"
-        stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path
+     sodipodi:type="star"
+     style="fill:#10b981;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-dasharray:none;stroke-dashoffset:0"
+     id="path1853"
+     inkscape:flatsided="true"
+     sodipodi:sides="3"
+     sodipodi:cx="4.7753553"
+     sodipodi:cy="6.2109656"
+     sodipodi:r1="2.4359763"
+     sodipodi:r2="1.2179881"
+     sodipodi:arg1="-0.72528721"
+     sodipodi:arg2="0.32191034"
+     inkscape:rounded="0"
+     inkscape:randomized="0"
+     d="M 6.5982181,4.5950598 5.2633394,8.597564 2.4645085,5.440273 Z"
+     inkscape:transform-center-x="0.17849202"
+     inkscape:transform-center-y="0.22131568"
+     transform="matrix(0.64228126,-0.01860496,0.01825255,0.63011565,13.005331,12.404399)" />
 </svg>
