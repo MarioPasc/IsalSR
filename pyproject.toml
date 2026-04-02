@@ -56,7 +56,8 @@ experiments = [
 all = ["isalsr[networkx,sympy,eval,search,viz,bench,dev,experiments]"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["isalsr*", "experiments*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
