@@ -63,61 +63,15 @@
             <a href="playground.html" class="btn btn-outline">Try the Playground &rarr;</a>
           </div>
         </div>
-        <div class="hero__viz" role="img" aria-label="Labeled DAG representing sin(x) + x * k and its canonical string encoding">
-          <!-- Static hero SVG: a labeled expression DAG -->
-          <svg viewBox="0 0 420 420" aria-hidden="true">
-            <!-- Background glow -->
-            <defs>
-              <radialGradient id="glow-amber" cx="50%" cy="40%" r="50%">
-                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.08"/>
-                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
-              </radialGradient>
-              <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
-              </marker>
-            </defs>
-            <rect width="420" height="420" fill="url(#glow-amber)" rx="16"/>
-
-            <!-- Edges (data flow: source → target) -->
-            <line x1="140" y1="175" x2="210" y2="115" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
-            <line x1="280" y1="175" x2="210" y2="115" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
-            <line x1="100" y1="280" x2="140" y2="200" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
-            <line x1="210" y1="280" x2="280" y2="200" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
-            <line x1="340" y1="280" x2="280" y2="200" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
-            <line x1="100" y1="280" x2="140" y2="200" stroke="#475569" stroke-width="2" marker-end="url(#arrowhead)"/>
-
-            <!-- Nodes -->
-            <!-- ADD (+) root -->
-            <circle cx="210" cy="100" r="28" fill="#1a2235" stroke="#fb923c" stroke-width="2.5"/>
-            <text x="210" y="100" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="22" font-weight="700" fill="#fb923c">+</text>
-
-            <!-- SIN -->
-            <circle cx="140" cy="190" r="24" fill="#1a2235" stroke="#34d399" stroke-width="2"/>
-            <text x="140" y="190" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600" fill="#34d399">sin</text>
-
-            <!-- MUL (*) -->
-            <circle cx="280" cy="190" r="24" fill="#1a2235" stroke="#fb923c" stroke-width="2"/>
-            <text x="280" y="190" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="700" fill="#fb923c">*</text>
-
-            <!-- x₁ (shared input) -->
-            <circle cx="100" cy="290" r="20" fill="#1a2235" stroke="#f59e0b" stroke-width="2"/>
-            <text x="100" y="290" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600" fill="#f59e0b">x&#x2081;</text>
-
-            <!-- x₂ -->
-            <circle cx="210" cy="290" r="20" fill="#1a2235" stroke="#f59e0b" stroke-width="2"/>
-            <text x="210" y="290" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600" fill="#f59e0b">x&#x2082;</text>
-
-            <!-- k (constant) -->
-            <circle cx="340" cy="290" r="20" fill="#1a2235" stroke="#94a3b8" stroke-width="2"/>
-            <text x="340" y="290" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600" fill="#94a3b8">k</text>
-
-            <!-- Canonical string display -->
-            <rect x="60" y="350" width="300" height="40" rx="8" fill="#0d1117" stroke="#243049" stroke-width="1"/>
-            <text x="210" y="370" text-anchor="middle" dominant-baseline="central" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="700">
-              <tspan fill="#fb923c">V+</tspan><tspan fill="#34d399">Vs</tspan><tspan fill="#f472b6">C</tspan><tspan fill="#fb923c">V*</tspan><tspan fill="#94a3b8">Vk</tspan>
-            </text>
-            <text x="210" y="405" text-anchor="middle" font-family="'Source Sans 3', sans-serif" font-size="11" fill="#7a8599">canonical string w*</text>
-          </svg>
+        <div class="hero__viz" role="img" aria-label="Animated DAG construction from IsalSR instruction string V+VsCV*Vk">
+          <!-- D3-rendered DAG with auto-play animation -->
+          <svg id="hero-dag-svg" viewBox="0 0 420 380" aria-hidden="true" style="width:100%; height: 380px;"></svg>
+          <div style="text-align: center; margin-top: var(--space-sm);">
+            <span id="hero-token-display" class="instruction-string" style="font-size: var(--text-base);"></span>
+            <div style="font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 4px;">
+              <span id="hero-step-label">canonical string w*</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -253,9 +207,17 @@
 
   <div id="site-footer"></div>
 
+  <!-- D3.js -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+
   <!-- Scripts -->
   <script src="js/theme.js"></script>
   <script src="js/components.js"></script>
+  <script src="js/core/cdll.js"></script>
+  <script src="js/core/alphabet.js"></script>
+  <script src="js/core/labeled-dag.js"></script>
+  <script src="js/core/s2d.js"></script>
+  <script src="js/viz/dag-renderer.js"></script>
 
   <!-- KaTeX -->
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
@@ -267,7 +229,6 @@
           katex.render(tex, el, { displayMode: false, throwOnError: false });
         }
       }
-      // Wait for KaTeX to load
       var interval = setInterval(function () {
         if (window.katex) {
           clearInterval(interval);
@@ -275,6 +236,73 @@
           renderMath('math-reduction', '\\text{Reduction factor} = \\Theta(k!)');
         }
       }, 100);
+
+      // Hero auto-play animation
+      var heroStr = 'V+VsCV*Vk';
+      var heroTokens = [
+        { token: 'V+', css: 'token-variadic' },
+        { token: 'Vs', css: 'token-unary' },
+        { token: 'C',  css: 'token-edge' },
+        { token: 'V*', css: 'token-variadic' },
+        { token: 'Vk', css: 'token-leaf' }
+      ];
+
+      try {
+        var s2d = new IsalSR.StringToDAG(heroStr, 1);
+        var result = s2d.run({ trace: true });
+        var steps = result.traceSteps;
+        var step = 0;
+        var tokenDisplay = document.getElementById('hero-token-display');
+        var stepLabel = document.getElementById('hero-step-label');
+
+        function showStep(idx) {
+          var s = steps[idx];
+          if (!s) return;
+          var d3Data = s.dag.toD3Data();
+          IsalSR.renderDAG('hero-dag-svg', d3Data, {
+            primaryNode: s.cdll.size() > 0 ? s.cdll.getValue(s.primaryPtr) : undefined,
+            secondaryNode: s.cdll.size() > 0 ? s.cdll.getValue(s.secondaryPtr) : undefined
+          });
+
+          // Token display: highlight up to current
+          var html = '';
+          for (var t = 0; t < heroTokens.length; t++) {
+            var opacity = t < idx ? '1' : (t === idx ? '1' : '0.3');
+            var weight = t < idx ? '700' : (t === idx ? '700' : '400');
+            html += '<span class="' + heroTokens[t].css + '" style="opacity:' + opacity + ';font-weight:' + weight + ';">' + heroTokens[t].token + '</span>';
+            if (t < heroTokens.length - 1) html += ' ';
+          }
+          tokenDisplay.innerHTML = html;
+
+          if (idx === 0) {
+            stepLabel.textContent = 'initial state: x\u2081';
+          } else if (idx >= steps.length - 1) {
+            stepLabel.textContent = 'canonical string w*';
+          } else {
+            stepLabel.textContent = 'step ' + idx + ': ' + heroTokens[idx - 1].token;
+          }
+        }
+
+        // Auto-play loop
+        function playLoop() {
+          showStep(step);
+          step++;
+          if (step >= steps.length) {
+            // Pause on final state, then restart
+            setTimeout(function () {
+              step = 0;
+              playLoop();
+            }, 3000);
+          } else {
+            setTimeout(playLoop, 1000);
+          }
+        }
+
+        // Start after brief delay
+        setTimeout(playLoop, 500);
+      } catch (e) {
+        // Fallback: leave empty SVG
+      }
     });
   </script>
 </body>

@@ -11,26 +11,26 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
-  <link rel="stylesheet" href="css/variables.css?v=1">
-  <link rel="stylesheet" href="css/reset.css?v=1">
-  <link rel="stylesheet" href="css/typography.css?v=1">
-  <link rel="stylesheet" href="css/layout.css?v=1">
-  <link rel="stylesheet" href="css/components.css?v=1">
-  <link rel="stylesheet" href="css/nav.css?v=1">
-  <link rel="stylesheet" href="css/footer.css?v=1">
-  <link rel="stylesheet" href="css/playground.css?v=1">
+  <link rel="stylesheet" href="css/variables.css?v=2">
+  <link rel="stylesheet" href="css/reset.css?v=2">
+  <link rel="stylesheet" href="css/typography.css?v=2">
+  <link rel="stylesheet" href="css/layout.css?v=2">
+  <link rel="stylesheet" href="css/components.css?v=2">
+  <link rel="stylesheet" href="css/nav.css?v=2">
+  <link rel="stylesheet" href="css/footer.css?v=2">
+  <link rel="stylesheet" href="css/playground.css?v=2">
+  <link rel="stylesheet" href="css/how-it-works.css?v=2">
 </head>
 <body data-page="playground">
   <a href="#main-content" class="skip-to-content">Skip to main content</a>
   <div id="site-nav"></div>
 
   <main id="main-content" class="container">
-    <!-- Header -->
     <header class="playground-header">
       <h1>Playground</h1>
       <p>
         Decode IsalSR instruction strings into labeled expression DAGs.
-        Enter a string or select a preset to see the resulting expression.
+        Enter a string, click <em>Decode</em>, then step through the execution trace.
       </p>
     </header>
 
@@ -47,13 +47,21 @@
           spellcheck="false"
           autocomplete="off"
         >
-        <div class="playground-input__info">
-          Variables: 1 (x<sub>1</sub>). Alphabet: N P n p C c W V&ell; v&ell;
+
+        <!-- Variable count -->
+        <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm);">
+          <label style="font-size: var(--text-xs); color: var(--text-tertiary);">Variables:</label>
+          <select id="s2d-vars" style="padding: 2px 6px; background: var(--bg-code); border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); font-size: var(--text-sm);">
+            <option value="1" selected>1 (x&#x2081;)</option>
+            <option value="2">2 (x&#x2081;, x&#x2082;)</option>
+            <option value="3">3 (x&#x2081;, x&#x2082;, x&#x2083;)</option>
+          </select>
         </div>
+
         <div id="s2d-error" class="playground-input__error"></div>
 
-        <div style="margin-top: var(--space-lg);">
-          <button class="btn btn-primary" id="s2d-decode-btn" onclick="IsalSR.decodeString()">
+        <div style="margin-top: var(--space-md);">
+          <button class="btn btn-primary" id="s2d-decode-btn">
             Decode &rarr;
           </button>
         </div>
@@ -62,49 +70,71 @@
         <div class="playground-presets">
           <span class="playground-presets__label">Presets</span>
           <div class="playground-presets__grid">
-            <button class="preset-btn" onclick="IsalSR.loadPreset('V+', 'x + new_node')">
-              <span class="token-variadic">V+</span> &nbsp;simple add
+            <button class="preset-btn" data-preset="V+" data-vars="1">
+              <span class="token-variadic">V+</span>&thinsp;add
             </button>
-            <button class="preset-btn" onclick="IsalSR.loadPreset('V+Vs', 'add + sin')">
-              <span class="token-variadic">V+</span><span class="token-unary">Vs</span> &nbsp;add &amp; sin
+            <button class="preset-btn" data-preset="V+Vs" data-vars="1">
+              <span class="token-variadic">V+</span><span class="token-unary">Vs</span>&thinsp;add+sin
             </button>
-            <button class="preset-btn" onclick="IsalSR.loadPreset('V+VsCV*Vk', 'sin(x)+x*k')">
+            <button class="preset-btn" data-preset="V+VsCV*Vk" data-vars="1">
               <span class="token-variadic">V+</span><span class="token-unary">Vs</span><span class="token-edge">C</span><span class="token-variadic">V*</span><span class="token-leaf">Vk</span>
             </button>
-            <button class="preset-btn" onclick="IsalSR.loadPreset('V*NV+nCNVs', 'complex')">
-              <span class="token-variadic">V*</span><span class="token-movement-fwd">N</span><span class="token-variadic">V+</span><span class="token-movement-fwd">n</span><span class="token-edge">C</span><span class="token-movement-fwd">N</span><span class="token-unary">Vs</span>
+            <button class="preset-btn" data-preset="V*NV+nCVs" data-vars="2">
+              <span class="token-variadic">V*</span><span class="token-movement-fwd">N</span><span class="token-variadic">V+</span><span class="token-movement-fwd">n</span><span class="token-edge">C</span><span class="token-unary">Vs</span>&thinsp;2-var
             </button>
-            <button class="preset-btn" onclick="IsalSR.loadPreset('VsV+VkNV*', 'multi-op')">
-              <span class="token-unary">Vs</span><span class="token-variadic">V+</span><span class="token-leaf">Vk</span><span class="token-movement-fwd">N</span><span class="token-variadic">V*</span>
+            <button class="preset-btn" data-preset="VeV+VkNVs" data-vars="1">
+              <span class="token-unary">Ve</span><span class="token-variadic">V+</span><span class="token-leaf">Vk</span><span class="token-movement-fwd">N</span><span class="token-unary">Vs</span>
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Output panel -->
+      <!-- Output panel: D3 DAG rendering -->
       <div class="playground-output">
-        <div class="playground-output__viz" id="s2d-output">
+        <svg id="s2d-dag-svg" class="playground-output__viz" style="width:100%; height:400px;"></svg>
+        <div id="s2d-placeholder" class="playground-output__viz" style="display:flex;">
           <div class="playground-output__placeholder">
             <div class="playground-output__placeholder-icon">&#x25C9;</div>
-            <p>
-              <strong>Interactive DAG visualization</strong><br>
-              Enter an instruction string and click <em>Decode</em> to see the resulting
-              expression DAG rendered here.
-            </p>
-            <p style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--text-tertiary);">
-              Full step-by-step visualization with D3.js is coming in the next release.
+            <p><strong>Interactive DAG visualization</strong></p>
+            <p style="margin-top: var(--space-sm);">
+              Enter an instruction string and click <em>Decode</em> to see the
+              expression DAG rendered with D3.js.
             </p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Trace section (scaffold) -->
+    <!-- Token string display -->
+    <div class="card" style="padding: var(--space-md) var(--space-xl); margin-bottom: var(--space-md);">
+      <div id="s2d-string-display" class="string-display" style="min-height: 36px; justify-content: center;">
+        <span style="color: var(--text-tertiary); font-size: var(--text-sm); font-weight: 400;">Token display appears after decoding</span>
+      </div>
+    </div>
+
+    <!-- Transport controls -->
+    <div class="trace-timeline" id="s2d-transport" style="display: none;">
+      <button class="btn btn-sm btn-ghost" id="sp-reset" title="Reset">&laquo;</button>
+      <button class="btn btn-sm btn-ghost" id="sp-prev" title="Previous step">&larr;</button>
+      <button class="btn btn-sm btn-primary" id="sp-play" title="Play">&#x25B6;</button>
+      <button class="btn btn-sm btn-ghost" id="sp-next" title="Next step">&rarr;</button>
+      <span id="sp-step-info" style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-secondary); margin-left: var(--space-md);"></span>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: var(--space-sm);">
+        <label style="font-size: var(--text-xs); color: var(--text-tertiary);">Speed:</label>
+        <select id="sp-speed" style="padding: 2px 4px; background: var(--bg-code); border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); font-size: var(--text-xs);">
+          <option value="1500">Slow</option>
+          <option value="800" selected>Normal</option>
+          <option value="400">Fast</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Step log -->
     <section class="playground-trace">
       <div class="card" style="padding: var(--space-xl);">
         <h3 style="margin-bottom: var(--space-md);">Execution Trace</h3>
-        <div id="s2d-trace" style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-tertiary);">
-          <p>Decode an instruction string to see the step-by-step execution trace.</p>
+        <div id="s2d-step-log" class="step-log" style="max-height: 250px;">
+          <p style="color: var(--text-tertiary);">Decode an instruction string to see the step-by-step execution trace.</p>
         </div>
       </div>
     </section>
@@ -122,34 +152,44 @@
 
   <div id="site-footer"></div>
 
+  <!-- D3.js -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+
+  <!-- IsalSR core -->
   <script src="js/theme.js"></script>
   <script src="js/components.js"></script>
+  <script src="js/core/cdll.js"></script>
+  <script src="js/core/alphabet.js"></script>
+  <script src="js/core/labeled-dag.js"></script>
+  <script src="js/core/s2d.js"></script>
+  <script src="js/viz/dag-renderer.js"></script>
+  <script src="js/viz/step-player.js"></script>
+
   <script>
-    // Playground controller (scaffold — full S2D port deferred)
     (function () {
       'use strict';
-      window.IsalSR = window.IsalSR || {};
+      var player = null;
 
-      // Valid single-char tokens
-      var SINGLE_TOKENS = 'NPnpCcW';
-      // Valid label chars after V/v
-      var LABEL_CHARS = '+*-/screlka^gi';
+      function getNumVars() {
+        var sel = document.getElementById('s2d-vars');
+        return sel ? parseInt(sel.value, 10) : 1;
+      }
 
-      IsalSR.loadPreset = function (str, name) {
-        var input = document.getElementById('s2d-input');
-        if (input) {
-          input.value = str;
+      // Preset buttons
+      document.querySelectorAll('.preset-btn[data-preset]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var str = btn.getAttribute('data-preset');
+          var vars = btn.getAttribute('data-vars');
+          document.getElementById('s2d-input').value = str;
+          if (vars) document.getElementById('s2d-vars').value = vars;
           document.getElementById('s2d-error').textContent = '';
-        }
-      };
+        });
+      });
 
-      IsalSR.decodeString = function () {
+      // Decode button
+      document.getElementById('s2d-decode-btn').addEventListener('click', function () {
         var input = document.getElementById('s2d-input');
         var errorEl = document.getElementById('s2d-error');
-        var traceEl = document.getElementById('s2d-trace');
-        var outputEl = document.getElementById('s2d-output');
-        if (!input) return;
-
         var str = input.value.trim();
         errorEl.textContent = '';
 
@@ -158,85 +198,82 @@
           return;
         }
 
-        // Tokenize and validate
-        var tokens = [];
-        var i = 0;
-        while (i < str.length) {
-          var ch = str[i];
-          if (ch === 'V' || ch === 'v') {
-            if (i + 1 >= str.length) {
-              errorEl.textContent = 'Error: ' + ch + ' at position ' + i + ' missing label character.';
-              return;
-            }
-            var label = str[i + 1];
-            if (LABEL_CHARS.indexOf(label) === -1) {
-              errorEl.textContent = 'Error: Invalid label "' + label + '" after ' + ch + ' at position ' + i + '.';
-              return;
-            }
-            tokens.push(ch + label);
-            i += 2;
-          } else if (SINGLE_TOKENS.indexOf(ch) !== -1) {
-            tokens.push(ch);
-            i++;
-          } else {
-            errorEl.textContent = 'Error: Unknown character "' + ch + '" at position ' + i + '.';
-            return;
+        var numVars = getNumVars();
+
+        // Tokenize
+        var tokens;
+        try {
+          tokens = IsalSR.tokenize(str);
+        } catch (e) {
+          errorEl.textContent = e.message;
+          return;
+        }
+
+        // Run S2D with trace
+        var s2d;
+        try {
+          s2d = new IsalSR.StringToDAG(str, numVars);
+        } catch (e) {
+          errorEl.textContent = e.message;
+          return;
+        }
+
+        var result;
+        try {
+          result = s2d.run({ trace: true });
+        } catch (e) {
+          errorEl.textContent = 'S2D error: ' + e.message;
+          return;
+        }
+
+        // Show DAG SVG, hide placeholder
+        document.getElementById('s2d-dag-svg').style.display = 'block';
+        document.getElementById('s2d-placeholder').style.display = 'none';
+
+        // Show transport controls
+        document.getElementById('s2d-transport').style.display = 'flex';
+
+        // Create step player
+        if (player) player.pause();
+        player = new IsalSR.StepPlayer({
+          traceSteps: result.traceSteps,
+          dagSvgId: 's2d-dag-svg',
+          stepInfoId: 'sp-step-info',
+          stepLogId: 's2d-step-log',
+          stringDisplayId: 's2d-string-display',
+          tokens: tokens
+        });
+
+        // Jump to final step to show complete result
+        player.goToStep(result.traceSteps.length - 1);
+      });
+
+      // Transport controls
+      document.getElementById('sp-reset').addEventListener('click', function () {
+        if (player) player.reset();
+      });
+      document.getElementById('sp-prev').addEventListener('click', function () {
+        if (player) player.prev();
+      });
+      document.getElementById('sp-play').addEventListener('click', function () {
+        if (!player) return;
+        if (player.playing) {
+          player.pause();
+        } else {
+          // If at end, reset first
+          if (player.currentStep >= player.totalSteps() - 1) {
+            player.reset();
           }
+          player.play();
         }
-
-        // Show tokenization trace
-        var traceHTML = '<div style="margin-bottom: var(--space-md);">';
-        traceHTML += '<strong style="color: var(--text-primary);">Tokens (' + tokens.length + '):</strong> ';
-        for (var t = 0; t < tokens.length; t++) {
-          var tok = tokens[t];
-          var cls = 'token-noop';
-          if (tok === 'N' || tok === 'n') cls = 'token-movement-fwd';
-          else if (tok === 'P' || tok === 'p') cls = 'token-movement-bwd';
-          else if (tok === 'C' || tok === 'c') cls = 'token-edge';
-          else if (tok === 'W') cls = 'token-noop';
-          else if (tok.length === 2) {
-            var lbl = tok[1];
-            if (lbl === '+' || lbl === '*') cls = 'token-variadic';
-            else if (lbl === '-' || lbl === '/' || lbl === '^') cls = 'token-binary';
-            else if (lbl === 'k') cls = 'token-leaf';
-            else cls = 'token-unary';
-          }
-          traceHTML += '<span class="' + cls + '" style="font-weight:700;">' + tok + '</span>';
-          if (t < tokens.length - 1) traceHTML += ' ';
-        }
-        traceHTML += '</div>';
-
-        // Token breakdown
-        var counts = { movement: 0, edge: 0, insert: 0, noop: 0 };
-        for (var j = 0; j < tokens.length; j++) {
-          var tk = tokens[j];
-          if ('NPnp'.indexOf(tk) !== -1) counts.movement++;
-          else if ('Cc'.indexOf(tk) !== -1) counts.edge++;
-          else if (tk === 'W') counts.noop++;
-          else counts.insert++;
-        }
-        traceHTML += '<div style="color: var(--text-secondary);">';
-        traceHTML += 'Movement: ' + counts.movement + ' | ';
-        traceHTML += 'Edge: ' + counts.edge + ' | ';
-        traceHTML += 'Insert: ' + counts.insert + ' | ';
-        traceHTML += 'No-op: ' + counts.noop;
-        traceHTML += '</div>';
-        traceHTML += '<div style="color: var(--text-tertiary); margin-top: var(--space-sm); font-size: var(--text-xs);">';
-        traceHTML += 'Expected DAG: 1 variable + ' + counts.insert + ' internal nodes = ' + (1 + counts.insert) + ' total nodes.';
-        traceHTML += '</div>';
-
-        traceEl.innerHTML = traceHTML;
-
-        // Update output placeholder with parsed info
-        outputEl.innerHTML =
-          '<div class="playground-output__placeholder">' +
-            '<div style="font-size: 2rem; margin-bottom: var(--space-md); color: var(--accent-primary);">&#x2713;</div>' +
-            '<p><strong>Valid string parsed</strong></p>' +
-            '<p style="margin-top: var(--space-sm);">' + tokens.length + ' tokens &rarr; ' + (1 + counts.insert) + ' DAG nodes</p>' +
-            '<p style="margin-top: var(--space-md); font-size: var(--text-xs); color: var(--text-tertiary);">' +
-              'Full D3.js DAG rendering coming in the next release.</p>' +
-          '</div>';
-      };
+        player._updateTransportUI();
+      });
+      document.getElementById('sp-next').addEventListener('click', function () {
+        if (player) player.next();
+      });
+      document.getElementById('sp-speed').addEventListener('change', function () {
+        if (player) player.setSpeed(parseInt(this.value, 10));
+      });
     })();
   </script>
 </body>
