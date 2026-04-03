@@ -42,6 +42,13 @@ conda activate isalsr 2>/dev/null || true
 CONDA_PREFIX="${CONDA_PREFIX:-$(conda info --base)/envs/isalsr}"
 export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 
+# Bypass CPython's pymalloc arena allocator: use glibc malloc directly.
+# pymalloc fragments the heap over 10K+ generations (256KB arenas pinned
+# by surviving objects).  With glibc malloc, large allocations use mmap
+# (cleanly returned on free) and malloc_trim(0) in _release_heap()
+# reclaims fragmented brk pages.  Prevents OOM on I.10.7/I.48.20.
+export PYTHONMALLOC=malloc
+
 REPO_DIR="${ISALSR_REPO_DIR:?ERROR: ISALSR_REPO_DIR not set}"
 cd "$REPO_DIR"
 

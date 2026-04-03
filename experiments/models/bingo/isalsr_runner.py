@@ -45,6 +45,33 @@ from experiments.models.bingo.runner import (
 log = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Heap fragmentation mitigation for long evolutionary runs.
+#
+# CPython's pymalloc uses 256 KB arenas.  Over 10 K+ generations of
+# create/GC cycles, surviving objects (canonical_seen entries, AGraphs
+# kept by selection) pin arenas — preventing glibc from returning pages
+# to the OS.  At gen ~19 K this exhausts 64 GB on I.10.7 / I.48.20.
+#
+# Calling glibc malloc_trim(0) after gc.collect() releases pages whose
+# entire arena has been freed.  Combined with PYTHONMALLOC=malloc in the
+# SLURM worker (bypasses pymalloc arenas entirely), this keeps RSS under
+# control for 12-hour runs.
+# ---------------------------------------------------------------------------
+try:
+    _LIBC = __import__("ctypes").CDLL("libc.so.6")
+
+    def _release_heap() -> None:
+        """Run full GC then return freed glibc pages to the OS."""
+        gc.collect()
+        _LIBC.malloc_trim(0)
+
+except (OSError, AttributeError):
+    # Non-Linux or missing libc — fall back to plain gc.collect
+    def _release_heap() -> None:  # type: ignore[misc]
+        gc.collect()
+
+
 class _CanonicalDeduplicator:
     """Tracks canonical strings and deduplication statistics.
 
@@ -128,6 +155,13 @@ class IsalSREvaluation(Evaluation):
         self._call_count += 1
         if self._call_count % 2 == 0:
             gen = self._call_count // 2
+
+            # Generation-boundary heap release: the most effective point
+            # because both parent and offspring evaluation are done and
+            # all transient LabeledDAG / canonical string objects from
+            # this generation are unreachable.
+            _release_heap()
+
             if gen % self._snapshot_freq == 0:
                 n_evals = (
                     self._fitness_counter.eval_count if self._fitness_counter is not None else 0
@@ -144,10 +178,10 @@ class IsalSREvaluation(Evaluation):
                     )
                 )
 
-    # Periodic GC to combat CPython heap fragmentation on long runs.
-    # Without this, 12h runs on hard problems (I.10.7, I.48.20) with
-    # 70M+ adapter conversions fragment the heap beyond 32GB.
-    _GC_INTERVAL = 100_000
+    # Intra-generation GC interval.  Reduced from 100 K to 5 K to
+    # limit peak RSS between generation boundaries on hard problems
+    # (I.10.7, I.48.20) where each generation processes >4 K individuals.
+    _GC_INTERVAL = 5_000
 
     def _serial_eval(self, population):  # type: ignore[override]
         for indv in population:
@@ -162,9 +196,9 @@ class IsalSREvaluation(Evaluation):
 
             self.dedup.n_total += 1
 
-            # Periodic garbage collection
+            # Periodic heap release (GC + malloc_trim)
             if self.dedup.n_total % self._GC_INTERVAL == 0:
-                gc.collect()
+                _release_heap()
 
             # Convert AGraph → LabeledDAG
             try:

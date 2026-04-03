@@ -74,7 +74,7 @@ experiments:
     n_problems: 12
     time_limit: "17:00:00"    # 12h evolution + 5h canon overhead buffer
     cpus: 1
-    mem_gb: 64              # 32→64: OOM on Nguyen-7 (6.2M DAGs, 3.1M unique at 32GB)
+    mem_gb: 128             # 64→128: heap fragmentation on hard problems + malloc_trim + PYTHONMALLOC=malloc
 
   # =========================================================
   # UDFS on Feynman (10 problems x 30 seeds = 300 tasks/group)
@@ -128,7 +128,7 @@ experiments:
     n_problems: 10
     time_limit: "17:00:00"    # 12h evolution + 5h canon overhead buffer
     cpus: 1
-    mem_gb: 64              # 32→64: OOM on I.10.7, I.48.20 (all 30 seeds failed at 32GB)
+    mem_gb: 128             # 64→128: heap fragmentation on I.10.7/I.48.20 + malloc_trim + PYTHONMALLOC=malloc
 
   # =========================================================
   # Atlas-enabled IsalSR (uses precomputed canonical lookup)
