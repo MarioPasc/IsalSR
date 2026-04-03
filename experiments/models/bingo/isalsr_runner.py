@@ -93,10 +93,18 @@ class _CanonicalDeduplicator:
         self.use_fast_canonical = use_fast_canonical
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
+        # Historical hash set — used for fitness caching & legacy dedup
         self.canonical_seen: set[int] = set()
+        # Fitness cache: canon_hash → fitness (for re-entry after eviction)
+        self.fitness_cache: dict[int, float] = {}
+        # Population-level dedup: canonical strings of currently alive members
+        self.population_canonicals: set[str] = set()
+        # Map id(indv) → canonical string for population set rebuild
+        self.id_to_canonical: dict[int, str] = {}
         self.n_total: int = 0
         self.n_unique: int = 0
         self.n_skipped: int = 0
+        self.n_rejected_duplicates: int = 0  # Population-level rejections
         self.canon_time_total: float = 0.0
         # Atlas-specific stats
         self.atlas_hits: int = 0
@@ -124,12 +132,14 @@ class IsalSREvaluation(Evaluation):
         dedup: _CanonicalDeduplicator,
         snapshot_freq: int = 10,
         t0: float = 0.0,
+        enforce_dedup: bool = False,
         **kwargs: Any,
     ):
         super().__init__(fitness_function, **kwargs)
         self.dedup = dedup
         self._snapshot_freq = snapshot_freq
         self._t0 = t0
+        self._enforce_dedup = enforce_dedup
         self._call_count = 0
         self._best_fitness = float("inf")
         self.snapshots: list[BingoTrajectorySnapshot] = []
@@ -143,12 +153,38 @@ class IsalSREvaluation(Evaluation):
         # AGraph.copy()) and is forced through dedup.
         self._parent_ids: set[int] = set()
 
+    def _rebuild_population_set(self, population: Any) -> None:
+        """Rebuild canonical set from current living population.
+
+        Called at the START of each __call__ to synchronize with
+        selection/replacement that happened since the last call.
+        Uses id(indv) → canonical mapping from previous _serial_eval calls.
+        Safe because all population members are alive (held by reference).
+        """
+        self.dedup.population_canonicals.clear()
+        new_id_map: dict[int, str] = {}
+        for indv in population:
+            canon = self.dedup.id_to_canonical.get(id(indv))
+            if canon is not None:
+                self.dedup.population_canonicals.add(canon)
+                new_id_map[id(indv)] = canon
+        # Prune stale entries (evicted individuals)
+        self.dedup.id_to_canonical = new_id_map
+
     def __call__(self, population: Any) -> None:
         # Detect the parent call: all individuals already evaluated AND
         # not the very first evaluation (initial pop has fit_set=False).
         all_evaluated = all(indv.fit_set for indv in population)
         if all_evaluated and self._call_count > 0:
             self._parent_ids = {id(indv) for indv in population}
+
+            # Rebuild population canonical set from PARENTS only.
+            # MuPlusLambda calls eval(parents) then eval(offspring).
+            # Rebuilding here ensures parent canonicals are in the set
+            # before offspring are evaluated.  Offspring canonicals are
+            # added incrementally in _serial_eval.
+            if self._enforce_dedup:
+                self._rebuild_population_set(population)
 
         super().__call__(population)
         # MuPlusLambda calls __call__ 2x per generation (parents + offspring)
@@ -189,8 +225,12 @@ class IsalSREvaluation(Evaluation):
 
             # Process if: (a) standard unevaluated individual, OR
             # (b) NOT a known parent (catches VarAnd clones that
-            #     inherited fit_set=True from parent via AGraph.copy()).
-            should_process = self._redundant or not indv.fit_set or not is_parent
+            #     inherited fit_set=True from parent via AGraph.copy()), OR
+            # (c) enforce_dedup parent with INF fitness (was a rejected
+            #     duplicate in a previous gen — may be eligible now if
+            #     the original was evicted by selection).
+            is_stale_dup = self._enforce_dedup and is_parent and indv.fitness == np.inf
+            should_process = self._redundant or not indv.fit_set or not is_parent or is_stale_dup
             if not should_process:
                 continue
 
@@ -214,6 +254,7 @@ class IsalSREvaluation(Evaluation):
             # Resolve canonical hash: atlas fast-path or online fallback
             t0 = time.perf_counter()
             canon_hash: int | None = None
+            canonical: str | None = None
 
             if self.dedup.atlas is not None:
                 canon_hash, was_hit = self.dedup.atlas.lookup_dag(dag)
@@ -224,7 +265,9 @@ class IsalSREvaluation(Evaluation):
                 else:
                     self.dedup.atlas_misses += 1
 
-            if canon_hash is None:
+            # Population dedup needs the full canonical string (not just hash)
+            need_canonical_str = canon_hash is None or self._enforce_dedup
+            if need_canonical_str and canonical is None:
                 # No atlas or atlas miss: compute canonical string
                 t0_canon = time.perf_counter()
                 try:
@@ -251,22 +294,53 @@ class IsalSREvaluation(Evaluation):
                             self._best_fitness = indv.fitness
                     continue
                 self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
-                canon_hash = hash(canonical)
+                if canon_hash is None:
+                    canon_hash = hash(canonical)
 
             self.dedup.canon_time_total += time.perf_counter() - t0
 
-            # Deduplication check (hash-based for memory efficiency)
-            if canon_hash in self.dedup.canonical_seen:
-                self.dedup.n_skipped += 1
-                indv.fitness = np.inf  # Sets fit_set=True, worst fitness
-                continue
+            if self._enforce_dedup:
+                # --- Population-level dedup with fitness caching ---
 
-            self.dedup.canonical_seen.add(canon_hash)
-            self.dedup.n_unique += 1
-            if not indv.fit_set:
-                indv.fitness = self.fitness_function(indv)
-            if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
-                self._best_fitness = indv.fitness
+                # Check if this canonical is already held by a living member
+                if canonical in self.dedup.population_canonicals:
+                    self.dedup.n_rejected_duplicates += 1
+                    self.dedup.n_skipped += 1
+                    indv.fitness = np.inf
+                    continue
+
+                # Fitness caching: reuse fitness if seen historically
+                if canon_hash in self.dedup.fitness_cache:
+                    indv.fitness = self.dedup.fitness_cache[canon_hash]
+                elif not indv.fit_set:
+                    indv.fitness = self.fitness_function(indv)
+
+                # Cache the fitness for future reuse
+                if np.isfinite(indv.fitness):
+                    self.dedup.fitness_cache[canon_hash] = indv.fitness
+
+                # Register in historical set and population set
+                if canon_hash not in self.dedup.canonical_seen:
+                    self.dedup.n_unique += 1
+                self.dedup.canonical_seen.add(canon_hash)
+                self.dedup.population_canonicals.add(canonical)
+                self.dedup.id_to_canonical[id(indv)] = canonical
+
+                if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
+                    self._best_fitness = indv.fitness
+            else:
+                # --- Legacy dedup: historical hash rejection ---
+                if canon_hash in self.dedup.canonical_seen:
+                    self.dedup.n_skipped += 1
+                    indv.fitness = np.inf
+                    continue
+
+                self.dedup.canonical_seen.add(canon_hash)
+                self.dedup.n_unique += 1
+                if not indv.fit_set:
+                    indv.fitness = self.fitness_function(indv)
+                if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
+                    self._best_fitness = indv.fitness
 
 
 class IsalSRBingoRunner(ModelRunner):
@@ -314,6 +388,7 @@ class IsalSRBingoRunner(ModelRunner):
                 "dedup": dedup,
                 "snapshot_freq": cfg.snapshot_frequency,
                 "t0": t0,
+                "enforce_dedup": cfg.enforce_population_dedup,
             },
         )
         # fitness_fn (ExplicitRegression) has eval_count; set after build

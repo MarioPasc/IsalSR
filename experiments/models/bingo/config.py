@@ -32,6 +32,9 @@ class BingoConfig:
     canonicalization_timeout: float = 60.0
     use_fast_canonical: bool = True
 
+    # Diversity enforcement: reject population-level duplicate canonicals
+    enforce_population_dedup: bool = False
+
     # Trajectory logging
     snapshot_frequency: int = 10  # snapshot every N generations
 

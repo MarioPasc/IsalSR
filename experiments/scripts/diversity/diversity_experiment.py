@@ -70,6 +70,10 @@ BENCHMARKS = {
         "formula": "m0 / sqrt(1 - v^2/c^2)",
         "n_variables": 3,
     },
+    "I.12.4": {
+        "formula": "q1 / (4 * pi * r * c)",
+        "n_variables": 3,
+    },
     "I.48.20": {
         "formula": "m*c^2 / sqrt(1-(v/c)^2)",
         "n_variables": 3,
@@ -182,6 +186,7 @@ def run_single_variant(
     n_workers: int,
     max_gen: int = 500,
     trajectory_freq: int = 1,
+    enforce_dedup: bool = False,
 ) -> tuple[list[tuple[PopulationSnapshot, DiversitySummary]], list[dict]]:
     """Run one (variant, seed) and capture population snapshots.
 
@@ -212,7 +217,12 @@ def run_single_variant(
             y_train,
             cfg,
             evaluation_cls=IsalSREvaluation,
-            evaluation_kwargs={"dedup": dedup, "snapshot_freq": 100_000, "t0": 0.0},
+            evaluation_kwargs={
+                "dedup": dedup,
+                "snapshot_freq": 100_000,
+                "t0": 0.0,
+                "enforce_dedup": enforce_dedup,
+            },
         )
         evaluation._fitness_counter = fitness_fn
     else:
@@ -369,6 +379,9 @@ def save_summary_csv(summaries: list[DiversitySummary], output_dir: Path) -> Non
         "pca_var2",
         "n_exact_pairs",
         "n_total_pairs",
+        "cv_ged",
+        "frac_zero_pairs",
+        "d_bar_nonzero",
     ]
 
     existing_keys = set()
@@ -406,6 +419,9 @@ def save_summary_csv(summaries: list[DiversitySummary], output_dir: Path) -> Non
                         "pca_var2": f"{s.pca_var2:.6f}",
                         "n_exact_pairs": s.n_exact_pairs,
                         "n_total_pairs": s.n_total_pairs,
+                        "cv_ged": f"{s.cv_ged:.6f}",
+                        "frac_zero_pairs": f"{s.frac_zero_pairs:.6f}",
+                        "d_bar_nonzero": f"{s.d_bar_nonzero:.4f}",
                     }
                 )
 
@@ -540,6 +556,13 @@ def parse_args() -> argparse.Namespace:
         help="Total SLURM array size (should be 2 * n_seeds)",
     )
 
+    # Population-level dedup enforcement (IsalSR variant only)
+    parser.add_argument(
+        "--enforce-dedup",
+        action="store_true",
+        help="Enforce population-level canonical dedup (delta → 1.0)",
+    )
+
     parser.add_argument("--dry-run", action="store_true", help="Print config and exit")
     return parser.parse_args()
 
@@ -649,6 +672,7 @@ def main():
             n_workers=n_workers,
             max_gen=max_gen,
             trajectory_freq=args.trajectory_freq,
+            enforce_dedup=args.enforce_dedup,
         )
         dt = time.perf_counter() - t0
 

@@ -4,315 +4,478 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Playground — IsalSR</title>
-  <meta name="description" content="Interactive playground for decoding IsalSR instruction strings into labeled expression DAGs.">
+  <meta name="description" content="Interactive playground: decode instruction strings into labeled DAGs, encode DAGs back, and verify the round-trip property.">
 
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
-  <link rel="stylesheet" href="css/variables.css?v=2">
-  <link rel="stylesheet" href="css/reset.css?v=2">
-  <link rel="stylesheet" href="css/typography.css?v=2">
-  <link rel="stylesheet" href="css/layout.css?v=2">
-  <link rel="stylesheet" href="css/components.css?v=2">
-  <link rel="stylesheet" href="css/nav.css?v=2">
-  <link rel="stylesheet" href="css/footer.css?v=2">
-  <link rel="stylesheet" href="css/playground.css?v=2">
-  <link rel="stylesheet" href="css/how-it-works.css?v=2">
+  <link rel="stylesheet" href="css/variables.css?v=3">
+  <link rel="stylesheet" href="css/reset.css?v=3">
+  <link rel="stylesheet" href="css/typography.css?v=3">
+  <link rel="stylesheet" href="css/layout.css?v=3">
+  <link rel="stylesheet" href="css/components.css?v=3">
+  <link rel="stylesheet" href="css/nav.css?v=3">
+  <link rel="stylesheet" href="css/footer.css?v=3">
+  <link rel="stylesheet" href="css/playground.css?v=3">
+  <link rel="stylesheet" href="css/how-it-works.css?v=3">
 </head>
 <body data-page="playground">
   <a href="#main-content" class="skip-to-content">Skip to main content</a>
   <div id="site-nav"></div>
 
-  <main id="main-content" class="container">
-    <header class="playground-header">
-      <h1>Playground</h1>
-      <p>
-        Decode IsalSR instruction strings into labeled expression DAGs.
-        Enter a string, click <em>Decode</em>, then step through the execution trace.
-      </p>
-    </header>
+  <main id="main-content">
+    <div class="container">
+      <header class="playground-header">
+        <h1>Playground</h1>
+        <p>Experiment with IsalSR encoding and decoding in real-time.</p>
+      </header>
 
-    <!-- Main layout -->
-    <div class="playground-layout">
-      <!-- Input panel -->
-      <div class="playground-input">
-        <label class="playground-input__label" for="s2d-input">String &rarr; DAG (S2D)</label>
-        <input
-          type="text"
-          id="s2d-input"
-          class="playground-input__string"
-          placeholder="e.g. V+VsCV*Vk"
-          spellcheck="false"
-          autocomplete="off"
-        >
+      <!-- ============ MODE TABS ============ -->
+      <div class="tabs" role="tablist">
+        <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-s2d" id="tab-s2d"
+          onclick="IsalSR.switchTab('s2d')">String &rarr; DAG</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="panel-d2s" id="tab-d2s"
+          onclick="IsalSR.switchTab('d2s')">DAG &rarr; String</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="panel-rt" id="tab-rt"
+          onclick="IsalSR.switchTab('rt')">Round-Trip</button>
+      </div>
 
-        <div id="s2d-vars-display" style="font-size: var(--text-xs); color: var(--text-tertiary); font-family: var(--font-mono); margin-bottom: var(--space-sm);">
-          Variables: 1 (x&#x2081;)
-        </div>
-        <input type="hidden" id="s2d-vars" value="1">
+      <!-- ============================================================
+           PANEL 1: STRING → DAG (S2D) — the gold standard
+           ============================================================ -->
+      <div class="tab-panel active" id="panel-s2d" role="tabpanel" aria-labelledby="tab-s2d">
+        <div class="playground-layout">
+          <div class="playground-input">
+            <label class="playground-input__label" for="s2d-input">Instruction String</label>
+            <input type="text" id="s2d-input" class="playground-input__string"
+              placeholder="e.g. V+NnncVs" spellcheck="false" autocomplete="off">
+            <div id="s2d-vars-display" style="font-size:var(--text-xs);color:var(--text-tertiary);font-family:var(--font-mono);margin-bottom:var(--space-sm);">Variables: 1 (x&#x2081;)</div>
+            <input type="hidden" id="s2d-vars" value="1">
+            <div id="s2d-error" class="playground-input__error"></div>
+            <button class="btn btn-primary" style="width:100%;margin-top:var(--space-md);" id="s2d-decode-btn">Decode &rarr;</button>
 
-        <div id="s2d-error" class="playground-input__error"></div>
+            <!-- Presets by variable count -->
+            <div class="playground-presets">
+              <span class="playground-presets__label">1 variable (x&#x2081;)</span>
+              <div class="playground-presets__grid">
+                <button class="preset-btn" data-preset="Vs" data-vars="1" data-panel="s2d"><span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;)</button>
+                <button class="preset-btn" data-preset="VsNVe" data-vars="1" data-panel="s2d"><span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span>&thinsp;exp(sin(x&#x2081;))</button>
+                <button class="preset-btn" data-preset="VsNVeNVr" data-vars="1" data-panel="s2d"><span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span><span class="token-movement-fwd">N</span><span class="token-unary">Vr</span>&thinsp;&#x221A;(exp(sin(x&#x2081;)))</button>
+              </div>
+            </div>
+            <div class="playground-presets" style="border-top:none;padding-top:0;margin-top:var(--space-sm);">
+              <span class="playground-presets__label">2 variables (x&#x2081;, x&#x2082;)</span>
+              <div class="playground-presets__grid">
+                <button class="preset-btn" data-preset="V+Nnnc" data-vars="2" data-panel="s2d"><span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span>&thinsp;x&#x2081;+x&#x2082;</button>
+                <button class="preset-btn" data-preset="V+NnncVs" data-vars="2" data-panel="s2d"><span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;+x&#x2082;)</button>
+                <button class="preset-btn" data-preset="V*NnncVe" data-vars="2" data-panel="s2d"><span class="token-variadic">V*</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-unary">Ve</span>&thinsp;exp(x&#x2081;&#xB7;x&#x2082;)</button>
+              </div>
+            </div>
+            <div class="playground-presets" style="border-top:none;padding-top:0;margin-top:var(--space-sm);">
+              <span class="playground-presets__label">3 variables (x&#x2081;, x&#x2082;, x&#x2083;)</span>
+              <div class="playground-presets__grid">
+                <button class="preset-btn" data-preset="V+NnncncVs" data-vars="3" data-panel="s2d"><span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-movement-fwd">n</span><span class="token-edge">c</span><span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;+x&#x2082;+x&#x2083;)</button>
+                <button class="preset-btn" data-preset="V*NnncncVsNVe" data-vars="3" data-panel="s2d"><span class="token-variadic">V*</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">cnc</span><span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span>&thinsp;exp(sin(x&#x2081;&#xB7;x&#x2082;&#xB7;x&#x2083;))</button>
+              </div>
+            </div>
+          </div>
 
-        <div style="margin-top: var(--space-md);">
-          <button class="btn btn-primary" id="s2d-decode-btn">
-            Decode &rarr;
-          </button>
-        </div>
-
-        <!-- Presets grouped by variable count -->
-        <div class="playground-presets">
-          <span class="playground-presets__label">1 variable (x&#x2081;)</span>
-          <div class="playground-presets__grid">
-            <button class="preset-btn" data-preset="Vs" data-vars="1">
-              <span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;)
-            </button>
-            <button class="preset-btn" data-preset="VsNVe" data-vars="1">
-              <span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span>&thinsp;exp(sin(x&#x2081;))
-            </button>
-            <button class="preset-btn" data-preset="VsNVeNVr" data-vars="1">
-              <span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span><span class="token-movement-fwd">N</span><span class="token-unary">Vr</span>&thinsp;&#x221A;(exp(sin(x&#x2081;)))
-            </button>
+          <!-- Output -->
+          <div class="playground-output">
+            <div id="s2d-expression-panel" style="display:none;padding:var(--space-sm) var(--space-md);background:var(--bg-code);border:1px solid var(--border-subtle);border-radius:var(--radius-md);margin-bottom:var(--space-sm);text-align:center;">
+              <span style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;font-family:var(--font-display);font-weight:700;">Expression</span>
+              <div id="s2d-expression" style="font-family:var(--font-mono);font-size:var(--text-lg);font-weight:600;color:var(--accent-primary);margin-top:2px;min-height:1.5em;">&hellip;</div>
+            </div>
+            <svg id="s2d-dag-svg" style="width:100%;height:370px;"></svg>
+            <div id="s2d-placeholder" class="playground-output__viz" style="display:flex;">
+              <div class="playground-output__placeholder">
+                <div class="playground-output__placeholder-icon">&#x25C9;</div>
+                <p><strong>Interactive DAG visualization</strong></p>
+                <p style="margin-top:var(--space-sm);">Enter an instruction string and click <em>Decode</em>.</p>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="playground-presets" style="border-top: none; padding-top: 0; margin-top: var(--space-sm);">
-          <span class="playground-presets__label">2 variables (x&#x2081;, x&#x2082;)</span>
-          <div class="playground-presets__grid">
-            <button class="preset-btn" data-preset="V+Nnnc" data-vars="2">
-              <span class="token-variadic">V+</span><span class="token-movement-fwd">N</span><span class="token-movement-fwd">nn</span><span class="token-edge">c</span>&thinsp;x&#x2081;+x&#x2082;
-            </button>
-            <button class="preset-btn" data-preset="V+NnncVs" data-vars="2">
-              <span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;+x&#x2082;)
-            </button>
-            <button class="preset-btn" data-preset="V*NnncVe" data-vars="2">
-              <span class="token-variadic">V*</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-unary">Ve</span>&thinsp;exp(x&#x2081;&#xB7;x&#x2082;)
-            </button>
-            <button class="preset-btn" data-preset="V+NnncVeNVs" data-vars="2">
-              <span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-unary">Ve</span><span class="token-movement-fwd">N</span><span class="token-unary">Vs</span>&thinsp;sin(exp(x&#x2081;+x&#x2082;))
-            </button>
+
+        <!-- String display + transport -->
+        <div class="card" style="padding:var(--space-md) var(--space-xl);margin-bottom:var(--space-md);">
+          <div id="s2d-string-display" class="string-display" style="min-height:36px;justify-content:center;">
+            <span style="color:var(--text-tertiary);font-size:var(--text-sm);font-weight:400;">Token display appears after decoding</span>
           </div>
         </div>
-        <div class="playground-presets" style="border-top: none; padding-top: 0; margin-top: var(--space-sm);">
-          <span class="playground-presets__label">3 variables (x&#x2081;, x&#x2082;, x&#x2083;)</span>
-          <div class="playground-presets__grid">
-            <button class="preset-btn" data-preset="V+Nnncnc" data-vars="3">
-              <span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-movement-fwd">n</span><span class="token-edge">c</span>&thinsp;x&#x2081;+x&#x2082;+x&#x2083;
-            </button>
-            <button class="preset-btn" data-preset="V+NnncncVs" data-vars="3">
-              <span class="token-variadic">V+</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-movement-fwd">n</span><span class="token-edge">c</span><span class="token-unary">Vs</span>&thinsp;sin(x&#x2081;+x&#x2082;+x&#x2083;)
-            </button>
-            <button class="preset-btn" data-preset="V*NnncncVsNVe" data-vars="3">
-              <span class="token-variadic">V*</span><span class="token-movement-fwd">Nnn</span><span class="token-edge">c</span><span class="token-movement-fwd">n</span><span class="token-edge">c</span><span class="token-unary">Vs</span><span class="token-movement-fwd">N</span><span class="token-unary">Ve</span>&thinsp;exp(sin(x&#x2081;&#xB7;x&#x2082;&#xB7;x&#x2083;))
-            </button>
+        <div class="trace-timeline" id="s2d-transport" style="display:none;">
+          <button class="btn btn-sm btn-ghost" id="s2d-reset" title="Reset">&laquo;</button>
+          <button class="btn btn-sm btn-ghost" id="s2d-prev" title="Previous">&larr;</button>
+          <button class="btn btn-sm btn-primary" id="s2d-play" title="Play">&#x25B6;</button>
+          <button class="btn btn-sm btn-ghost" id="s2d-next" title="Next">&rarr;</button>
+          <span id="s2d-step-info" style="font-family:var(--font-mono);font-size:var(--text-sm);color:var(--text-secondary);margin-left:var(--space-md);"></span>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:var(--space-sm);">
+            <label style="font-size:var(--text-xs);color:var(--text-tertiary);">Speed:</label>
+            <select id="s2d-speed" style="padding:2px 4px;background:var(--bg-code);border:1px solid var(--border-default);border-radius:var(--radius-sm);color:var(--text-primary);font-size:var(--text-xs);">
+              <option value="1500">Slow</option><option value="800" selected>Normal</option><option value="400">Fast</option>
+            </select>
+          </div>
+        </div>
+        <section class="playground-trace">
+          <div class="card" style="padding:var(--space-xl);">
+            <h3 style="margin-bottom:var(--space-md);">Execution Trace</h3>
+            <div id="s2d-step-log" class="step-log" style="max-height:250px;"><p style="color:var(--text-tertiary);">Decode a string to see the step-by-step trace.</p></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ============================================================
+           PANEL 2: DAG → STRING (D2S)
+           ============================================================ -->
+      <div class="tab-panel" id="panel-d2s" role="tabpanel" aria-labelledby="tab-d2s">
+        <p style="color:var(--text-secondary);margin-bottom:var(--space-lg);">
+          Select a preset expression, then click <strong>Encode</strong> to convert the DAG
+          back into an IsalSR instruction string using the greedy D2S algorithm.
+        </p>
+        <div class="playground-layout">
+          <div class="playground-input">
+            <label class="playground-input__label">Expression DAG</label>
+            <div class="playground-presets" style="margin-top:0;">
+              <span class="playground-presets__label">Select an expression</span>
+              <div class="playground-presets__grid">
+                <button class="preset-btn" data-d2s-preset="Vs" data-d2s-vars="1">sin(x&#x2081;)</button>
+                <button class="preset-btn" data-d2s-preset="VsNVe" data-d2s-vars="1">exp(sin(x&#x2081;))</button>
+                <button class="preset-btn" data-d2s-preset="V+NnncVs" data-d2s-vars="2">sin(x&#x2081;+x&#x2082;)</button>
+                <button class="preset-btn" data-d2s-preset="V*NnncVe" data-d2s-vars="2">exp(x&#x2081;&#xB7;x&#x2082;)</button>
+                <button class="preset-btn" data-d2s-preset="V+NnncncVs" data-d2s-vars="3">sin(x&#x2081;+x&#x2082;+x&#x2083;)</button>
+              </div>
+            </div>
+            <div id="d2s-input-info" style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:var(--space-md);min-height:1.5em;"></div>
+            <div id="d2s-error" class="playground-input__error"></div>
+            <button class="btn btn-primary" style="width:100%;margin-top:var(--space-md);" id="d2s-encode-btn" disabled>Encode &rarr;</button>
+          </div>
+
+          <div class="playground-output">
+            <div id="d2s-expression-panel" style="display:none;padding:var(--space-sm) var(--space-md);background:var(--bg-code);border:1px solid var(--border-subtle);border-radius:var(--radius-md);margin-bottom:var(--space-sm);text-align:center;">
+              <span style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;font-family:var(--font-display);font-weight:700;">Input Expression</span>
+              <div id="d2s-expression" style="font-family:var(--font-mono);font-size:var(--text-lg);font-weight:600;color:var(--accent-primary);margin-top:2px;min-height:1.5em;">&hellip;</div>
+            </div>
+            <svg id="d2s-dag-svg" style="width:100%;height:350px;display:none;"></svg>
+            <div id="d2s-placeholder" class="playground-output__viz" style="display:flex;">
+              <div class="playground-output__placeholder">
+                <div class="playground-output__placeholder-icon">&#x25C9;</div>
+                <p><strong>Select an expression preset</strong></p>
+                <p style="margin-top:var(--space-sm);">The input DAG will appear here.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- D2S output string -->
+        <div id="d2s-output-section" style="display:none;">
+          <div class="card" style="padding:var(--space-md) var(--space-xl);margin-top:var(--space-md);text-align:center;">
+            <span style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;font-family:var(--font-display);font-weight:700;">Encoded String</span>
+            <div id="d2s-output-string" class="string-display" style="min-height:36px;justify-content:center;margin-top:var(--space-sm);font-size:var(--text-xl);"></div>
+            <div id="d2s-output-info" style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:var(--space-sm);"></div>
           </div>
         </div>
       </div>
 
-      <!-- Output panel: D3 DAG rendering -->
-      <div class="playground-output">
-        <!-- Expression panel -->
-        <div id="s2d-expression-panel" style="display:none; padding: var(--space-sm) var(--space-md); background: var(--bg-code); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin-bottom: var(--space-sm); text-align: center;">
-          <span style="font-size: var(--text-xs); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--font-display); font-weight: 700;">Expression</span>
-          <div id="s2d-expression" style="font-family: var(--font-mono); font-size: var(--text-lg); font-weight: 600; color: var(--accent-primary); margin-top: 2px; min-height: 1.5em;">&hellip;</div>
-        </div>
-        <svg id="s2d-dag-svg" class="playground-output__viz" style="width:100%; height:370px;"></svg>
-        <div id="s2d-placeholder" class="playground-output__viz" style="display:flex;">
-          <div class="playground-output__placeholder">
-            <div class="playground-output__placeholder-icon">&#x25C9;</div>
-            <p><strong>Interactive DAG visualization</strong></p>
-            <p style="margin-top: var(--space-sm);">
-              Enter an instruction string and click <em>Decode</em> to see the
-              expression DAG rendered with D3.js.
-            </p>
+      <!-- ============================================================
+           PANEL 3: ROUND-TRIP
+           ============================================================ -->
+      <div class="tab-panel" id="panel-rt" role="tabpanel" aria-labelledby="tab-rt">
+        <p style="color:var(--text-secondary);margin-bottom:var(--space-lg);">
+          Verify the <strong>round-trip property</strong>: decode a string to a DAG (S2D),
+          encode it back (D2S), decode again, and confirm the result is isomorphic.
+        </p>
+        <div class="playground-layout">
+          <div class="playground-input">
+            <label class="playground-input__label" for="rt-input">Instruction String</label>
+            <input type="text" id="rt-input" class="playground-input__string" value="V+NnncVs"
+              placeholder="e.g. V+NnncVs" spellcheck="false" autocomplete="off">
+            <input type="hidden" id="rt-vars" value="2">
+            <div id="rt-error" class="playground-input__error"></div>
+
+            <div class="playground-presets">
+              <span class="playground-presets__label">Presets</span>
+              <div class="playground-presets__grid">
+                <button class="preset-btn" data-rt-preset="Vs" data-rt-vars="1">sin(x&#x2081;)</button>
+                <button class="preset-btn" data-rt-preset="VsNVe" data-rt-vars="1">exp(sin(x&#x2081;))</button>
+                <button class="preset-btn" data-rt-preset="V+NnncVs" data-rt-vars="2">sin(x&#x2081;+x&#x2082;)</button>
+                <button class="preset-btn" data-rt-preset="V*NnncVe" data-rt-vars="2">exp(x&#x2081;&#xB7;x&#x2082;)</button>
+                <button class="preset-btn" data-rt-preset="V+NnncncVs" data-rt-vars="3">sin(x&#x2081;+x&#x2082;+x&#x2083;)</button>
+              </div>
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-top:var(--space-lg);" id="rt-run-btn">Run Round-Trip &rarr;</button>
+          </div>
+
+          <div class="playground-output" id="rt-output" style="display:none;">
+            <!-- Step 1: Original DAG -->
+            <div style="margin-bottom:var(--space-lg);">
+              <div style="font-family:var(--font-display);font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary);margin-bottom:var(--space-sm);">1. Decode: S2D(w)</div>
+              <div id="rt-expr-1" style="font-family:var(--font-mono);font-size:var(--text-base);color:var(--accent-primary);margin-bottom:var(--space-sm);"></div>
+              <svg id="rt-svg-1" style="width:100%;height:250px;"></svg>
+              <div id="rt-info-1" style="font-size:var(--text-sm);color:var(--text-secondary);"></div>
+            </div>
+            <!-- Step 2: Re-encode -->
+            <div style="margin-bottom:var(--space-lg);">
+              <div style="font-family:var(--font-display);font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary);margin-bottom:var(--space-sm);">2. Encode: D2S(D, x&#x2081;)</div>
+              <div id="rt-encoded-string" class="string-display" style="min-height:36px;justify-content:center;font-size:var(--text-lg);margin:var(--space-sm) 0;"></div>
+              <div id="rt-info-2" style="font-size:var(--text-sm);color:var(--text-secondary);"></div>
+            </div>
+            <!-- Step 3: Re-decode -->
+            <div style="margin-bottom:var(--space-lg);">
+              <div style="font-family:var(--font-display);font-size:var(--text-xs);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary);margin-bottom:var(--space-sm);">3. Decode again: S2D(w&prime;)</div>
+              <div id="rt-expr-3" style="font-family:var(--font-mono);font-size:var(--text-base);color:var(--accent-primary);margin-bottom:var(--space-sm);"></div>
+              <svg id="rt-svg-3" style="width:100%;height:250px;"></svg>
+              <div id="rt-info-3" style="font-size:var(--text-sm);color:var(--text-secondary);"></div>
+            </div>
+            <!-- Verdict -->
+            <div id="rt-verdict" class="rt-verdict"></div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Token string display -->
-    <div class="card" style="padding: var(--space-md) var(--space-xl); margin-bottom: var(--space-md);">
-      <div id="s2d-string-display" class="string-display" style="min-height: 36px; justify-content: center;">
-        <span style="color: var(--text-tertiary); font-size: var(--text-sm); font-weight: 400;">Token display appears after decoding</span>
-      </div>
-    </div>
+    </div><!-- container -->
 
-    <!-- Transport controls -->
-    <div class="trace-timeline" id="s2d-transport" style="display: none;">
-      <button class="btn btn-sm btn-ghost" id="sp-reset" title="Reset">&laquo;</button>
-      <button class="btn btn-sm btn-ghost" id="sp-prev" title="Previous step">&larr;</button>
-      <button class="btn btn-sm btn-primary" id="sp-play" title="Play">&#x25B6;</button>
-      <button class="btn btn-sm btn-ghost" id="sp-next" title="Next step">&rarr;</button>
-      <span id="sp-step-info" style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-secondary); margin-left: var(--space-md);"></span>
-      <div style="margin-left: auto; display: flex; align-items: center; gap: var(--space-sm);">
-        <label style="font-size: var(--text-xs); color: var(--text-tertiary);">Speed:</label>
-        <select id="sp-speed" style="padding: 2px 4px; background: var(--bg-code); border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); font-size: var(--text-xs);">
-          <option value="1500">Slow</option>
-          <option value="800" selected>Normal</option>
-          <option value="400">Fast</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Step log -->
-    <section class="playground-trace">
-      <div class="card" style="padding: var(--space-xl);">
-        <h3 style="margin-bottom: var(--space-md);">Execution Trace</h3>
-        <div id="s2d-step-log" class="step-log" style="max-height: 250px;">
-          <p style="color: var(--text-tertiary);">Decode an instruction string to see the step-by-step execution trace.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Reference -->
-    <section style="max-width: 700px; margin: var(--space-3xl) auto 0; text-align: center;">
-      <p style="color: var(--text-tertiary); font-size: var(--text-sm);">
-        The playground implements the S2D (String-to-DAG) algorithm described in
-        <a href="how-it-works.html" style="color: var(--accent-primary);">How It Works</a>.
-        For the full mathematical specification, see
-        <a href="math.html" style="color: var(--accent-primary);">Math Foundations</a>.
+    <section style="max-width:700px;margin:var(--space-3xl) auto 0;text-align:center;">
+      <p style="color:var(--text-tertiary);font-size:var(--text-sm);">
+        The playground implements the S2D and D2S algorithms described in
+        <a href="how-it-works.html" style="color:var(--accent-primary);">How It Works</a>.
+        For the full specification, see <a href="math.html" style="color:var(--accent-primary);">Math Foundations</a>.
       </p>
     </section>
   </main>
 
   <div id="site-footer"></div>
 
-  <!-- D3.js -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-
-  <!-- IsalSR core -->
   <script src="js/theme.js"></script>
   <script src="js/components.js"></script>
   <script src="js/core/cdll.js"></script>
   <script src="js/core/alphabet.js"></script>
   <script src="js/core/labeled-dag.js"></script>
   <script src="js/core/s2d.js"></script>
+  <script src="js/core/d2s.js"></script>
   <script src="js/viz/dag-renderer.js"></script>
   <script src="js/viz/step-player.js"></script>
 
   <script>
-    (function () {
-      'use strict';
-      var player = null;
+  (function () {
+    'use strict';
+    window.IsalSR = window.IsalSR || {};
+    var s2dPlayer = null;
 
-      function getNumVars() {
-        var sel = document.getElementById('s2d-vars');
-        return sel ? parseInt(sel.value, 10) : 1;
-      }
+    var VAR_LABELS = { '1':'1 (x\u2081)', '2':'2 (x\u2081, x\u2082)', '3':'3 (x\u2081, x\u2082, x\u2083)' };
 
-      var VAR_LABELS = {
-        '1': '1 (x\u2081)',
-        '2': '2 (x\u2081, x\u2082)',
-        '3': '3 (x\u2081, x\u2082, x\u2083)'
-      };
-
-      function setVars(n) {
-        document.getElementById('s2d-vars').value = n;
-        document.getElementById('s2d-vars-display').textContent = 'Variables: ' + (VAR_LABELS[n] || n);
-      }
-
-      // Preset buttons
-      document.querySelectorAll('.preset-btn[data-preset]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var str = btn.getAttribute('data-preset');
-          var vars = btn.getAttribute('data-vars') || '1';
-          document.getElementById('s2d-input').value = str;
-          setVars(vars);
-          document.getElementById('s2d-error').textContent = '';
-        });
+    // ================================================================
+    // Tab switching
+    // ================================================================
+    IsalSR.switchTab = function (mode) {
+      document.querySelectorAll('.tab').forEach(function (t) {
+        t.classList.remove('active'); t.setAttribute('aria-selected','false');
       });
+      document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+      var tab = document.getElementById('tab-' + mode);
+      var panel = document.getElementById('panel-' + mode);
+      if (tab) { tab.classList.add('active'); tab.setAttribute('aria-selected','true'); }
+      if (panel) panel.classList.add('active');
+    };
 
-      // Decode button
-      document.getElementById('s2d-decode-btn').addEventListener('click', function () {
-        var input = document.getElementById('s2d-input');
-        var errorEl = document.getElementById('s2d-error');
-        var str = input.value.trim();
+    // ================================================================
+    // Helpers
+    // ================================================================
+    function renderColoredTokens(str, numVars) {
+      try {
+        var tokens = IsalSR.tokenize(str);
+        var html = '';
+        for (var i = 0; i < tokens.length; i++) {
+          html += '<span class="' + tokens[i].css + '" style="font-weight:700;">' + tokens[i].token + '</span>';
+          if (i < tokens.length - 1) html += ' ';
+        }
+        return html;
+      } catch (e) { return '<span style="color:var(--text-secondary);">' + str + '</span>'; }
+    }
+
+    function runS2D(str, numVars) {
+      var s2d = new IsalSR.StringToDAG(str, numVars);
+      return s2d.run({ trace: true });
+    }
+
+    function runD2S(dag) {
+      var d2s = new IsalSR.DAGToString(dag, 0);
+      return d2s.run();
+    }
+
+    // ================================================================
+    // S2D Panel
+    // ================================================================
+    function setS2DVars(n) {
+      document.getElementById('s2d-vars').value = n;
+      document.getElementById('s2d-vars-display').textContent = 'Variables: ' + (VAR_LABELS[n] || n);
+    }
+
+    document.querySelectorAll('.preset-btn[data-panel="s2d"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.getElementById('s2d-input').value = btn.getAttribute('data-preset');
+        setS2DVars(btn.getAttribute('data-vars') || '1');
+        document.getElementById('s2d-error').textContent = '';
+      });
+    });
+
+    document.getElementById('s2d-decode-btn').addEventListener('click', function () {
+      var str = document.getElementById('s2d-input').value.trim();
+      var errorEl = document.getElementById('s2d-error');
+      errorEl.textContent = '';
+      if (!str) { errorEl.textContent = 'Please enter a string.'; return; }
+
+      var numVars = parseInt(document.getElementById('s2d-vars').value, 10) || 1;
+      var tokens, result;
+      try { tokens = IsalSR.tokenize(str); } catch (e) { errorEl.textContent = e.message; return; }
+      try { result = runS2D(str, numVars); } catch (e) { errorEl.textContent = 'S2D error: ' + e.message; return; }
+
+      document.getElementById('s2d-dag-svg').style.display = 'block';
+      document.getElementById('s2d-placeholder').style.display = 'none';
+      document.getElementById('s2d-expression-panel').style.display = 'block';
+      document.getElementById('s2d-transport').style.display = 'flex';
+
+      if (s2dPlayer) s2dPlayer.pause();
+      s2dPlayer = new IsalSR.StepPlayer({
+        traceSteps: result.traceSteps, dagSvgId: 's2d-dag-svg',
+        stepInfoId: 's2d-step-info', stepLogId: 's2d-step-log',
+        stringDisplayId: 's2d-string-display', expressionId: 's2d-expression', tokens: tokens
+      });
+      s2dPlayer.goToStep(result.traceSteps.length - 1);
+    });
+
+    // S2D transport
+    document.getElementById('s2d-reset').addEventListener('click', function () { if (s2dPlayer) s2dPlayer.reset(); });
+    document.getElementById('s2d-prev').addEventListener('click', function () { if (s2dPlayer) s2dPlayer.prev(); });
+    document.getElementById('s2d-next').addEventListener('click', function () { if (s2dPlayer) s2dPlayer.next(); });
+    document.getElementById('s2d-play').addEventListener('click', function () {
+      if (!s2dPlayer) return;
+      if (s2dPlayer.playing) { s2dPlayer.pause(); }
+      else { if (s2dPlayer.currentStep >= s2dPlayer.totalSteps()-1) s2dPlayer.reset(); s2dPlayer.play(); }
+      s2dPlayer._updateTransportUI();
+    });
+    document.getElementById('s2d-speed').addEventListener('change', function () {
+      if (s2dPlayer) s2dPlayer.setSpeed(parseInt(this.value, 10));
+    });
+
+    // ================================================================
+    // D2S Panel
+    // ================================================================
+    var d2sCurrentDAG = null;
+    var d2sCurrentVars = 1;
+
+    document.querySelectorAll('.preset-btn[data-d2s-preset]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var str = btn.getAttribute('data-d2s-preset');
+        var nv = parseInt(btn.getAttribute('data-d2s-vars'), 10) || 1;
+        d2sCurrentVars = nv;
+
+        try {
+          var result = runS2D(str, nv);
+          d2sCurrentDAG = result.traceSteps[result.traceSteps.length - 1].dag;
+          var d3Data = d2sCurrentDAG.toD3Data();
+          var expr = d2sCurrentDAG.toExpression();
+
+          document.getElementById('d2s-dag-svg').style.display = 'block';
+          document.getElementById('d2s-placeholder').style.display = 'none';
+          document.getElementById('d2s-expression-panel').style.display = 'block';
+          document.getElementById('d2s-expression').textContent = expr;
+          IsalSR.renderDAG('d2s-dag-svg', d3Data, {});
+
+          document.getElementById('d2s-input-info').textContent = d3Data.nodes.length + ' nodes, ' + d3Data.edges.length + ' edges';
+          document.getElementById('d2s-encode-btn').disabled = false;
+          document.getElementById('d2s-error').textContent = '';
+          document.getElementById('d2s-output-section').style.display = 'none';
+        } catch (e) {
+          document.getElementById('d2s-error').textContent = 'Error: ' + e.message;
+        }
+      });
+    });
+
+    document.getElementById('d2s-encode-btn').addEventListener('click', function () {
+      if (!d2sCurrentDAG) return;
+      var errorEl = document.getElementById('d2s-error');
+      try {
+        var result = runD2S(d2sCurrentDAG);
+        var encoded = result.string;
+        document.getElementById('d2s-output-section').style.display = 'block';
+        document.getElementById('d2s-output-string').innerHTML = renderColoredTokens(encoded, d2sCurrentVars);
+        var tokens = IsalSR.tokenize(encoded);
+        document.getElementById('d2s-output-info').textContent = tokens.length + ' tokens, ' + encoded.length + ' characters';
         errorEl.textContent = '';
+      } catch (e) {
+        errorEl.textContent = 'D2S error: ' + e.message;
+      }
+    });
 
-        if (!str) {
-          errorEl.textContent = 'Please enter an instruction string.';
-          return;
-        }
-
-        var numVars = getNumVars();
-
-        // Tokenize
-        var tokens;
-        try {
-          tokens = IsalSR.tokenize(str);
-        } catch (e) {
-          errorEl.textContent = e.message;
-          return;
-        }
-
-        // Run S2D with trace
-        var s2d;
-        try {
-          s2d = new IsalSR.StringToDAG(str, numVars);
-        } catch (e) {
-          errorEl.textContent = e.message;
-          return;
-        }
-
-        var result;
-        try {
-          result = s2d.run({ trace: true });
-        } catch (e) {
-          errorEl.textContent = 'S2D error: ' + e.message;
-          return;
-        }
-
-        // Show DAG SVG, expression panel, hide placeholder
-        document.getElementById('s2d-dag-svg').style.display = 'block';
-        document.getElementById('s2d-placeholder').style.display = 'none';
-        document.getElementById('s2d-expression-panel').style.display = 'block';
-
-        // Show transport controls
-        document.getElementById('s2d-transport').style.display = 'flex';
-
-        // Create step player
-        if (player) player.pause();
-        player = new IsalSR.StepPlayer({
-          traceSteps: result.traceSteps,
-          dagSvgId: 's2d-dag-svg',
-          stepInfoId: 'sp-step-info',
-          stepLogId: 's2d-step-log',
-          stringDisplayId: 's2d-string-display',
-          expressionId: 's2d-expression',
-          tokens: tokens
-        });
-
-        // Jump to final step to show complete result
-        player.goToStep(result.traceSteps.length - 1);
+    // ================================================================
+    // Round-Trip Panel
+    // ================================================================
+    document.querySelectorAll('.preset-btn[data-rt-preset]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.getElementById('rt-input').value = btn.getAttribute('data-rt-preset');
+        document.getElementById('rt-vars').value = btn.getAttribute('data-rt-vars') || '1';
+        document.getElementById('rt-error').textContent = '';
       });
+    });
 
-      // Transport controls
-      document.getElementById('sp-reset').addEventListener('click', function () {
-        if (player) player.reset();
-      });
-      document.getElementById('sp-prev').addEventListener('click', function () {
-        if (player) player.prev();
-      });
-      document.getElementById('sp-play').addEventListener('click', function () {
-        if (!player) return;
-        if (player.playing) {
-          player.pause();
+    document.getElementById('rt-run-btn').addEventListener('click', function () {
+      var str = document.getElementById('rt-input').value.trim();
+      var nv = parseInt(document.getElementById('rt-vars').value, 10) || 1;
+      var errorEl = document.getElementById('rt-error');
+      var outputDiv = document.getElementById('rt-output');
+      errorEl.textContent = '';
+
+      if (!str) { errorEl.textContent = 'Please enter a string.'; return; }
+
+      try {
+        // Step 1: S2D
+        var res1 = runS2D(str, nv);
+        var dag1 = res1.traceSteps[res1.traceSteps.length - 1].dag;
+        var d3_1 = dag1.toD3Data();
+        IsalSR.renderDAG('rt-svg-1', d3_1, {});
+        document.getElementById('rt-expr-1').textContent = dag1.toExpression();
+        document.getElementById('rt-info-1').textContent = d3_1.nodes.length + ' nodes, ' + d3_1.edges.length + ' edges';
+
+        // Step 2: D2S
+        var d2sResult = runD2S(dag1);
+        var encoded = d2sResult.string;
+        document.getElementById('rt-encoded-string').innerHTML = renderColoredTokens(encoded, nv);
+        var sameness = encoded === str ? ' (identical to input!)' : ' (different from input: ' + str.length + ' chars)';
+        document.getElementById('rt-info-2').textContent = encoded.length + ' characters' + sameness;
+
+        // Step 3: S2D again
+        var res3 = runS2D(encoded, nv);
+        var dag3 = res3.traceSteps[res3.traceSteps.length - 1].dag;
+        var d3_3 = dag3.toD3Data();
+        IsalSR.renderDAG('rt-svg-3', d3_3, {});
+        document.getElementById('rt-expr-3').textContent = dag3.toExpression();
+        document.getElementById('rt-info-3').textContent = d3_3.nodes.length + ' nodes, ' + d3_3.edges.length + ' edges';
+
+        // Step 4: Compare expressions
+        var expr1 = dag1.toExpression();
+        var expr3 = dag3.toExpression();
+        var match = expr1 === expr3;
+        var verdictEl = document.getElementById('rt-verdict');
+        if (match) {
+          verdictEl.className = 'rt-verdict rt-verdict--success';
+          verdictEl.innerHTML = '&#x2714; Round-trip verified! Expressions match: <strong>' + expr1 + '</strong>';
         } else {
-          // If at end, reset first
-          if (player.currentStep >= player.totalSteps() - 1) {
-            player.reset();
-          }
-          player.play();
+          verdictEl.className = 'rt-verdict rt-verdict--fail';
+          verdictEl.innerHTML = '&#x2718; Expressions differ: <strong>' + expr1 + '</strong> vs <strong>' + expr3 + '</strong>';
         }
-        player._updateTransportUI();
-      });
-      document.getElementById('sp-next').addEventListener('click', function () {
-        if (player) player.next();
-      });
-      document.getElementById('sp-speed').addEventListener('change', function () {
-        if (player) player.setSpeed(parseInt(this.value, 10));
-      });
-    })();
+
+        outputDiv.style.display = 'block';
+      } catch (e) {
+        errorEl.textContent = 'Error: ' + e.message;
+        outputDiv.style.display = 'block';
+        outputDiv.innerHTML = '<div style="color:#ef4444;padding:var(--space-lg);">Error: ' + e.message + '</div>';
+      }
+    });
+
+  })();
   </script>
 </body>
 </html>

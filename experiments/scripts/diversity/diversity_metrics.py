@@ -72,6 +72,53 @@ class DiversitySummary:
     pca_var2: float
     n_exact_pairs: int  # pairs where exact GED was proven optimal
     n_total_pairs: int  # total C(N,2) pairs
+    # Fragmentation metrics (added v2)
+    cv_ged: float = 0.0  # coefficient of variation of upper-tri BP-GED
+    frac_zero_pairs: float = 0.0  # fraction of zero-distance pairs
+    d_bar_nonzero: float = 0.0  # mean GED restricted to non-isomorphic pairs
+
+
+# ======================================================================
+# Fragmentation metrics
+# ======================================================================
+
+
+def compute_cv_ged(bp_matrix: np.ndarray) -> float:
+    """Coefficient of variation of upper-triangular BP-GED entries.
+
+    CV = sigma / mu. High CV indicates fragmented population (bimodal
+    distance distribution); low CV indicates uniform spread.
+    """
+    tri = bp_matrix[np.triu_indices_from(bp_matrix, k=1)]
+    if len(tri) == 0:
+        return 0.0
+    mu = float(np.mean(tri))
+    if mu < 1e-15:
+        return 0.0
+    return float(np.std(tri) / mu)
+
+
+def compute_frac_zero_pairs(bp_matrix: np.ndarray) -> float:
+    """Fraction of upper-triangular pairs with zero BP-GED distance.
+
+    Measures isomorphic redundancy. By construction, frac_zero ≈ 1 - delta.
+    """
+    tri = bp_matrix[np.triu_indices_from(bp_matrix, k=1)]
+    if len(tri) == 0:
+        return 0.0
+    return float(np.sum(tri < 1e-10) / len(tri))
+
+
+def compute_d_bar_nonzero(bp_matrix: np.ndarray) -> float:
+    """Mean BP-GED restricted to non-isomorphic pairs (d > 0).
+
+    From Remark X.6: d_bar_nonzero = d_bar / (1 - frac_zero).
+    """
+    tri = bp_matrix[np.triu_indices_from(bp_matrix, k=1)]
+    nonzero = tri[tri > 1e-10]
+    if len(nonzero) == 0:
+        return 0.0
+    return float(np.mean(nonzero))
 
 
 # ======================================================================
@@ -776,6 +823,9 @@ def capture_population_snapshot(
         pca_var2=pca_var[1],
         n_exact_pairs=n_exact_pairs,
         n_total_pairs=n_total_sampled,
+        cv_ged=compute_cv_ged(bp_ged_mat),
+        frac_zero_pairs=compute_frac_zero_pairs(bp_ged_mat),
+        d_bar_nonzero=compute_d_bar_nonzero(bp_ged_mat),
     )
 
     return snapshot, summary

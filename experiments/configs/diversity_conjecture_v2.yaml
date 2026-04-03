@@ -1,0 +1,38 @@
+# Diversity Conjecture v2: population-level dedup on harder benchmarks.
+#
+# Key changes from v1 (I.48.20):
+#   - enforce_population_dedup: true (delta → 1.0 guaranteed)
+#   - Harder benchmarks (I.12.4, I.10.7) where diversity matters
+#   - More granular early snapshots for convergence analysis
+#   - 30 seeds (up from 20) for tighter CIs
+
+experiment_name: diversity_conjecture_v2
+
+# Bingo parameters (match I.48.20 v1 for comparability)
+population_size: 200
+stack_size: 32
+operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log"]
+crossover_prob: 0.4
+mutation_prob: 0.4
+metric: mse
+clo_alg: lm
+max_time: 7200.0  # 2 hours per seed
+
+# Duplicate-free enforcement (new in v2)
+enforce_population_dedup: true
+
+# Snapshot schedule (more granular in early generations)
+snapshot_gens: [0, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 300, 400, 500]
+
+# Seeds
+seeds: 30
+
+# Benchmarks
+benchmarks:
+  - I.12.4    # primary: hard problem where diversity matters
+  - I.10.7    # secondary: medium difficulty
+  - Nguyen-1  # control: trivial sanity check
+
+# Diversity metrics
+n_workers: 8
+trajectory_freq: 1
