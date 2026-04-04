@@ -439,11 +439,12 @@ class IsalSRBingoRunner(ModelRunner):
         snapshots = evaluation.snapshots  # type: ignore[union-attr]
 
         log.info(
-            "IsalSR Bingo: total=%d unique=%d skipped=%d canon=%.2fs "
-            "atlas_hits=%d misses=%d gens=%d",
+            "IsalSR Bingo: total=%d unique=%d skipped=%d pop_rejected=%d "
+            "canon=%.2fs atlas_hits=%d misses=%d gens=%d",
             dedup.n_total,
             dedup.n_unique,
             dedup.n_skipped,
+            dedup.n_rejected_duplicates,
             dedup.canon_time_total,
             dedup.atlas_hits,
             dedup.atlas_misses,

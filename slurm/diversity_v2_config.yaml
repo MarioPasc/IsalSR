@@ -1,0 +1,55 @@
+# Diversity Conjecture v2 — Population-Level Dedup + Harder Benchmarks
+# =====================================================================
+# Key changes from v1:
+#   1. enforce_population_dedup: true → delta should approach 1.0
+#   2. Three benchmarks: I.12.4 (hard), I.10.7 (medium), Nguyen-1 (control)
+#   3. 30 seeds (up from 20) for tighter confidence intervals
+#   4. More granular early snapshots for convergence analysis
+#
+# Task layout:
+#   For each benchmark (B benchmarks, S seeds):
+#     tasks [b*2S+1 .. b*2S+S]         = baseline seeds 0..S-1
+#     tasks [b*2S+S+1 .. b*2S+2S]      = isalsr seeds 0..S-1
+#   Total = B * 2 * S = 3 * 2 * 30 = 180 tasks
+
+# Paths (Picasso filesystem layout)
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/diversity_v2
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu
+account: tic_163_uma
+
+# Experiment parameters
+experiment:
+  # Benchmarks (ordered: hard → easy)
+  benchmarks:
+    - "I.12.4"     # q1/(4*pi*r*c), 3 variables — hard
+    - "I.10.7"     # m0/sqrt(1-v^2/c^2), 3 variables — medium
+    - "Nguyen-1"   # x^3+x^2+x, 1 variable — control
+
+  # Bingo evolution
+  population_size: 200
+  stack_size: 32
+  max_time: 7200.0        # 2h wall-clock limit per evolutionary run
+  snapshot_gens: "0,5,10,15,20,25,30,40,50,75,100,150,200,300,400,500"
+  trajectory_freq: 1
+
+  # Population-level dedup (new in v2)
+  enforce_dedup: true
+
+  # Seeds and array
+  n_seeds: 30
+  # Total array size = 3 benchmarks * 2 variants * 30 seeds = 180 tasks
+
+  # SLURM resources per task
+  time_limit: "08:00:00"
+  cpus: 8
+  mem_gb: 16
+
+  # Analysis job
+  analysis:
+    time_limit: "02:00:00"
+    cpus: 4
+    mem_gb: 16

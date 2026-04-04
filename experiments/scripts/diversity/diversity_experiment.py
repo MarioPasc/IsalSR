@@ -677,7 +677,7 @@ def main():
         dt = time.perf_counter() - t0
 
         # Save snapshots, summaries, and trajectory
-        for snap, summary in results:
+        for snap, _summary in results:
             save_snapshot(snap, output_dir)
 
         save_summary_csv([s for _, s in results], output_dir)
