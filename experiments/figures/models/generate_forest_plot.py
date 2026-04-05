@@ -58,8 +58,8 @@ _PROBLEM_LABELS = {
 }
 
 METHOD_COLORS = {
-    "udfs": PAUL_TOL_BRIGHT["blue"],
-    "bingo": PAUL_TOL_BRIGHT["red"],
+    "udfs": PAUL_TOL_BRIGHT["green"],
+    "bingo": PAUL_TOL_BRIGHT["purple"],
 }
 
 

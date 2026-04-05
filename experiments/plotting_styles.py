@@ -127,6 +127,28 @@ PLOT_SETTINGS = {
 }
 
 # =============================================================================
+# Variant Colors (Native DAG baseline vs IsalSR — used across ALL figures)
+# =============================================================================
+
+COLOR_NATIVE: str = PAUL_TOL_BRIGHT["blue"]  # #4477AA — Native DAG (baseline)
+COLOR_ISALSR: str = PAUL_TOL_BRIGHT["red"]  # #EE6677 — IsalSR variant
+
+VARIANT_COLORS: dict[str, str] = {
+    "baseline": COLOR_NATIVE,
+    "native": COLOR_NATIVE,
+    "isalsr": COLOR_ISALSR,
+}
+
+# =============================================================================
+# Method Colors (SR method identity — must NOT overlap with variant colors)
+# =============================================================================
+
+METHOD_COLORS: dict[str, str] = {
+    "udfs": PAUL_TOL_BRIGHT["green"],  # #228833
+    "bingo": PAUL_TOL_BRIGHT["purple"],  # #AA3377
+}
+
+# =============================================================================
 # Condition Colors (for consistent styling across figures)
 # =============================================================================
 

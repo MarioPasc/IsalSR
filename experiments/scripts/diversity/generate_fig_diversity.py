@@ -27,7 +27,8 @@ from matplotlib.gridspec import GridSpec
 from scipy import stats
 
 from experiments.plotting_styles import (
-    PAUL_TOL_BRIGHT,
+    COLOR_ISALSR,
+    COLOR_NATIVE,
     PLOT_SETTINGS,
     apply_ieee_style,
     save_figure,
@@ -37,8 +38,7 @@ log = logging.getLogger(__name__)
 
 RESULTS_DIR = Path("/media/mpascual/Sandisk2TB/research/isalsr/results/model_validation/diversity")
 
-COLOR_BASELINE = PAUL_TOL_BRIGHT["blue"]
-COLOR_ISALSR = PAUL_TOL_BRIGHT["red"]
+COLOR_BASELINE = COLOR_NATIVE  # Re-export for downstream imports
 
 
 # ======================================================================

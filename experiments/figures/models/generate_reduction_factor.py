@@ -38,8 +38,8 @@ log = logging.getLogger(__name__)
 # ======================================================================
 
 METHOD_STYLE = {
-    "udfs": {"color": "#2166ac", "label": "UDFS"},
-    "bingo": {"color": "#b2182b", "label": "Bingo"},
+    "udfs": {"color": "#228833", "label": "UDFS"},  # Paul Tol green
+    "bingo": {"color": "#AA3377", "label": "Bingo"},  # Paul Tol purple
 }
 
 _NGUYEN_ORDER = [
@@ -248,7 +248,7 @@ def _plot_panel(
                     "markerfacecolor": color,
                     "markeredgecolor": color,
                 },
-                medianprops={"color": "white", "linewidth": 1.2},
+                medianprops={"color": "white", "linewidth": 0.8},
                 boxprops={"facecolor": color, "alpha": 0.65, "edgecolor": color},
                 whiskerprops={"color": color, "linewidth": 0.8},
                 capprops={"color": color, "linewidth": 0.8},
@@ -311,7 +311,7 @@ def _plot_panel(
         fontsize=7,
     )
     ax.set_ylabel("Reduction factor $\\rho$", fontsize=9)
-    ax.set_title(title, fontsize=10, fontweight="bold", loc="left")
+    ax.set_title(title, fontsize=10, loc="left")
     ax.grid(axis="y", alpha=0.3, linewidth=0.5)
     ax.set_axisbelow(True)
     ax.set_xlim(
@@ -353,17 +353,18 @@ def generate_reduction_factor_figure(
                     global_ymax = max(global_ymax, max(seeds))
     global_ymax *= 1.05
 
-    # Single-column: 3.5in wide, tall to give y-axis room
+    # Double-column: 1 row × 2 cols, shared y-axis
     fig, axes = plt.subplots(
-        len(benchmarks),
         1,
-        figsize=(3.5, 7.0),
-        gridspec_kw={"hspace": 0.45},
+        len(benchmarks),
+        figsize=(7.0, 3.5),
+        sharey=True,
+        gridspec_kw={"wspace": 0.08},
     )
     if len(benchmarks) == 1:
         axes = [axes]
 
-    for ax, benchmark in zip(axes, benchmarks):
+    for idx, (ax, benchmark) in enumerate(zip(axes, benchmarks, strict=True)):
         title, order = bench_config.get(benchmark, (benchmark, []))
         rf_data = _load_rf_data(results_dir, methods, benchmark)
 
@@ -379,6 +380,9 @@ def generate_reduction_factor_figure(
 
         _plot_panel(ax, rf_data, order, methods, title, dag_weighted=dag_weighted)
         ax.set_ylim(0.95, global_ymax)
+        # Only show y-label on the leftmost panel
+        if idx > 0:
+            ax.set_ylabel("")
 
     # Unified legend below both panels
     handles, labels = axes[0].get_legend_handles_labels()
@@ -404,7 +408,7 @@ def generate_reduction_factor_figure(
         ncol=len(handles),
         fontsize=8,
         frameon=False,
-        bbox_to_anchor=(0.5, -0.02),
+        bbox_to_anchor=(0.5, -0.11),
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)

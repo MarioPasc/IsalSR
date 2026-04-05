@@ -24,15 +24,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 from experiments.models.io_utils import load_all_run_logs  # noqa: E402
 from experiments.plotting_styles import (  # noqa: E402
-    PAUL_TOL_BRIGHT,
+    COLOR_ISALSR,
+    COLOR_NATIVE,
     apply_ieee_style,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger(__name__)
 
-C_BASELINE = PAUL_TOL_BRIGHT["grey"]
-C_ISALSR = PAUL_TOL_BRIGHT["red"]
+C_BASELINE = COLOR_NATIVE
+C_ISALSR = COLOR_ISALSR
 
 
 def generate_pareto(

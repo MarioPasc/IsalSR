@@ -14,8 +14,8 @@ import argparse
 import logging
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from experiments.figures.models.generate_case_study import generate_case_study
 from experiments.figures.models.generate_convergence import generate_convergence_figure
@@ -34,7 +34,8 @@ from experiments.figures.models.generate_solution_rate import generate_solution_
 from experiments.figures.models.generate_tables import (
     generate_table1,
     generate_table2,
-    generate_table3,
+    generate_table_k_range,
+    generate_table_supplementary,
 )
 
 log = logging.getLogger(__name__)
@@ -45,9 +46,7 @@ _CASE_STUDIES: list[tuple[str, str, str]] = [
 ]
 
 
-def _run_step(
-    name: str, fn: Callable[[], None]
-) -> tuple[bool, float]:
+def _run_step(name: str, fn: Callable[[], None]) -> tuple[bool, float]:
     """Execute *fn*, returning (success, elapsed_seconds)."""
     log.info("── %s", name)
     t0 = time.perf_counter()
@@ -88,8 +87,12 @@ def generate_all(
             lambda: generate_table2(results_dir, methods, benchmarks, output_dir),
         ),
         (
-            "Table 3 – overhead breakdown",
-            lambda: generate_table3(results_dir, methods, benchmarks, output_dir),
+            "Table K – k-range overhead",
+            lambda: generate_table_k_range(results_dir, methods, benchmarks, output_dir),
+        ),
+        (
+            "Table S – supplementary per-problem",
+            lambda: generate_table_supplementary(results_dir, methods, benchmarks, output_dir),
         ),
         # -- Figures ----------------------------------------------------------
         (
@@ -104,9 +107,7 @@ def generate_all(
         ),
         (
             "Forest plot (Cohen's d)",
-            lambda: generate_forest_plot(
-                results_dir, output_dir, methods, benchmarks
-            ),
+            lambda: generate_forest_plot(results_dir, output_dir, methods, benchmarks),
         ),
         (
             "Pareto (R² vs complexity)",
@@ -114,9 +115,7 @@ def generate_all(
         ),
         (
             "Solution rate",
-            lambda: generate_solution_rate(
-                results_dir, output_dir, methods, benchmarks
-            ),
+            lambda: generate_solution_rate(results_dir, output_dir, methods, benchmarks),
         ),
         (
             "Convergence trajectories",
@@ -137,20 +136,20 @@ def generate_all(
         ),
         (
             "CD diagrams – per benchmark",
-            lambda: generate_cd_per_benchmark(
-                results_dir, output_dir, methods, benchmarks
-            ),
+            lambda: generate_cd_per_benchmark(results_dir, output_dir, methods, benchmarks),
         ),
     ]
 
     # -- Case studies (one step per configured problem) ----------------------
     for method, benchmark, problem in case_studies:
-        steps.append((
-            f"Case study – {method}/{benchmark}/{problem}",
-            lambda m=method, b=benchmark, p=problem: generate_case_study(
-                results_dir, output_dir, m, b, p
-            ),
-        ))
+        steps.append(
+            (
+                f"Case study – {method}/{benchmark}/{problem}",
+                lambda m=method, b=benchmark, p=problem: generate_case_study(
+                    results_dir, output_dir, m, b, p
+                ),
+            )
+        )
 
     results: dict[str, bool] = {}
     t_total = time.perf_counter()
@@ -165,9 +164,7 @@ def generate_all(
     n_ok = sum(results.values())
     n_total = len(results)
     log.info("━" * 60)
-    log.info(
-        "Done: %d/%d succeeded  (%.1fs total)", n_ok, n_total, elapsed_total
-    )
+    log.info("Done: %d/%d succeeded  (%.1fs total)", n_ok, n_total, elapsed_total)
     if n_ok < n_total:
         failed = [n for n, ok in results.items() if not ok]
         log.warning("Failed steps:\n  • %s", "\n  • ".join(failed))

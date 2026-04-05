@@ -29,6 +29,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 from critdd import Diagram, Diagrams  # noqa: E402
 
 from experiments.models.io_utils import load_all_run_logs  # noqa: E402
+from experiments.plotting_styles import (  # noqa: E402
+    COLOR_ISALSR,
+    COLOR_NATIVE,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger(__name__)
@@ -289,13 +293,21 @@ def _style_2d_tikz(tikz_str: str) -> str:
       - Same COLOR  per representation: native DAG = gray (dim), IsalSR = red (vivid)
       - Mark size increased for readability in TPAMI double-column
     """
+    # Convert hex colours to LaTeX {HTML}{RRGGBB} specs
+    native_hex = COLOR_NATIVE.lstrip("#")
+    isalsr_hex = COLOR_ISALSR.lstrip("#")
+    native_color_def = f"\\definecolor{{clrNative}}{{HTML}}{{{native_hex}}}"
+    isalsr_color_def = f"\\definecolor{{clrIsalsr}}{{HTML}}{{{isalsr_hex}}}"
+
     # Define the custom cycle list BEFORE \\begin{axis}
     cycle_def = (
+        f"{native_color_def}\n"
+        f"{isalsr_color_def}\n"
         "\\pgfplotscreateplotcyclelist{isalsr}{\n"
-        "  {gray!70!black, mark=o, mark size=4pt, very thick},\n"  # UDFS native DAG
-        "  {red!80!black, mark=o, mark size=4pt, very thick},\n"  # UDFS IsalSR
-        "  {gray!70!black, mark=triangle*, mark size=5pt, very thick},\n"  # Bingo native DAG
-        "  {red!80!black, mark=triangle*, mark size=5pt, very thick},\n"  # Bingo IsalSR
+        "  {clrNative, mark=o, mark size=4pt, very thick},\n"  # UDFS native DAG
+        "  {clrIsalsr, mark=o, mark size=4pt, very thick},\n"  # UDFS IsalSR
+        "  {clrNative, mark=triangle*, mark size=5pt, very thick},\n"  # Bingo native DAG
+        "  {clrIsalsr, mark=triangle*, mark size=5pt, very thick},\n"  # Bingo IsalSR
         "}\n"
     )
     tikz_str = tikz_str.replace(
@@ -319,29 +331,30 @@ def _caption_cd_2d(
     methods: list[str],
     benchmarks: list[str],
 ) -> str:
-    """Return a LaTeX-ready caption for the 2D critical difference diagram."""
+    """Return a LaTeX-ready caption for the multi-metric CD diagram."""
     bench_str = " and ".join(b.capitalize() for b in benchmarks)
     method_str = " and ".join(methods)
     return (
-        f"Two-dimensional critical difference diagram comparing four "
+        f"Three-row critical difference diagram comparing four "
         f"configurations---{method_str}, each with its native DAG "
         f"representation and with \\IsalSR{{}} canonicalization---on "
         f"{n_problems} benchmark problems ({bench_str}). "
         f"Marker shape encodes the SR method "
-        f"(\\tikz\\node[circle,draw=gray!70!black,inner sep=1.5pt]{{}}; "
+        f"(\\tikz\\node[circle,draw=clrNative,inner sep=1.5pt]{{}}; "
         f"= UDFS, "
         f"\\tikz\\node[regular polygon,regular polygon sides=3,"
-        f"fill=gray!70!black,inner sep=1pt]{{}}; = Bingo) "
+        f"fill=clrNative,inner sep=1pt]{{}}; = Bingo) "
         f"and colour encodes the representation "
-        f"(gray = native DAG, red = \\IsalSR). "
+        f"(blue = native DAG, red = \\IsalSR). "
         f"Top row: $R^2$ test (higher rank = better fit). "
-        f"Bottom row: reduction factor $\\rho$ (higher rank = more "
+        f"Middle row: reduction factor $\\rho$ (higher rank = more "
         f"redundancy eliminated). "
+        f"Bottom row: wall-clock time $T$ (higher rank = faster execution). "
         f"Thick horizontal bars connect groups that are not significantly "
         f"different (Nemenyi post-hoc, $\\alpha = 0.05$, Holm adjustment). "
         f"\\IsalSR{{}}-augmented variants (red) match or improve quality "
         f"rankings while achieving significantly higher $\\rho$ than their "
-        f"native-DAG counterparts (gray)."
+        f"native-DAG counterparts (gray), without degrading execution time."
     )
 
 
@@ -351,10 +364,10 @@ def generate_cd_2d(
     methods: list[str],
     benchmarks: list[str],
 ) -> None:
-    """Generate 2D CD diagram: R² test (row 1) + Reduction Factor (row 2).
+    """Generate 3-row CD diagram: R² test + Reduction Factor + Wall-clock time.
 
-    This shows the joint trade-off: are the same groups that rank well on
-    quality also ranking well on search space reduction?
+    Three-axis joint view: quality (R²), search space reduction (RF), and
+    computational cost (wall-clock time, negated so higher = faster).
 
     Visual encoding:
       Shape  → algorithm identity (circle = UDFS, triangle = Bingo)
@@ -362,6 +375,7 @@ def generate_cd_2d(
     """
     all_r2: list[np.ndarray] = []
     all_rf: list[np.ndarray] = []
+    all_time: list[np.ndarray] = []
     group_names: list[str] = []
 
     for benchmark in benchmarks:
@@ -376,15 +390,24 @@ def generate_cd_2d(
             methods,
             benchmark,
         )
+        # Negate time: maximize_outcome=True → higher (less negative) = faster
+        X_time, _, problems_time = _load_problem_means(
+            results_dir,
+            methods,
+            benchmark,
+            metric_extractor=lambda rl: -rl.time.wall_clock_total_s,
+        )
         if not group_names and gn:
             group_names = gn
 
-        if X_r2.size > 0 and X_rf.size > 0:
-            common = sorted(set(problems_r2) & set(problems_rf))
+        if X_r2.size > 0 and X_rf.size > 0 and X_time.size > 0:
+            common = sorted(set(problems_r2) & set(problems_rf) & set(problems_time))
             idx_r2 = [problems_r2.index(p) for p in common]
             idx_rf = [problems_rf.index(p) for p in common]
+            idx_time = [problems_time.index(p) for p in common]
             all_r2.append(X_r2[idx_r2])
             all_rf.append(X_rf[idx_rf])
+            all_time.append(X_time[idx_time])
 
     if not all_r2:
         log.warning("No data for 2D CD diagram")
@@ -392,8 +415,9 @@ def generate_cd_2d(
 
     X_r2_combined = np.vstack(all_r2)
     X_rf_combined = np.vstack(all_rf)
+    X_time_combined = np.vstack(all_time)
     log.info(
-        "2D CD: %d problems x %d groups, 2 metrics",
+        "3-row CD: %d problems x %d groups, 3 metrics",
         X_r2_combined.shape[0],
         X_r2_combined.shape[1],
     )
@@ -402,8 +426,12 @@ def generate_cd_2d(
     display_names = [_TREATMENT_LABELS.get(g, g) for g in group_names]
 
     diagrams = Diagrams(
-        [X_r2_combined, X_rf_combined],
-        diagram_names=["$R^2$ test", "Reduction factor $\\rho$"],
+        [X_r2_combined, X_rf_combined, X_time_combined],
+        diagram_names=[
+            "$R^2$ test",
+            "Reduction factor $\\rho$",
+            "Wall-clock time $T$",
+        ],
         treatment_names=display_names,
         maximize_outcome=True,
     )

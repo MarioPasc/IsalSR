@@ -28,12 +28,14 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
+from experiments.plotting_styles import COLOR_ISALSR, COLOR_NATIVE  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger(__name__)
 
 # Colors consistent with the rest of the paper
-C_BASELINE = "#777777"
-C_ISALSR = "#b2182b"
+C_BASELINE = COLOR_NATIVE
+C_ISALSR = COLOR_ISALSR
 
 
 # ======================================================================
