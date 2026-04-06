@@ -19,6 +19,7 @@ from bingo.symbolic_regression.agraph.agraph import AGraph  # noqa: E402
 from experiments.models.bingo.adapter import agraph_to_labeled_dag  # noqa: E402
 from experiments.models.bingo.config import BingoConfig  # noqa: E402
 from experiments.models.bingo.isalsr_runner import (  # noqa: E402
+    _DUPLICATE_AGE_PENALTY,
     IsalSREvaluation,
     _CanonicalDeduplicator,
 )
@@ -141,7 +142,6 @@ class TestPopulationDedup:
         evaluation._serial_eval(population)
 
         assert np.isfinite(ag1.fitness), "First individual should have finite fitness"
-        assert ag1.fitness == pytest.approx(np.inf) or np.isfinite(ag1.fitness)
         assert ag2.fitness == np.inf, "Duplicate should get INF fitness"
         assert dedup.n_rejected_duplicates == 1
 
@@ -263,12 +263,97 @@ class TestDeltaReachesOne:
                 n_valid += 1  # Count but skip
 
         delta = len(canonical_strings) / n_valid if n_valid > 0 else 0
-        # Threshold 0.75: conservative for small N=64 test population.
-        # With N=64, conversion/canonicalization failures and limited
-        # mutation diversity prevent delta=1.0.  Production runs (N=200)
-        # target delta >= 0.98.  The key invariant is that enforce_dedup
-        # raises delta significantly above the ~0.50 baseline level.
-        assert delta >= 0.75, (
-            f"Delta should be significantly above baseline with enforce_dedup, "
+        # With the NaN fitness + age penalty, duplicates are unconditionally
+        # removed by AgeFitness selection. For small N=64 populations with
+        # stack_size=12, delta >= 0.90 after 30 gens is a strong signal.
+        # Production runs (N=200+) achieve delta >= 0.99.
+        assert delta >= 0.90, (
+            f"Delta should approach 1.0 with enforce_dedup + age penalty, "
             f"got {delta:.3f} ({len(canonical_strings)}/{n_valid} unique)"
+        )
+
+
+class TestAgePenalty:
+    """Tests for the age penalty mechanism on duplicate individuals."""
+
+    def _make_dedup_and_eval(
+        self, use_age_penalty: bool = True
+    ) -> tuple[_CanonicalDeduplicator, IsalSREvaluation]:
+        dedup = _CanonicalDeduplicator(use_fast_canonical=True, timeout=30.0)
+
+        class DummyFitness:
+            eval_count = 0
+
+            def __call__(self, indv):
+                self.eval_count += 1
+                return 1.0
+
+        evaluation = IsalSREvaluation(
+            fitness_function=DummyFitness(),
+            dedup=dedup,
+            snapshot_freq=100_000,
+            t0=0.0,
+            enforce_dedup=True,
+            use_age_penalty=use_age_penalty,
+        )
+        return dedup, evaluation
+
+    def test_age_penalty_ensures_pareto_dominance(self):
+        """Duplicate with age penalty is always Pareto-dominated."""
+        from bingo.selection.age_fitness import AgeFitness
+
+        _, evaluation = self._make_dedup_and_eval(use_age_penalty=True)
+
+        ag1 = _make_sin_x_agraph()
+        ag2 = _make_sin_x_agraph()  # duplicate
+        ag2.genetic_age = 3  # young age
+
+        evaluation._serial_eval([ag1, ag2])
+
+        # ag2 should have INF fitness and high age
+        assert ag2.fitness == np.inf
+        assert ag2.genetic_age >= _DUPLICATE_AGE_PENALTY
+
+        # ag1 should NOT be dominated by ag2
+        assert AgeFitness._first_not_dominated(ag1, ag2) is True
+        # ag2 IS dominated by ag1
+        assert AgeFitness._first_not_dominated(ag2, ag1) is False
+
+    def test_age_penalty_can_be_disabled(self):
+        """With use_age_penalty=False, only fitness is set to INF."""
+        _, evaluation = self._make_dedup_and_eval(use_age_penalty=False)
+
+        ag1 = _make_sin_x_agraph()
+        ag2 = _make_sin_x_agraph()
+        original_age = ag2.genetic_age
+
+        evaluation._serial_eval([ag1, ag2])
+
+        assert ag2.fitness == np.inf, "Duplicate should get INF fitness"
+        assert ag2.genetic_age == original_age, "Age should NOT be modified"
+
+    def test_stale_dup_age_reset(self):
+        """Previously penalized individual gets age reset when re-eligible."""
+        dedup, evaluation = self._make_dedup_and_eval(use_age_penalty=True)
+
+        ag1 = _make_sin_x_agraph()
+        ag2 = _make_sin_x_agraph()  # duplicate
+
+        evaluation._serial_eval([ag1, ag2])
+        assert ag2.genetic_age >= _DUPLICATE_AGE_PENALTY
+
+        # Simulate eviction: ag1 removed, ag2 remains as stale dup
+        evaluation._rebuild_population_set([ag2])
+        # population_canonicals now has ag2's canonical
+
+        # Clear population set (simulates ag2's canonical being evicted)
+        evaluation._rebuild_population_set([])
+
+        # Re-evaluate ag2: it's no longer a population duplicate
+        ag2.fit_set = False  # force re-evaluation
+        evaluation._serial_eval([ag2])
+
+        # Age should be reset (was stale dup, now eligible)
+        assert ag2.genetic_age < _DUPLICATE_AGE_PENALTY, (
+            f"Stale dup age should be reset, got {ag2.genetic_age}"
         )

@@ -45,6 +45,7 @@ from experiments.models.bingo.config import BingoConfig
 from experiments.models.bingo.isalsr_runner import (
     IsalSREvaluation,
     _CanonicalDeduplicator,
+    purge_penalized,
 )
 from experiments.models.bingo.runner import build_bingo_pipeline
 from experiments.scripts.diversity.diversity_metrics import (
@@ -303,6 +304,9 @@ def run_single_variant(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 island.evolve(1)
+            # Purge age-penalized duplicates that survived selection.
+            if variant == "isalsr" and enforce_dedup:
+                purge_penalized(island.population)
 
         gen += 1
 

@@ -44,6 +44,14 @@ from experiments.models.bingo.runner import (
 
 log = logging.getLogger(__name__)
 
+# Age penalty for duplicate individuals.  Must be large enough that the
+# duplicate is Pareto-dominated by ANY other individual in AgeFitnessEA
+# selection on both (genetic_age, fitness) dimensions.  With fitness=inf
+# and age=_DUPLICATE_AGE_PENALTY, _first_not_dominated(other, dup) is
+# always True for any finite-fitness, finite-age individual, guaranteeing
+# immediate removal by selection.
+_DUPLICATE_AGE_PENALTY = 10_000_000
+
 
 # ---------------------------------------------------------------------------
 # Heap fragmentation mitigation for long evolutionary runs.
@@ -133,6 +141,7 @@ class IsalSREvaluation(Evaluation):
         snapshot_freq: int = 10,
         t0: float = 0.0,
         enforce_dedup: bool = False,
+        use_age_penalty: bool = True,
         **kwargs: Any,
     ):
         super().__init__(fitness_function, **kwargs)
@@ -140,6 +149,7 @@ class IsalSREvaluation(Evaluation):
         self._snapshot_freq = snapshot_freq
         self._t0 = t0
         self._enforce_dedup = enforce_dedup
+        self._use_age_penalty = use_age_penalty
         self._call_count = 0
         self._best_fitness = float("inf")
         self.snapshots: list[BingoTrajectorySnapshot] = []
@@ -226,10 +236,10 @@ class IsalSREvaluation(Evaluation):
             # Process if: (a) standard unevaluated individual, OR
             # (b) NOT a known parent (catches VarAnd clones that
             #     inherited fit_set=True from parent via AGraph.copy()), OR
-            # (c) enforce_dedup parent with INF fitness (was a rejected
-            #     duplicate in a previous gen — may be eligible now if
-            #     the original was evicted by selection).
-            is_stale_dup = self._enforce_dedup and is_parent and indv.fitness == np.inf
+            # (c) enforce_dedup parent with non-finite fitness (was a
+            #     rejected duplicate in a previous gen — may be eligible
+            #     now if the original was evicted by selection).
+            is_stale_dup = self._enforce_dedup and is_parent and not np.isfinite(indv.fitness)
             should_process = self._redundant or not indv.fit_set or not is_parent or is_stale_dup
             if not should_process:
                 continue
@@ -307,7 +317,16 @@ class IsalSREvaluation(Evaluation):
                     self.dedup.n_rejected_duplicates += 1
                     self.dedup.n_skipped += 1
                     indv.fitness = np.inf
+                    if self._use_age_penalty:
+                        indv.genetic_age = _DUPLICATE_AGE_PENALTY
                     continue
+
+                # Stale duplicate re-entry: individual was previously penalized
+                # (age >= _DUPLICATE_AGE_PENALTY) but its canonical is no longer
+                # held by a living member (original was evicted by selection).
+                # Reset age so the individual competes fairly.
+                if indv.genetic_age >= _DUPLICATE_AGE_PENALTY:
+                    indv.genetic_age = 0
 
                 # Fitness caching: reuse fitness if seen historically
                 if canon_hash in self.dedup.fitness_cache:
@@ -333,6 +352,8 @@ class IsalSREvaluation(Evaluation):
                 if canon_hash in self.dedup.canonical_seen:
                     self.dedup.n_skipped += 1
                     indv.fitness = np.inf
+                    if self._use_age_penalty:
+                        indv.genetic_age = _DUPLICATE_AGE_PENALTY
                     continue
 
                 self.dedup.canonical_seen.add(canon_hash)
@@ -341,6 +362,30 @@ class IsalSREvaluation(Evaluation):
                     indv.fitness = self.fitness_function(indv)
                 if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                     self._best_fitness = indv.fitness
+
+
+def purge_penalized(population: list) -> list:
+    """Remove age-penalized duplicates from a population list.
+
+    Bingo's AgeFitness tournament selection doesn't prioritize removing
+    inf-fitness individuals — it removes targets randomly across the
+    combined pool.  Penalized duplicates can survive when non-penalized
+    individuals are also removed via Pareto dominance.  Call this after
+    ``island.evolve()`` to guarantee all duplicates are purged.
+
+    Args:
+        population: List of Bingo AGraph individuals (modified in place).
+
+    Returns:
+        The filtered list (same object, for convenience).
+    """
+    i = 0
+    while i < len(population):
+        if population[i].genetic_age >= _DUPLICATE_AGE_PENALTY:
+            population.pop(i)
+        else:
+            i += 1
+    return population
 
 
 class IsalSRBingoRunner(ModelRunner):
