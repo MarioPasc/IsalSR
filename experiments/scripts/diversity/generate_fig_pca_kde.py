@@ -367,23 +367,23 @@ def generate_figure(
             if mask_i.any():
                 best_r2_i = float(summary_df.loc[mask_i, "best_r2"].iloc[0])
 
-        n_total = len(b_coords)
         gen_data[gen] = {
             "baseline": {
                 "coords": b_coords,
                 "cs": snap_b["canonical_strings"],
                 "fit": snap_b["fitnesses"],
                 "best_r2": best_r2_b,
+                "n_total": len(b_coords),
             },
             "isalsr": {
                 "coords": i_coords,
                 "cs": snap_i["canonical_strings"],
                 "fit": snap_i["fitnesses"],
                 "best_r2": best_r2_i,
+                "n_total": len(i_coords),
             },
             "xlim": xlim,
             "ylim": ylim,
-            "n_total": n_total,
         }
 
     available_gens = [g for g in display_gens if g in gen_data]
@@ -426,7 +426,7 @@ def generate_figure(
                 color,
                 data["xlim"],
                 data["ylim"],
-                data["n_total"],
+                data[variant]["n_total"],
                 data[variant]["best_r2"],
             )
             # Column titles on top row

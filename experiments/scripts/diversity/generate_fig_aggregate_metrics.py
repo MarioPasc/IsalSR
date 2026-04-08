@@ -204,7 +204,12 @@ def generate_figure(
     # ------------------------------------------------------------------
     for variant, color in [("baseline", COLOR_NATIVE), ("isalsr", COLOR_ISALSR)]:
         sub = df[df["variant"] == variant]
-        _plot_metric(ax_ratio, sub, "delta", color, linestyle="-")
+        # Exclude gen 0 for IsalSR delta: the initial random population has
+        # not undergone selection yet (delta < 1.0 by construction).  Including
+        # it causes Savitzky-Golay smoothing to bleed the outlier into gen 1+,
+        # visually misrepresenting the invariant delta = 1.0 at all t >= 1.
+        sub_delta = sub[sub["generation"] >= 1] if variant == "isalsr" else sub
+        _plot_metric(ax_ratio, sub_delta, "delta", color, linestyle="-")
         _plot_metric(ax_ratio, sub, "best_r2", color, linestyle="-.")
 
     ax_ratio.set_xlabel("Generation $t$", fontsize=label_fs)
