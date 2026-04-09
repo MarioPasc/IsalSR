@@ -160,7 +160,7 @@ def draw_pca_panel(
     ax.text(
         0.02,
         0.98,
-        f"$\\delta$={delta:.2f}\n({n_unique}/{n_total})",
+        f"$\\eta$={delta:.2f}\n({n_unique}/{n_total})",
         transform=ax.transAxes,
         fontsize=PLOT_SETTINGS["annotation_fontsize"] - 1,
         va="top",
@@ -424,7 +424,7 @@ def generate_figure(input_dir: Path, output_dir: Path):
 
     # Panel 1: delta(t) — from trajectory (dense) or snapshots
     ax_delta = fig.add_subplot(gs[2 * n_rows_pca, 0])
-    draw_timeseries_panel(ax_delta, ts_data, "delta", r"$\delta(P_t)$", ylim=(-0.05, 1.1))
+    draw_timeseries_panel(ax_delta, ts_data, "delta", r"$\eta(P_t)$", ylim=(-0.05, 1.1))
     ax_delta.axhline(1.0, color="grey", linestyle="--", linewidth=0.6, alpha=0.5)
     ax_delta.legend(fontsize=PLOT_SETTINGS["legend_fontsize"], loc="lower left")
 

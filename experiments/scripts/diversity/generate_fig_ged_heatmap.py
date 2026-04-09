@@ -395,7 +395,7 @@ def generate_figure(
         "with 95\\% confidence intervals. The baseline develops large "
         "uniform blocks (duplicated individuals) that grow over time, while "
         "IsalSR preserves richer distance structure, consistent with the "
-        "higher effective diversity ratio $\\delta$."
+        "higher effective diversity ratio $\\eta$."
     )
     caption_path = output_dir / "fig_ged_heatmap_matrix.caption.txt"
     caption_path.write_text(caption)

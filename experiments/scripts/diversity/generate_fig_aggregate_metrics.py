@@ -2,7 +2,7 @@
 
 Two-panel figure (1 row x 2 columns) at IEEE single-column width:
   Left:  mean pairwise BP-GED and Levenshtein distance
-  Right: effective diversity ratio (delta) and best R^2
+  Right: effective diversity ratio (eta) and best R^2
 
 Data is aggregated across all benchmark problems.  Per-run R^2 is
 monotonised (cumulative max) before aggregation — since best_r2
@@ -213,7 +213,7 @@ def generate_figure(
         _plot_metric(ax_ratio, sub, "best_r2", color, linestyle="-.")
 
     ax_ratio.set_xlabel("Generation $t$", fontsize=label_fs)
-    ax_ratio.set_ylabel(r"$\delta(P_t)$ / $R^2$", fontsize=label_fs)
+    ax_ratio.set_ylabel(r"$\eta(P_t)$ / $R^2$", fontsize=label_fs)
     ax_ratio.set_ylim(-0.05, 1.08)
     ax_ratio.tick_params(labelsize=tick_fs)
     ax_ratio.set_title("Diversity and fitness", fontsize=label_fs)
@@ -221,9 +221,7 @@ def generate_figure(
     # Legend under right panel: linestyle handles only (black)
     line_bp = mlines.Line2D([], [], color="black", linestyle="-", linewidth=1.2, label="BP-GED")
     line_lev = mlines.Line2D([], [], color="black", linestyle="--", linewidth=1.2, label="Lev.")
-    line_delta = mlines.Line2D(
-        [], [], color="black", linestyle="-", linewidth=1.2, label=r"$\delta$"
-    )
+    line_delta = mlines.Line2D([], [], color="black", linestyle="-", linewidth=1.2, label=r"$\eta$")
     line_r2 = mlines.Line2D([], [], color="black", linestyle="-.", linewidth=1.2, label=r"$R^2$")
     ax_ratio.legend(
         handles=[line_bp, line_delta, line_lev, line_r2],
@@ -253,7 +251,7 @@ def generate_figure(
         f"{n_obs} independent runs per variant "
         f"({n_seeds} seeds $\\times$ {n_problems} problems). "
         "Left panel: mean pairwise BP-GED (solid) and Levenshtein (dashed) distance. "
-        "Right panel: effective diversity ratio $\\delta$ (solid) and best training "
+        "Right panel: effective diversity ratio $\\eta$ (solid) and best training "
         "$R^2$ (dash-dot). Bands show 95\\% confidence intervals; curves are smoothed "
         "with a Savitzky--Golay filter (window 31, order 3). Per-run $R^2$ is "
         "monotonised (cumulative max) before aggregation."

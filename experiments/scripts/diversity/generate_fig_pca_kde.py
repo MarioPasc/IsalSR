@@ -231,7 +231,7 @@ def draw_pca_kde_panel(
     ax.text(
         0.97,
         0.97,
-        f"$\\delta = {delta:.2f}$\n$R^2_{{\\max}} = {r2_str}$",
+        f"$\\eta = {delta:.2f}$\n$R^2_{{\\max}} = {r2_str}$",
         transform=ax.transAxes,
         fontsize=ann_fs,
         va="top",
@@ -480,7 +480,7 @@ def generate_figure(
         "unique canonical classes (weight = number of isomorphic copies in "
         "the population). Green stars mark the individual with lowest MSE. "
         "Each panel annotates the effective diversity ratio "
-        "$\\delta = |\\{[G] : G \\in P_t\\}| / N$ and the maximum $R^2$ "
+        "$\\eta = |\\{[G] : G \\in P_t\\}| / N$ and the maximum $R^2$ "
         "at that generation. Bottom row: mean best $R^2$ across 20 seeds "
         "with 95\\% confidence intervals. The baseline population collapses "
         "to fewer unique classes as generations progress, while IsalSR "

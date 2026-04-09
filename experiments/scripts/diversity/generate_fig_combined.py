@@ -226,9 +226,9 @@ def _draw_pca_panel(
     r2_str = f"{best_r2:.2f}" if np.isfinite(best_r2) else "N/A"
 
     if delta_std is not None and delta_std > 0.001:
-        delta_str = f"$\\delta = {delta:.2f} \\pm {delta_std:.2f}$"
+        delta_str = f"$\\eta = {delta:.2f} \\pm {delta_std:.2f}$"
     else:
-        delta_str = f"$\\delta = {delta:.2f}$"
+        delta_str = f"$\\eta = {delta:.2f}$"
 
     ax.text(
         0.97,
@@ -726,7 +726,7 @@ def generate_figure(
         else:
             pca_desc = (
                 "the first row shows the PCA projection from a "
-                f"representative seed (seed {rep_seed}, median $\\delta$)"
+                f"representative seed (seed {rep_seed}, median $\\eta$)"
             )
         caption = (
             "Combined population diversity analysis across generations, "
@@ -737,7 +737,7 @@ def generate_figure(
             f"of the {n_ged} per-seed pairwise BP-GED matrices, each independently "
             "reordered by hierarchical clustering before aggregation. "
             "PCA panels annotate the mean effective diversity ratio "
-            "$\\delta \\pm \\sigma$ and mean best $R^2$ across all seeds; "
+            "$\\eta \\pm \\sigma$ and mean best $R^2$ across all seeds; "
             "green stars mark the fittest individual. "
             "The horizontal colorbar (bottom) applies to all heatmap panels. "
             "The baseline develops large uniform blocks in the median GED matrix "
@@ -752,7 +752,7 @@ def generate_figure(
             "Within each block, the first row shows the PCA projection of the population "
             "with kernel density contour lines (topographic style), and the second row "
             "shows the pairwise bipartite GED matrix reordered by hierarchical clustering. "
-            "PCA panels annotate the effective diversity ratio $\\delta$ and best $R^2$; "
+            "PCA panels annotate the effective diversity ratio $\\eta$ and best $R^2$; "
             "green stars mark the fittest individual. The horizontal colorbar (bottom) "
             "applies to all heatmap panels. "
             "The baseline develops large uniform blocks in the GED matrix (isomorphic "
