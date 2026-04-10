@@ -35,6 +35,7 @@ M_IDX=$(( SLURM_ARRAY_TASK_ID % 3 ))
 K=${K_VALUES[$K_IDX]}
 M=${M_VALUES[$M_IDX]}
 
+RESULTS_DIR="/mnt/home/users/tic_163_uma/mpascual/execs/isalsr"
 OUT_DIR="${RESULTS_DIR:-results}/synthetic_scalability"
 mkdir -p "$OUT_DIR/logs"
 
