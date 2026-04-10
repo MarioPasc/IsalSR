@@ -43,6 +43,7 @@ import os
 import random
 import sys
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import numpy as np
