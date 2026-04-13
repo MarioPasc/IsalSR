@@ -492,3 +492,79 @@ Outputs in `analysis/`:
 - `global_summary.json` — legacy combined output
 
 Results dir: `/media/mpascual/Sandisk2TB/research/isalsr/results/model_validation/`
+
+## Hard-Tier Benchmark Suite (added 2026-04-13)
+
+**Why**: Bingo solves all 22 existing problems (Nguyen + Feynman) to R² ≈ 1.0,
+preventing demonstration of downstream quality / convergence-speed gains from
+IsalSR's search-space reduction. The hard tier closes this empirical gap.
+
+**Source**: `docs/md_files/changes/hard_benchmark_proposal.md`.
+
+### 32-problem, 3-tier benchmark
+
+| Tier | Source file | n | Difficulty | Suite key |
+|------|-------------|---|------------|-----------|
+| Nguyen | `benchmarks/datasets/nguyen.py` | 12 | Easy–Medium | `nguyen` |
+| Feynman | `benchmarks/datasets/feynman.py` | 10 | Medium | `feynman` |
+| **Hard** | `benchmarks/datasets/hard.py` | **10** | **Hard** | `hard` |
+
+### Hard suite (10 problems)
+
+**Extended Feynman (uniform sampling, 1000 train + 250 test)**:
+I.15.10, I.30.3, I.37.4, II.11.27, III.17.37.
+
+**GP-hard classics (per-problem sampling)**:
+- Pagie-1 (676 train / 2500 test, 26×26 grid, skip-zero)
+- Korns-12 (2000 train / 2000 test, **subsampled** from canonical 10k/10k —
+  preserves 5-variable feature-selection difficulty inside UDFS single-process budget)
+- Vladislavleva-4 (1024/5000 uniform)
+- Vladislavleva-2 (100 uniform train / 221 grid test, step 0.05)
+- Keijzer-6 (50 train integers / 120 test integers, **extrapolation**)
+
+### Operator-set extension
+
+The hard configs (`experiments/configs/{udfs,bingo}_hard.yaml`) extend the
+production operator set with `sqrt` (and `pow` for Bingo only — UDFS's
+vendored search has no generic `pow`). Pagie-1, I.15.10, I.37.4, III.17.37
+are otherwise structurally unsolvable. All other hyperparameters
+(pop=500, stack=32, cx=0.4, mut=0.4, LM, max_time=43200) match production.
+
+### Sampling protocol dispatch
+
+`hard.generate_data` shares the Feynman signature
+`(bench, n_samples, train_ratio, seed)`; per-problem sampling protocols
+are encoded in each bench's `sampling` dict (`type`: `uniform | grid_2d_skip_zero |
+grid_1d_train_uniform_test_grid | integer_grid`). The orchestrator's
+`_get_ground_truth_sympy` was extended to read pre-built `sympy_expression`
+keys, unlocking solution_recovery for all 10 hard problems uniformly
+(including 4-/5-variable cases).
+
+### SLURM launchers
+
+| Command | Effect |
+|---------|--------|
+| `bash slurm/hard_launch.sh` | UDFS + Bingo (baseline + isalsr) on 10 hard problems. 4 arrays × 300 tasks = 1200 runs. |
+| `bash slurm/hard_launch.sh --dry-run` | Preview sbatch commands. |
+| `bash slurm/hard_launch.sh --experiment udfs_hard_baseline` | Single group. |
+| `bash slurm/diversity_hard_launch.sh --experiment all` | Diversity on 3 candidates (II.11.27, Korns-12, Pagie-1) as 3 separate 60-task arrays. |
+| `bash slurm/diversity_hard_launch.sh --experiment diversity_paramagnetism` | Single diversity benchmark. |
+
+Resources (per task): UDFS baseline/isalsr 8G, Bingo baseline 16G, Bingo
+isalsr 128G (heap fragmentation). Time: 15h baseline, 17h isalsr.
+
+Diversity per task: 8h, 8 CPUs, 16G; pop=200, stack=32, max_time=7200, dedup
+enforced for isalsr variant. Snapshots match diversity v2.
+
+### Tests
+
+- `tests/unit/test_hard_benchmarks.py` — 51 tests, target_fn correctness,
+  sampling shapes, NaN-free outputs, sympy ground truth.
+- `tests/integration/test_hard_smoke.py` — 12 tests, Bingo + UDFS on
+  II.11.27 / Pagie-1 / Keijzer-6 (one per sampling type), max_time=30s.
+
+### Diversity candidate priority
+
+1. **II.11.27** (paramagnetism, 4 vars, two opposite-sign exp branches) — primary.
+2. **Korns-12** (5 vars, 3 irrelevant, high-frequency trig) — secondary.
+3. **Pagie-1** — fallback only if screening shows R² ∈ [0.3, 0.9].

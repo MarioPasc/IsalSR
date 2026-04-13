@@ -1,9 +1,11 @@
 # ruff: noqa: N802, N803, N806
 """Synthetic scalability figure for the IsalSR supplementary material.
 
-Two-panel figure showing:
-  (a) Reduction factor rho vs. k (log-scale y) with k! reference curve.
-  (b) Canonicalization time vs. k (log-scale y) with O(k^2) and O(k!) refs.
+Single-panel figure combining canonicalization timing (left y-axis) with
+the k! equivalent-representations curve (right y-axis).  A text annotation
+states the invariance result (rho = k! for all expressions).
+
+Also exports a standalone LaTeX table (tab_synthetic_scalability.tex).
 
 Data source: synth_k*_m*.csv fragments from the synthetic scalability experiment.
 
@@ -106,123 +108,64 @@ def load_synthetic_data(data_dir: str) -> list[dict[str, float | int]]:
 
 
 # =============================================================================
-# Panel (a): rho vs. k
+# Aggregate per-k statistics (pooled across m) — for LaTeX table
 # =============================================================================
 
 
-def plot_panel_a(
-    ax: plt.Axes,
+def _aggregate_per_k(
     rows: list[dict[str, float | int]],
-) -> None:
-    """Reduction factor rho vs. k (log-scale y) with k! reference."""
-    # Group by (k, m)
-    cell: dict[tuple[int, int], list[float]] = defaultdict(list)
+) -> list[dict[str, object]]:
+    """Aggregate rows by k (pooling all m values)."""
+    by_k: dict[int, list[dict[str, float | int]]] = defaultdict(list)
     for r in rows:
-        cell[(int(r["k"]), int(r["m"]))].append(float(r["rho"]))
+        by_k[int(r["k"])].append(r)
 
-    k_values = sorted({k for k, _ in cell})
-    m_values = sorted({m for _, m in cell})
+    table: list[dict[str, object]] = []
+    for k in sorted(by_k):
+        group = by_k[k]
+        n = len(group)
+        kfact = math.factorial(k)
+        n_perms = int(group[0]["n_perms"])
+        n_invariant = sum(1 for r in group if int(r["n_unique_canonicals"]) == 1)
+        times_ms = [float(r["mean_canon_time_s"]) * 1000 for r in group]
+        med_t = float(np.median(times_ms))
+        iqr_lo = float(np.percentile(times_ms, 25))
+        iqr_hi = float(np.percentile(times_ms, 75))
+        rho_kfact = [float(r["rho_over_kfact"]) for r in group]
+        all_exact = all(abs(v - 1.0) < 1e-6 for v in rho_kfact)
 
-    # k! reference curve
-    k_range = np.arange(min(k_values), max(k_values) + 1)
-    k_factorial = np.array([math.factorial(int(kv)) for kv in k_range], dtype=float)
-    ax.plot(
-        k_range,
-        k_factorial,
-        color="0.3",
-        linestyle="--",
-        linewidth=float(PLOT_SETTINGS["line_width_thick"]),
-        label=r"$k!$ (theoretical)",
-        zorder=5,
-    )
-
-    # Horizontal line at y=1 ("After canonicalization")
-    ax.axhline(
-        y=1,
-        color=PAUL_TOL_BRIGHT["red"],
-        linestyle="-",
-        linewidth=float(PLOT_SETTINGS["line_width"]),
-        alpha=0.8,
-        label="After canonicalization",
-        zorder=4,
-    )
-
-    # Shade the reduction gap
-    ax.fill_between(
-        k_range,
-        np.ones_like(k_factorial),
-        k_factorial,
-        alpha=0.08,
-        color=PAUL_TOL_BRIGHT["blue"],
-        zorder=1,
-    )
-
-    # Boxplots per m, slightly offset for readability
-    n_m = len(m_values)
-    box_width = 0.25
-    offsets = np.linspace(-(n_m - 1) * box_width / 2, (n_m - 1) * box_width / 2, n_m)
-
-    for m_val, offset in zip(m_values, offsets, strict=True):
-        color = M_COLORS.get(m_val, PAUL_TOL_BRIGHT["grey"])
-        k_present = [k for k in k_values if (k, m_val) in cell]
-        if not k_present:
-            continue
-
-        box_data = [cell[(k, m_val)] for k in k_present]
-        positions = [k + offset for k in k_present]
-
-        bp = ax.boxplot(
-            box_data,
-            positions=positions,
-            widths=box_width,
-            patch_artist=True,
-            showfliers=True,
-            flierprops={"marker": "o", "markersize": 2, "alpha": 0.4},
-            medianprops={"color": "0.15", "linewidth": 1.0},
-            whiskerprops={"linewidth": 0.7},
-            capprops={"linewidth": 0.7},
-            boxprops={"linewidth": 0.7},
-            zorder=3,
+        table.append(
+            {
+                "k": k,
+                "k_factorial": kfact,
+                "n_perms": n_perms,
+                "n_expr": n,
+                "n_invariant": n_invariant,
+                "pct_invariant": 100.0 * n_invariant / n,
+                "rho_equals_kfact": all_exact,
+                "median_time_ms": med_t,
+                "iqr_lo_ms": iqr_lo,
+                "iqr_hi_ms": iqr_hi,
+            }
         )
-        for patch in bp["boxes"]:
-            patch.set_facecolor(color)
-            patch.set_alpha(0.6)
-        bp["boxes"][0].set_label(M_LABELS[m_val])
-
-    ax.set_yscale("log")
-    ax.set_ylim(0.5, k_factorial[-1] * 5)
-    ax.set_xlim(min(k_values) - 0.6, max(k_values) + 0.6)
-    ax.set_xlabel("Internal nodes $k$")
-    ax.set_ylabel(r"Reduction factor $\rho$")
-    ax.set_xticks(k_values)
-    ax.set_xticklabels([str(k) for k in k_values])
-    ax.legend(
-        fontsize=int(PLOT_SETTINGS["legend_fontsize"]) - 1,
-        loc="upper left",
-        frameon=False,
-    )
-
-    ax.text(
-        -0.12,
-        1.05,
-        "(a)",
-        transform=ax.transAxes,
-        fontsize=PLOT_SETTINGS["panel_label_fontsize"],
-        fontweight="bold",
-    )
+    return table
 
 
 # =============================================================================
-# Panel (b): Canonicalization time vs. k
+# Single-panel figure
 # =============================================================================
 
 
-def plot_panel_b(
+def plot_figure(
     ax: plt.Axes,
     rows: list[dict[str, float | int]],
-) -> None:
-    """Canonicalization time vs. k (log-scale y) with reference curves."""
-    # Group by (k, m)
+) -> float:
+    """Plot timing boxplots (left y) + k! curve (right y) + annotation.
+
+    Returns:
+        Fitted power-law exponent b.
+    """
+    # ---- Group by (k, m) ----
     cell: dict[tuple[int, int], list[float]] = defaultdict(list)
     for r in rows:
         cell[(int(r["k"]), int(r["m"]))].append(float(r["mean_canon_time_s"]) * 1000)
@@ -230,59 +173,7 @@ def plot_panel_b(
     k_values = sorted({k for k, _ in cell})
     m_values = sorted({m for _, m in cell})
 
-    # Reference curves (fitted to data range)
-    k_arr = np.linspace(min(k_values), max(k_values), 200)
-
-    # O(k!) reference — normalized to pass through data at k_mid
-    k_mid = k_values[len(k_values) // 2]
-    all_times_mid = []
-    for m_val in m_values:
-        if (k_mid, m_val) in cell:
-            all_times_mid.extend(cell[(k_mid, m_val)])
-    t_mid = float(np.median(all_times_mid)) if all_times_mid else 1.0
-    kf_mid = math.factorial(k_mid)
-    kf_ref = np.array([math.factorial(int(round(kv))) for kv in k_arr], dtype=float)
-    kf_curve = t_mid * kf_ref / kf_mid
-
-    ax.plot(
-        k_arr,
-        kf_curve,
-        color="0.6",
-        linestyle=":",
-        linewidth=float(PLOT_SETTINGS["line_width"]),
-        label=r"$O(k!)$ reference",
-        zorder=2,
-    )
-
-    # O(k^2) reference — fitted via least-squares on log-log
-    all_k = []
-    all_t = []
-    for (k, _m_val), times in cell.items():
-        for t in times:
-            all_k.append(k)
-            all_t.append(t)
-    all_k_arr = np.array(all_k, dtype=float)
-    all_t_arr = np.array(all_t, dtype=float)
-
-    # Fit power law: t = a * k^b via log-log linear regression
-    mask = (all_k_arr > 0) & (all_t_arr > 0)
-    log_k = np.log(all_k_arr[mask])
-    log_t = np.log(all_t_arr[mask])
-    b_fit, log_a_fit = np.polyfit(log_k, log_t, 1)
-    a_fit = np.exp(log_a_fit)
-    poly_curve = a_fit * k_arr**b_fit
-
-    ax.plot(
-        k_arr,
-        poly_curve,
-        color="0.3",
-        linestyle="--",
-        linewidth=float(PLOT_SETTINGS["line_width_thick"]),
-        label=rf"$O(k^{{{b_fit:.1f}}})$ (fitted)",
-        zorder=5,
-    )
-
-    # Boxplots per m
+    # ---- Timing boxplots (left y-axis) ----
     n_m = len(m_values)
     box_width = 0.25
     offsets = np.linspace(-(n_m - 1) * box_width / 2, (n_m - 1) * box_width / 2, n_m)
@@ -313,26 +204,178 @@ def plot_panel_b(
             patch.set_alpha(0.6)
         bp["boxes"][0].set_label(M_LABELS[m_val])
 
+    # ---- Power-law fit ----
+    all_k: list[float] = []
+    all_t: list[float] = []
+    for (_k, _m), times in cell.items():
+        for t in times:
+            all_k.append(float(_k))
+            all_t.append(t)
+    all_k_arr = np.array(all_k)
+    all_t_arr = np.array(all_t)
+
+    mask = (all_k_arr > 0) & (all_t_arr > 0)
+    b_fit, log_a_fit = np.polyfit(np.log(all_k_arr[mask]), np.log(all_t_arr[mask]), 1)
+    a_fit = np.exp(log_a_fit)
+    k_arr = np.linspace(min(k_values), max(k_values), 200)
+    poly_curve = a_fit * k_arr**b_fit
+
+    ax.plot(
+        k_arr,
+        poly_curve,
+        color="0.3",
+        linestyle="--",
+        linewidth=float(PLOT_SETTINGS["line_width_thick"]),
+        label=rf"$O(k^{{{b_fit:.1f}}})$ (fitted)",
+        zorder=5,
+    )
+
     ax.set_yscale("log")
     ax.set_xlim(min(k_values) - 0.6, max(k_values) + 0.6)
     ax.set_xlabel("Internal nodes $k$")
     ax.set_ylabel("Canonicalization time (ms)")
     ax.set_xticks(k_values)
     ax.set_xticklabels([str(k) for k in k_values])
+    ax.yaxis.set_minor_locator(
+        matplotlib.ticker.LogLocator(
+            base=10.0,
+            subs=np.arange(2, 10) * 0.1,
+            numticks=20,
+        )
+    )
+    ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+
+    # ---- k! curve on secondary y-axis (right) ----
+    ax2 = ax.twinx()
+
+    # Discrete points at integer k + smooth interpolation on log scale
+    k_int = np.array(k_values)
+    kf_int = np.array([math.factorial(k) for k in k_values], dtype=float)
+    # Smooth curve via log-space interpolation
+    k_smooth = np.linspace(min(k_values), max(k_values), 200)
+    log_kf_smooth = np.interp(k_smooth, k_int, np.log(kf_int))
+    kf_smooth = np.exp(log_kf_smooth)
+
+    ax2.plot(
+        k_smooth,
+        kf_smooth,
+        color=PAUL_TOL_BRIGHT["red"],
+        linestyle=":",
+        linewidth=float(PLOT_SETTINGS["line_width_thick"]),
+        label=r"$k!$ isomorphic copies",
+        zorder=2,
+        alpha=0.7,
+    )
+    ax2.scatter(
+        k_int,
+        kf_int,
+        color=PAUL_TOL_BRIGHT["red"],
+        s=20,
+        zorder=6,
+        alpha=0.8,
+        edgecolors="none",
+    )
+    ax2.set_yscale("log")
+    ax2.set_ylabel(r"Isomorphic copies ($k!$)")
+    ax2.tick_params(axis="y")
+
+    # Shade reduction gap (between k! and 1)
+    ax2.fill_between(
+        k_smooth,
+        np.ones_like(kf_smooth),
+        kf_smooth,
+        alpha=0.06,
+        color=PAUL_TOL_BRIGHT["red"],
+        zorder=1,
+    )
+
+    # ---- Combined legend (k! first, then timing entries) ----
+    lines_1, labels_1 = ax.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
     ax.legend(
+        lines_2 + lines_1,
+        labels_2 + labels_1,
         fontsize=int(PLOT_SETTINGS["legend_fontsize"]) - 1,
         loc="upper left",
         frameon=False,
     )
 
+    # ---- Invariance annotation (lower-right, compact) ----
     ax.text(
-        -0.12,
-        1.05,
-        "(b)",
+        0.97,
+        0.04,
+        r"$\rho = k!\;\;\forall\; k,\, m$",
         transform=ax.transAxes,
-        fontsize=PLOT_SETTINGS["panel_label_fontsize"],
-        fontweight="bold",
+        fontsize=int(PLOT_SETTINGS["annotation_fontsize"]) + 1,
+        verticalalignment="bottom",
+        horizontalalignment="right",
+        bbox={
+            "boxstyle": "round,pad=0.4",
+            "facecolor": "white",
+            "edgecolor": "0.7",
+            "alpha": 0.9,
+        },
+        zorder=10,
     )
+
+    return b_fit
+
+
+# =============================================================================
+# LaTeX table export
+# =============================================================================
+
+
+def _export_latex_table(
+    table_data: list[dict[str, object]],
+    output_dir: str,
+) -> str:
+    """Export a standalone LaTeX table summarizing the synthetic results."""
+    lines = [
+        r"\begin{table}[htbp]",
+        r"  \centering",
+        r"  \caption{Synthetic scalability: canonical invariance and timing "
+        r"for random expression DAGs with $k$ internal nodes. "
+        r"For each $k$, 200 expressions $\times$ 3 variable counts were "
+        r"generated (600 total) and all $k!$ internal-node permutations "
+        r"were exhaustively canonicalized. $\rho = k!$ confirms that every "
+        r"permuted DAG maps to the same canonical string "
+        r"($|\mathrm{Aut}(D)| = 1$ for all expressions).}",
+        r"  \label{tab:synthetic_scalability}",
+        r"  \small",
+        r"  \begin{tabular}{r r r c c r}",
+        r"    \toprule",
+        r"    $k$ & $k!$ & Perms & $\rho = k!$ & Invariance & Time (ms) \\",
+        r"    \midrule",
+    ]
+    for row in table_data:
+        k = int(row["k"])
+        kf = int(row["k_factorial"])
+        n_perms = int(row["n_perms"])
+        rho_ok = r"\checkmark" if row["rho_equals_kfact"] else r"$\times$"
+        inv_pct = f"{float(row['pct_invariant']):.0f}\\%"
+        med = float(row["median_time_ms"])
+        iqr_lo = float(row["iqr_lo_ms"])
+        iqr_hi = float(row["iqr_hi_ms"])
+        time_str = f"{med:.2f} [{iqr_lo:.2f}--{iqr_hi:.2f}]"
+
+        kf_str = f"{kf:,}".replace(",", r"{,}")
+        np_str = f"{n_perms:,}".replace(",", r"{,}")
+        lines.append(f"    {k} & {kf_str} & {np_str} & {rho_ok} & {inv_pct} & {time_str} \\\\")
+
+    lines.extend(
+        [
+            r"    \bottomrule",
+            r"  \end{tabular}",
+            r"\end{table}",
+        ]
+    )
+
+    tex_path = os.path.join(output_dir, "tab_synthetic_scalability.tex")
+    os.makedirs(output_dir, exist_ok=True)
+    Path(tex_path).write_text("\n".join(lines) + "\n")
+    logger.info("LaTeX table: %s", tex_path)
+    return tex_path
 
 
 # =============================================================================
@@ -340,7 +383,10 @@ def plot_panel_b(
 # =============================================================================
 
 
-def _build_caption(rows: list[dict[str, float | int]]) -> str:
+def _build_caption(
+    rows: list[dict[str, float | int]],
+    b_fit: float,
+) -> str:
     """Generate figure caption from data summary."""
     k_values = sorted({int(r["k"]) for r in rows})
     m_values = sorted({int(r["m"]) for r in rows})
@@ -349,23 +395,10 @@ def _build_caption(rows: list[dict[str, float | int]]) -> str:
     k_max = max(k_values)
     k_max_fact = math.factorial(k_max)
 
-    # Compute empirical power-law exponent
-    all_k = np.array([float(r["k"]) for r in rows])
-    all_t = np.array([float(r["mean_canon_time_s"]) * 1000 for r in rows])
-    mask = (all_k > 0) & (all_t > 0)
-    b_fit, _ = np.polyfit(np.log(all_k[mask]), np.log(all_t[mask]), 1)
-
-    # Check invariance
-    n_invariant = sum(1 for r in rows if int(r["n_unique_canonicals"]) == 1)
-    pct_invariant = 100.0 * n_invariant / n_total
-
-    # Check rho = k! fraction
     n_exact_kfact = sum(1 for r in rows if abs(float(r["rho_over_kfact"]) - 1.0) < 1e-6)
-    pct_exact = 100.0 * n_exact_kfact / n_total
 
     return (
-        f"Synthetic scalability analysis: reduction factor $\\rho$ and "
-        f"canonicalization time versus internal node count $k$. "
+        f"Synthetic scalability analysis. "
         f"{n_expr_per_cell} random expression DAGs per $(k, m)$ cell were "
         f"generated via the Lample--Charton (2020) method with operators "
         f"$\\{{+, \\times, \\hat{{}}, \\sin, \\cos, \\exp, \\log, "
@@ -373,31 +406,27 @@ def _build_caption(rows: list[dict[str, float | int]]) -> str:
         f"$m \\in \\{{{', '.join(str(v) for v in m_values)}\\}}$ variables. "
         f"For each expression, all $k!$ permutations of internal node IDs "
         f"were exhaustively canonicalized via the WL-guided greedy algorithm. "
-        f"(a)~$\\rho$ tracks the theoretical $k!$ curve exactly: "
-        f"{pct_exact:.1f}\\% of expressions ({n_exact_kfact}/{n_total}) "
-        f"achieve $\\rho = k!$ (i.e., $|\\mathrm{{Aut}}(D)| = 1$), and "
-        f"{pct_invariant:.1f}\\% have perfect canonical invariance "
-        f"($n_{{\\mathrm{{unique}}}} = 1$). "
-        f"(b)~Canonicalization time grows as "
-        f"$O(k^{{{b_fit:.1f}}})$ (power-law fit), confirming that the "
-        f"greedy-invariant algorithm avoids the $O(k!)$ worst case of "
-        f"exhaustive canonicalization. At $k = {k_max}$, the reduction "
-        f"collapses ${k_max_fact:,}$ equivalent representations to one "
-        f"canonical string in $< 1$\\,ms."
+        f"Left axis (boxplots): canonicalization time grows as "
+        f"$O(k^{{{b_fit:.1f}}})$ (power-law fit, dashed), confirming that "
+        f"the greedy-invariant algorithm avoids the factorial worst case. "
+        f"Right axis (dotted, red shading): the $k!$ equivalent "
+        f"representations that canonicalization collapses to a single "
+        f"canonical string. The reduction factor equals $k!$ for all "
+        f"{n_exact_kfact}/{n_total} expressions "
+        f"($|\\mathrm{{Aut}}(D)| = 1$, trivial automorphism group), with "
+        f"100\\% canonical invariance. "
+        f"At $k = {k_max}$, ${k_max_fact:,}$ equivalent representations "
+        f"are collapsed in $< 1$\\,ms."
     )
 
 
 # =============================================================================
-# Main Figure
+# Main
 # =============================================================================
 
 
 def generate_figure(data_dir: str, output_dir: str) -> str:
-    """Generate the 2-panel synthetic scalability figure.
-
-    Returns:
-        Base output path (without extension).
-    """
+    """Generate the single-panel synthetic scalability figure."""
     apply_ieee_style()
 
     rows = load_synthetic_data(data_dir)
@@ -415,13 +444,12 @@ def generate_figure(data_dir: str, output_dir: str) -> str:
         n_total,
     )
 
-    # Two-panel figure (double-column width)
-    fig_w, fig_h = get_figure_size("double", height_ratio=0.50)
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(fig_w, fig_h))
-    fig.subplots_adjust(wspace=0.35, left=0.09, right=0.96, top=0.90, bottom=0.16)
+    # Single-panel figure (single-column width)
+    fig_w, fig_h = get_figure_size("single", height_ratio=0.85)
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    fig.subplots_adjust(left=0.16, right=0.82, top=0.95, bottom=0.14)
 
-    plot_panel_a(ax_a, rows)
-    plot_panel_b(ax_b, rows)
+    b_fit = plot_figure(ax, rows)
 
     # Save figure
     os.makedirs(output_dir, exist_ok=True)
@@ -432,10 +460,14 @@ def generate_figure(data_dir: str, output_dir: str) -> str:
     plt.close(fig)
 
     # Save caption
-    caption = _build_caption(rows)
+    caption = _build_caption(rows, b_fit)
     caption_path = os.path.join(output_dir, "fig_synthetic_scalability.caption.txt")
     Path(caption_path).write_text(caption)
     logger.info("Caption: %s", caption_path)
+
+    # Export standalone LaTeX table
+    table_data = _aggregate_per_k(rows)
+    _export_latex_table(table_data, output_dir)
 
     return out_path
 

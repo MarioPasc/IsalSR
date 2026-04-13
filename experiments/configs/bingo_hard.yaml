@@ -1,0 +1,46 @@
+# Bingo experiment on hard-tier benchmarks (10 problems)
+# References:
+#   docs/md_files/changes/hard_benchmark_proposal.md (2026-04-13)
+#   benchmarks/datasets/hard.py
+#
+# Operator-set extension (sqrt, pow): justified per Plan-agent review.
+#   - Pagie-1 needs x^(-4) (otherwise 4 chained MUL+INV — unsolvable in 12h).
+#   - I.15.10, I.37.4, III.17.37 contain sqrt of nontrivial subexpressions.
+# All other Bingo hyperparameters match production Nguyen/Feynman exactly.
+#
+# Note: train_size/test_size below are HINTS for orchestrator; the per-problem
+# ``sampling`` dict in benchmarks/datasets/hard.py overrides them for grid-based
+# protocols (Pagie-1, Keijzer-6, Vladislavleva-2) and for Korns-12/Vlad-4.
+
+experiment:
+  name: bingo_hard
+  method: bingo
+  n_seeds: 30
+
+benchmarks:
+  hard:
+    problems: all
+    train_size: 1000      # Used by Feynman-extended (uniform); ignored by grid problems.
+    test_size: 250
+
+bingo:
+  population_size: 500
+  stack_size: 32
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  metric: mse
+  clo_alg: lm
+  generations: 100000000
+  fitness_threshold: 1.0e-16
+  max_time: 43200       # 12h algorithm budget (standard).
+  max_evals: 100000000
+  snapshot_frequency: 10
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

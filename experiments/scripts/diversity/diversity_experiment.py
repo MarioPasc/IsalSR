@@ -79,6 +79,19 @@ BENCHMARKS = {
         "formula": "m*c^2 / sqrt(1-(v/c)^2)",
         "n_variables": 3,
     },
+    # Hard-tier diversity candidates (added 2026-04-13).
+    "II.11.27": {
+        "formula": "n0*exp(-mu*B/kT) + n0*exp(mu*B/kT)",
+        "n_variables": 4,
+    },
+    "Korns-12": {
+        "formula": "2.0 - 2.1*cos(9.8*x1)*sin(1.3*x5)",
+        "n_variables": 5,
+    },
+    "Pagie-1": {
+        "formula": "1/(1 + x^-4) + 1/(1 + y^-4)",
+        "n_variables": 2,
+    },
 }
 
 
@@ -90,6 +103,9 @@ BENCHMARKS = {
 def make_benchmark_data(name: str):
     """Generate train data for a benchmark problem.
 
+    Probes Nguyen / Feynman / Hard registries in order. Falls back to the
+    legacy Nguyen-1 hardcoded sampler for backwards compatibility.
+
     Returns (x_train, y_train).
     """
     if name == "Nguyen-1":
@@ -97,12 +113,48 @@ def make_benchmark_data(name: str):
         x = rng.uniform(-1, 1, (20, 1))
         y = x[:, 0] ** 3 + x[:, 0] ** 2 + x[:, 0]
         return x, y
-    else:
-        from benchmarks.datasets.feynman import generate_data, get_benchmark
 
-        bench = get_benchmark(name)
-        x_train, y_train, _, _ = generate_data(bench, n_samples=200)
+    # Try Hard suite first (catches II.11.27, Korns-12, Pagie-1, etc.).
+    try:
+        from benchmarks.datasets.hard import (
+            generate_data as hard_generate_data,
+        )
+        from benchmarks.datasets.hard import (
+            get_benchmark as hard_get,
+        )
+
+        bench = hard_get(name)
+        x_train, y_train, _, _ = hard_generate_data(bench, seed=42)
         return x_train, y_train
+    except ValueError:
+        pass
+
+    # Try Feynman.
+    try:
+        from benchmarks.datasets.feynman import (
+            generate_data as feynman_generate_data,
+        )
+        from benchmarks.datasets.feynman import (
+            get_benchmark as feynman_get,
+        )
+
+        bench = feynman_get(name)
+        x_train, y_train, _, _ = feynman_generate_data(bench, n_samples=200)
+        return x_train, y_train
+    except ValueError:
+        pass
+
+    # Try Nguyen (other than Nguyen-1).
+    from benchmarks.datasets.nguyen import (
+        generate_data as nguyen_generate_data,
+    )
+    from benchmarks.datasets.nguyen import (
+        get_benchmark as nguyen_get,
+    )
+
+    bench = nguyen_get(name)
+    x_train, y_train, _, _ = nguyen_generate_data(bench)
+    return x_train, y_train
 
 
 # ======================================================================

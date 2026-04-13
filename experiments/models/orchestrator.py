@@ -27,6 +27,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from benchmarks.datasets.feynman import FEYNMAN_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.feynman import generate_data as feynman_generate_data  # noqa: E402
+from benchmarks.datasets.hard import HARD_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.hard import generate_data as hard_generate_data  # noqa: E402
 from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.nguyen import generate_data as nguyen_generate_data  # noqa: E402
 from experiments.models.analyzer.aggregation import (  # noqa: E402
@@ -58,6 +60,7 @@ log = logging.getLogger(__name__)
 _BENCHMARK_REGISTRY: dict[str, tuple[list[dict[str, Any]], Any]] = {
     "nguyen": (NGUYEN_BENCHMARKS, nguyen_generate_data),
     "feynman": (FEYNMAN_BENCHMARKS, feynman_generate_data),
+    "hard": (HARD_BENCHMARKS, hard_generate_data),
 }
 
 
@@ -113,6 +116,17 @@ def _generate_benchmark_data(
         n_samples = train_size + test_size
         train_ratio = train_size / n_samples
         return feynman_generate_data(
+            bench,
+            n_samples=n_samples,
+            train_ratio=train_ratio,
+            seed=seed,
+        )
+    elif bench_name == "hard":
+        # Same signature as feynman; per-problem ``sampling`` key inside
+        # the bench dict overrides train/test sizes for grid-based protocols.
+        n_samples = train_size + test_size
+        train_ratio = train_size / n_samples
+        return hard_generate_data(
             bench,
             n_samples=n_samples,
             train_ratio=train_ratio,
@@ -397,10 +411,18 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
 def _get_ground_truth_sympy(bench: dict[str, Any]):
     """Get ground truth as SymPy expression.
 
-    NOTE: Currently only handles Nguyen-style benchmarks with 1-2 variables
-    named x, y. For Feynman benchmarks (physics variable names, up to 3 vars),
-    returns None gracefully. Solution recovery will report False for these.
+    Resolution order:
+        1. ``bench["sympy_expression"]`` — pre-built SymPy Expr (preferred,
+           used by the hard-tier benchmarks; covers any variable count).
+        2. String-parse ``bench["expression"]`` for 1-2 variable Nguyen-style
+           problems (replacing ``x`` -> ``x_0`` and ``y`` -> ``x_1``).
+        3. Returns None for Feynman 3+ variable problems with physics
+           variable names (solution_recovery will report False for these).
     """
+    expr = bench.get("sympy_expression")
+    if expr is not None:
+        return expr
+
     try:
         import sympy
 
@@ -427,7 +449,15 @@ def _get_ground_truth_sympy(bench: dict[str, Any]):
 
 
 def _get_ground_truth_vars(bench: dict[str, Any]):
-    """Get ground truth variables as SymPy symbols."""
+    """Get ground truth variables as SymPy symbols.
+
+    Prefers ``bench["sympy_variables"]`` (used by hard-tier benchmarks);
+    falls back to constructing ``[x_0, ..., x_{nv-1}]`` for Nguyen/Feynman.
+    """
+    syms = bench.get("sympy_variables")
+    if syms is not None:
+        return list(syms)
+
     try:
         import sympy
 

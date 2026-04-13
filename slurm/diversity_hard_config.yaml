@@ -1,0 +1,65 @@
+# Diversity Conjecture — Hard-Tier Candidates
+# =============================================
+#
+# Three SEPARATE diversity experiments (one per benchmark), each submitted
+# as an independent SLURM array. User can run any subset via
+# `bash slurm/diversity_hard_launch.sh --experiment NAME`.
+#
+# Each experiment: 2 variants * 30 seeds = 60 array tasks.
+# Task layout (per experiment):
+#   tasks  1..30  -> baseline seeds 0..29
+#   tasks 31..60  -> isalsr   seeds 0..29
+#
+# Population/stack/snapshot config matches diversity_v2 (so results stay
+# directly comparable to existing diversity figures).
+
+# Paths (Picasso filesystem layout)
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/diversity_hard
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu
+account: tic_163_uma
+
+# Shared evolution + snapshot config (mirror of diversity_v2_config.yaml)
+shared:
+  population_size: 200
+  stack_size: 32
+  max_time: 7200.0       # 2h wall-clock per evolutionary run
+  snapshot_gens: "0,5,10,15,20,25,30,40,50,75,100,150,200,300,400,500"
+  trajectory_freq: 1
+  enforce_dedup: true
+  n_seeds: 30
+
+  # Per-task SLURM resources
+  time_limit: "08:00:00"
+  cpus: 8
+  mem_gb: 16
+
+# Three experiment blocks — one per candidate. The launcher submits one
+# 60-task array per experiment (or all three with --experiment all).
+experiments:
+  diversity_paramagnetism:
+    enabled: true
+    benchmark: "II.11.27"
+    description: >
+      Feynman II.11.27, paramagnetism (n0*exp(-mu*B/kT) + n0*exp(mu*B/kT)).
+      4 variables; two exponential branches with opposite signs make
+      crossover-based discovery of both branches simultaneously hard.
+
+  diversity_korns12:
+    enabled: true
+    benchmark: "Korns-12"
+    description: >
+      Korns-12 (2 - 2.1*cos(9.8*x1)*sin(1.3*x5)). 5 variables (3 irrelevant)
+      tests implicit feature selection; high-frequency cos/sin expected to
+      keep Bingo plateau well below R^2=1.0.
+
+  diversity_pagie1:
+    enabled: true
+    benchmark: "Pagie-1"
+    description: >
+      Pagie-1 (1/(1+x^-4)+1/(1+y^-4)). Universally GP-hard. Use only if
+      screening shows Bingo R^2 in [0.3, 0.9]; otherwise diversity collapse
+      is uninformative.
