@@ -153,6 +153,8 @@ class IsalSREvaluation(Evaluation):
         self._call_count = 0
         self._best_fitness = float("inf")
         self.snapshots: list[BingoTrajectorySnapshot] = []
+        # Dense per-generation convergence data (all individuals' fitness).
+        self.convergence_data: list[tuple[int, float, int, np.ndarray]] = []
         # Set after build_bingo_pipeline returns
         self._fitness_counter: Any = None
         # Parent-ID registry for VarAnd clone detection (fix 2026-04-01).
@@ -181,6 +183,20 @@ class IsalSREvaluation(Evaluation):
         # Prune stale entries (evicted individuals)
         self.dedup.id_to_canonical = new_id_map
 
+    def _capture_convergence(self, generation: int, population: Any) -> None:
+        """Record every individual's fitness for convergence analysis."""
+        n_evals = self._fitness_counter.eval_count if self._fitness_counter is not None else 0
+        fitness_arr = np.array(
+            [
+                indv.fitness if hasattr(indv, "fitness") and indv.fit_set else np.inf
+                for indv in population
+            ],
+            dtype=np.float64,
+        )
+        self.convergence_data.append(
+            (generation, time.perf_counter() - self._t0, n_evals, fitness_arr)
+        )
+
     def __call__(self, population: Any) -> None:
         # Detect the parent call: all individuals already evaluated AND
         # not the very first evaluation (initial pop has fit_set=False).
@@ -199,8 +215,15 @@ class IsalSREvaluation(Evaluation):
         super().__call__(population)
         # MuPlusLambda calls __call__ 2x per generation (parents + offspring)
         self._call_count += 1
+
+        # Capture gen 0 after initial evaluation
+        if self._call_count == 1:
+            self._capture_convergence(0, population)
+
         if self._call_count % 2 == 0:
             gen = self._call_count // 2
+            # Dense per-generation capture: all individuals' fitness
+            self._capture_convergence(gen, population)
 
             # Generation-boundary heap release: the most effective point
             # because both parent and offspring evaluation are done and
@@ -482,6 +505,7 @@ class IsalSRBingoRunner(ModelRunner):
 
         search_only = wall_clock - dedup.canon_time_total
         snapshots = evaluation.snapshots  # type: ignore[union-attr]
+        convergence_data = evaluation.convergence_data  # type: ignore[union-attr]
 
         log.info(
             "IsalSR Bingo: total=%d unique=%d skipped=%d pop_rejected=%d "
@@ -507,6 +531,7 @@ class IsalSRBingoRunner(ModelRunner):
             best_fitness=best_fitness,
             n_generations=n_gens,
             trajectory_snapshots=snapshots,
+            convergence_data=convergence_data,
             n_total_dags=dedup.n_total,
             n_unique_canonical=dedup.n_unique,
             n_skipped=dedup.n_skipped,

@@ -375,6 +375,10 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
                     save_run_log(run_log, sd / "run_log.json")
                     save_trajectory(trajectory, sd / "trajectory.csv")
 
+                    # Dense per-generation convergence log (Bingo only)
+                    if method == "bingo" and hasattr(translator, "save_convergence_log"):
+                        translator.save_convergence_log(raw, sd / "convergence_log.npz")
+
                     log.info(
                         "    R²=%.4f total_dags=%d unique=%d",
                         run_log.regression.r2_test,

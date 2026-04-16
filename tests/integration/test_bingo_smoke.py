@@ -56,6 +56,15 @@ class TestBingoBaseline:
         r2 = r_squared(y_test, result.y_pred_test)
         assert np.isfinite(r2)
 
+    def test_convergence_data_populated(self, nguyen1_data, small_config):
+        x_train, y_train, x_test, y_test, bench = nguyen1_data
+        runner = BingoBaselineRunner(config=small_config)
+        result = runner.fit(x_train, y_train, x_test, y_test, seed=42, config={})
+        assert len(result.convergence_data) >= 2  # gen 0 + at least 1 gen
+        gen0 = result.convergence_data[0]
+        assert gen0[0] == 0  # generation index
+        assert len(gen0[3]) == small_config.population_size  # fitness array
+
 
 @pytest.mark.slow
 class TestIsalSRBingo:
@@ -84,6 +93,15 @@ class TestIsalSRBingo:
         runner = IsalSRBingoRunner(config=small_config)
         result = runner.fit(x_train, y_train, x_test, y_test, seed=42, config={})
         assert result.search_only_time_s <= result.wall_clock_s
+
+    def test_convergence_data_populated(self, nguyen1_data, small_config):
+        x_train, y_train, x_test, y_test, bench = nguyen1_data
+        runner = IsalSRBingoRunner(config=small_config)
+        result = runner.fit(x_train, y_train, x_test, y_test, seed=42, config={})
+        assert len(result.convergence_data) >= 2  # gen 0 + at least 1 gen
+        gen0 = result.convergence_data[0]
+        assert gen0[0] == 0
+        assert len(gen0[3]) == small_config.population_size
 
 
 @pytest.mark.slow
@@ -114,3 +132,18 @@ class TestBingoTranslator:
         translator = BingoTranslator(y_train=y_train, y_test=y_test)
         trajectory = translator.to_trajectory(result)
         assert len(trajectory) >= 1
+
+    def test_convergence_log_roundtrip(self, nguyen1_data, small_config, tmp_path):
+        x_train, y_train, x_test, y_test, bench = nguyen1_data
+        runner = BingoBaselineRunner(config=small_config)
+        result = runner.fit(x_train, y_train, x_test, y_test, seed=42, config={})
+        translator = BingoTranslator(y_train=y_train, y_test=y_test)
+        out_path = tmp_path / "convergence_log.npz"
+        translator.save_convergence_log(result, out_path)
+        assert out_path.exists()
+        data = np.load(out_path)
+        assert "generations" in data
+        assert "population_r2" in data
+        assert data["population_r2"].shape[1] == small_config.population_size
+        assert data["generations"][0] == 0
+        assert np.any(np.isfinite(data["best_r2_train"]))

@@ -78,6 +78,11 @@ class BingoRawResult(RawRunResult):
     best_fitness: float = float("inf")
     n_generations: int = 0
     trajectory_snapshots: list[BingoTrajectorySnapshot] = field(default_factory=list)
+    # Dense per-generation convergence data: all individuals' fitness per gen.
+    # Each element: (generation, timestamp_s, n_evals, fitness_array_mse)
+    convergence_data: list[tuple[int, float, int, np.ndarray]] = field(
+        default_factory=list,
+    )
     # IsalSR-specific (populated by IsalSR runner)
     n_total_dags: int = 0
     n_unique_canonical: int = 0
@@ -113,8 +118,28 @@ class _TrajectoryEvaluation(Evaluation):
         self._call_count = 0
         self._best_fitness = float("inf")
         self.snapshots: list[BingoTrajectorySnapshot] = []
+        # Dense per-generation convergence data (all individuals' fitness).
+        self.convergence_data: list[tuple[int, float, int, np.ndarray]] = []
         # Set after build_bingo_pipeline returns
         self._fitness_counter: Any = None
+
+    def _capture_population_fitness(
+        self,
+        generation: int,
+        population: Any,
+    ) -> None:
+        """Record every individual's fitness for convergence analysis."""
+        n_evals = self._fitness_counter.eval_count if self._fitness_counter is not None else 0
+        fitness_arr = np.array(
+            [
+                indv.fitness if hasattr(indv, "fitness") and indv.fit_set else np.inf
+                for indv in population
+            ],
+            dtype=np.float64,
+        )
+        self.convergence_data.append(
+            (generation, time.perf_counter() - self._t0, n_evals, fitness_arr)
+        )
 
     def __call__(self, population: Any) -> None:
         super().__call__(population)
@@ -126,8 +151,15 @@ class _TrajectoryEvaluation(Evaluation):
                     self._best_fitness = fit
         # MuPlusLambda calls __call__ 2x per generation (parents + offspring)
         self._call_count += 1
+
+        # Capture gen 0 after initial evaluation
+        if self._call_count == 1:
+            self._capture_population_fitness(0, population)
+
         if self._call_count % 2 == 0:
             gen = self._call_count // 2
+            # Dense per-generation capture: all individuals' fitness
+            self._capture_population_fitness(gen, population)
             if gen % self._snapshot_freq == 0:
                 n_evals = (
                     self._fitness_counter.eval_count if self._fitness_counter is not None else 0
@@ -378,6 +410,7 @@ class BingoBaselineRunner(ModelRunner):
             log.debug("Failed to extract Bingo results", exc_info=True)
 
         snapshots = evaluation.snapshots  # type: ignore[union-attr]
+        convergence_data = evaluation.convergence_data  # type: ignore[union-attr]
 
         return BingoRawResult(
             wall_clock_s=wall_clock,
@@ -390,6 +423,7 @@ class BingoBaselineRunner(ModelRunner):
             best_fitness=best_fitness,
             n_generations=n_gens,
             trajectory_snapshots=snapshots,
+            convergence_data=convergence_data,
             n_total_dags=total_evals,
             n_unique_canonical=total_evals,  # baseline: all unique
             n_skipped=0,

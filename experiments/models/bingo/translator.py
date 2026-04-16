@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import math
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -211,6 +212,71 @@ class BingoTranslator(ResultTranslator):
         )
 
         return rows
+
+    def save_convergence_log(self, raw: RawRunResult, path: Path) -> None:
+        """Save dense per-generation population fitness as compressed .npz.
+
+        Parameters
+        ----------
+        raw : RawRunResult
+            Must be a BingoRawResult with convergence_data populated.
+        path : Path
+            Output file path (should end in .npz).
+
+        Notes
+        -----
+        File contains:
+            generations     : int32   (n_gens,)
+            timestamps_s    : float64 (n_gens,)
+            n_evals         : int32   (n_gens,)
+            best_r2_train   : float64 (n_gens,)
+            population_r2   : float64 (n_gens, pop_size)
+            var_y_train     : float64 scalar
+
+        R² = 1 - MSE / Var(y_train). Individuals with MSE=inf get R²=-inf.
+        """
+        r = raw
+        assert isinstance(r, BingoRawResult)
+
+        if not r.convergence_data:
+            return
+
+        var_y = float(np.var(self._y_train))
+        if var_y <= 0:
+            var_y = 1.0
+
+        n_gens = len(r.convergence_data)
+        pop_size = len(r.convergence_data[0][3])
+
+        generations = np.empty(n_gens, dtype=np.int32)
+        timestamps_s = np.empty(n_gens, dtype=np.float64)
+        n_evals_arr = np.empty(n_gens, dtype=np.int32)
+        best_r2 = np.empty(n_gens, dtype=np.float64)
+        pop_r2 = np.empty((n_gens, pop_size), dtype=np.float64)
+
+        for i, (gen, ts, ne, fitness_arr) in enumerate(r.convergence_data):
+            generations[i] = gen
+            timestamps_s[i] = ts
+            n_evals_arr[i] = ne
+            r2_arr = np.where(
+                np.isfinite(fitness_arr),
+                1.0 - fitness_arr / var_y,
+                -np.inf,
+            )
+            pop_r2[i] = r2_arr
+            finite_mask = np.isfinite(r2_arr)
+            best_r2[i] = np.max(r2_arr[finite_mask]) if finite_mask.any() else -np.inf
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            path,
+            generations=generations,
+            timestamps_s=timestamps_s,
+            n_evals=n_evals_arr,
+            best_r2_train=best_r2,
+            population_r2=pop_r2,
+            var_y_train=np.float64(var_y),
+        )
 
     def best_expression_sympy(self, raw: RawRunResult) -> sympy.Expr | None:
         r = raw
