@@ -17,6 +17,9 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from experiments.figures.models.generate_bingo_convergence_speed import (
+    generate_bingo_convergence_speed,
+)
 from experiments.figures.models.generate_case_study import generate_case_study
 from experiments.figures.models.generate_convergence import generate_convergence_figure
 from experiments.figures.models.generate_critical_difference import (
@@ -120,6 +123,10 @@ def generate_all(
         (
             "Convergence trajectories",
             lambda: generate_convergence_figure(results_dir, output_dir),
+        ),
+        (
+            "Bingo convergence speed",
+            lambda: generate_bingo_convergence_speed(results_dir, output_dir),
         ),
         # -- Critical difference diagrams ------------------------------------
         (

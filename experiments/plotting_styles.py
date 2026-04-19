@@ -148,20 +148,6 @@ METHOD_COLORS: dict[str, str] = {
     "bingo": PAUL_TOL_BRIGHT["purple"],  # #AA3377
 }
 
-# =============================================================================
-# Condition Colors (for consistent styling across figures)
-# =============================================================================
-
-CONDITION_COLORS: dict[str, str] = {
-    "real_data": PAUL_TOL_BRIGHT["blue"],
-    "synthetic_data": PAUL_TOL_BRIGHT["red"],
-    "control": PAUL_TOL_BRIGHT["green"],
-    "epilepsy": PAUL_TOL_BRIGHT["purple"],
-    "vMF": PAUL_TOL_BRIGHT["cyan"],
-    "baseline": PAUL_TOL_BRIGHT["yellow"],
-    "threshold": PAUL_TOL_BRIGHT["grey"],
-}
-
 
 def apply_ieee_style() -> None:
     """Apply IEEE publication style using scienceplots if available.
@@ -182,7 +168,7 @@ def apply_ieee_style() -> None:
     # Override with condition colors and custom settings
     plt.rcParams.update(
         {
-            "axes.prop_cycle": plt.cycler(color=list(CONDITION_COLORS.values())),
+            "axes.prop_cycle": plt.cycler(color=list(VARIANT_COLORS.values())),
             # Ensure math rendering
             "mathtext.fontset": PLOT_SETTINGS["mathtext_fontset"],
             "font.family": PLOT_SETTINGS["font_family"],

@@ -189,7 +189,13 @@ def _plot_panel(
     dag_weighted: dict[str, dict[str, float]] | None = None,
 ) -> None:
     """Draw one panel (one benchmark) of the reduction factor figure."""
-    problems = [p for p in problem_order if any(p in rf_data[m] for m in methods)]
+    if problem_order:
+        problems = [p for p in problem_order if any(p in rf_data[m] for m in methods)]
+    else:
+        all_probs: set[str] = set()
+        for m in methods:
+            all_probs.update(rf_data.get(m, {}).keys())
+        problems = sorted(all_probs)
     problems = _sort_problems_by_rf(problems, rf_data, methods)
     n_methods = len(methods)
 
@@ -255,7 +261,7 @@ def _plot_panel(
             )
 
         # Constant-value problems: thick horizontal tick
-        for pos, val in zip(const_positions, const_values):
+        for pos, val in zip(const_positions, const_values, strict=True):
             hw = width * 0.40
             ax.plot(
                 [pos - hw, pos + hw],
@@ -401,15 +407,16 @@ def generate_reduction_factor_figure(
         handles.append(diamond_handle)
         labels.append("DAG-weighted $\\rho$")
 
-    fig.legend(
-        handles,
-        labels,
-        loc="lower center",
-        ncol=len(handles),
-        fontsize=8,
-        frameon=False,
-        bbox_to_anchor=(0.5, -0.11),
-    )
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            ncol=len(handles),
+            fontsize=8,
+            frameon=False,
+            bbox_to_anchor=(0.5, -0.11),
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     for fmt in ["pdf", "png"]:

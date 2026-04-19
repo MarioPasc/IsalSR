@@ -420,6 +420,7 @@ These constraints MUST be enforced at all times. The `proposal-guard` agent chec
 - @docs/design/experimental_design/isalsr_experimental_design.md -- Three-axis comparison framework
 - @docs/design/experimental_design/experimental_design_amendments.md -- Cache integration amendments
 - @docs/design/experimental_design/data_benchmarking_design.md -- Dataset sizes, train/test splits, literature justification
+- @docs/md_files/changes/bottleneck_type_analysis.md -- Bottleneck-type analysis: when does IsalSR help? (2026-04-19)
 - Save every output in `/media/mpascual/Sandisk2TB/research/isalsr`
 
 ## arXiv Search Space Experiment: Controlled Permutation Analysis
@@ -568,3 +569,34 @@ enforced for isalsr variant. Snapshots match diversity v2.
 1. **II.11.27** (paramagnetism, 4 vars, two opposite-sign exp branches) — primary.
 2. **Korns-12** (5 vars, 3 irrelevant, high-frequency trig) — secondary.
 3. **Pagie-1** — fallback only if screening shows R² ∈ [0.3, 0.9].
+
+## Bottleneck-Type Analysis (2026-04-19)
+
+**Source**: `docs/md_files/changes/bottleneck_type_analysis.md`
+
+IsalSR's advantage is predicted by the problem's **bottleneck type**, not by
+source (Feynman vs GP) or individual structural features.
+
+**Core finding**: bottleneck=structural × sig_train → Fisher exact p = 0.0079,
+10/10 classification accuracy. IsalSR helps **if and only if** the primary
+difficulty is structural search (finding the right operator topology), not
+constant optimization, feature selection, or trivial/unsolvable problems.
+
+| Bottleneck | Problems | sig_train |
+|---|---|---|
+| structural (k=7–8, integer consts) | I.15.10, I.30.3, I.37.4, III.17.37, Pagie-1 | **5/5** |
+| none_trivial (R²=1.0 all seeds) | II.11.27 | 0/1 |
+| constant (precise real/irrational) | Keijzer-6, Korns-12 | 0/2 |
+| structural_depth (k≥12) | Vlad-2 | 0/1 |
+| width+constants | Vlad-4 | 0/1 |
+
+**Mechanism**: variance reduction through seed rescue. For structural problems,
+IsalSR reduces R² variance by 26–1518× (Levene p < 0.001) and rescues 100%
+of below-median baseline seeds. Cliff's δ = 0.48–0.62 (large effect).
+
+**Convergence**: IsalSR pays an early exploration cost (gen 0–500), then
+overtakes baseline (gen 500–1000) for structural problems. For non-structural
+problems, the cost is never recovered.
+
+**Analysis scripts**: `experiments/scripts/analyze_isalsr_{advantage,advantage_factors,deep_dive,synthesis}.py`
+**Paired data**: `experiments/scripts/hard_bingo_paired_data.csv`
