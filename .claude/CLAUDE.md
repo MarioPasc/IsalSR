@@ -421,6 +421,8 @@ These constraints MUST be enforced at all times. The `proposal-guard` agent chec
 - @docs/design/experimental_design/experimental_design_amendments.md -- Cache integration amendments
 - @docs/design/experimental_design/data_benchmarking_design.md -- Dataset sizes, train/test splits, literature justification
 - @docs/md_files/changes/bottleneck_type_analysis.md -- Bottleneck-type analysis: when does IsalSR help? (2026-04-19)
+- @docs/md_files/changes/hard_problem_selection_rationale.md -- Why we chose the 10 hard problems (SRBench, McDermott, screening)
+- @docs/md_files/changes/candidate_problem_screening.md -- Screening 8 SR benchmark suites for IsalSR-compatible candidates (2026-04-20)
 - Save every output in `/media/mpascual/Sandisk2TB/research/isalsr`
 
 ## arXiv Search Space Experiment: Controlled Permutation Analysis
@@ -600,3 +602,67 @@ problems, the cost is never recovered.
 
 **Analysis scripts**: `experiments/scripts/analyze_isalsr_{advantage,advantage_factors,deep_dive,synthesis}.py`
 **Paired data**: `experiments/scripts/hard_bingo_paired_data.csv`
+
+## Cherrypicked Benchmark Suite (added 2026-04-20)
+
+**Why**: The hard-tier bottleneck analysis (2026-04-19) found IsalSR helps
+**if and only if** the bottleneck is structural search (n_nontrivial_constants=0,
+k≥5). To validate this hypothesis on independent data, we screened 8 published
+SR benchmark suites (~200 problems) and selected 10 new problems predicted to
+show IsalSR advantage. This suite intentionally "cherry-picks" structurally
+favorable problems.
+
+**Source**: `docs/md_files/changes/candidate_problem_screening.md` (2026-04-20)
+
+### 42-problem, 4-tier benchmark
+
+| Tier | Source file | n | Difficulty | Suite key |
+|------|-------------|---|------------|-----------|
+| Nguyen | `benchmarks/datasets/nguyen.py` | 12 | Easy–Medium | `nguyen` |
+| Feynman | `benchmarks/datasets/feynman.py` | 10 | Medium | `feynman` |
+| Hard | `benchmarks/datasets/hard.py` | 10 | Hard | `hard` |
+| **Cherrypicked** | `benchmarks/datasets/cherrypicked.py` | **10** | **Predicted IsalSR advantage** | `cherrypicked` |
+
+### Cherrypicked suite (10 problems)
+
+| Problem | k | n_vars | Source | Sampling |
+|---|---|---|---|---|
+| I.29.16 (law of cosines) | 11 | 4 | Feynman | uniform 1000/250 |
+| I.50.26 (nonlinear oscillation) | 8 | 4 | Feynman | uniform 1000/250 |
+| I.16.6 (relativistic velocity) | 6 | 3 | Feynman | uniform 1000/250 |
+| II.11.28 (Clausius-Mossotti) | 6 | 2 | Feynman | uniform 1000/250 |
+| III.14.14 (Shockley diode) | 6 | 5 | Feynman | uniform 1000/250 |
+| Vlad-7 (product + sin) | 9 | 2 | Vladislavleva 2009 | uniform **300/1200** |
+| R2 (rational quintic) | 9 | 1 | DSO/Koza | uniform 1000/250 |
+| R3 (rational sextic) | 11 | 1 | DSO/Koza | uniform 1000/250 |
+| Keijzer-11 (bivariate trig) | 6 | 2 | McDermott 2012 | uniform 1000/250 |
+| Liv-14 (poly+trig hybrid) | 8 | 2 | DSO-Livermore | uniform 1000/250 |
+
+k-range: [6, 11]. n_vars range: [1, 5]. All uniform sampling. Vlad-7 uses
+published protocol (300 train / 1200 test); all others use 1000/250.
+
+### Execution
+
+Same as `models_hard`: Bingo/UDFS, 30 seeds, same hyperparameters. Only the
+problem set and output folder (`models_cherrypicked`) change.
+
+### Key files
+
+| File | Role |
+|---|---|
+| `benchmarks/datasets/cherrypicked.py` | 10 problem definitions |
+| `experiments/configs/bingo_cherrypicked.yaml` | Bingo config |
+| `experiments/configs/udfs_cherrypicked.yaml` | UDFS config |
+| `slurm/cherrypicked_config.yaml` | SLURM resource config |
+| `slurm/cherrypicked_launch.sh` | Phased launcher (UDFS → Bingo → Analysis) |
+| `tests/unit/test_cherrypicked_benchmarks.py` | 48 unit tests |
+
+### SLURM launchers
+
+| Command | Effect |
+|---------|--------|
+| `bash slurm/cherrypicked_launch.sh` | All 4 groups (1200 tasks total) |
+| `bash slurm/cherrypicked_launch.sh --dry-run` | Preview sbatch commands |
+| `bash slurm/cherrypicked_launch.sh --experiment udfs_cherrypicked_baseline` | Single group |
+
+Resources per task: identical to `models_hard`.

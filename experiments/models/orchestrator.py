@@ -25,6 +25,10 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+from benchmarks.datasets.cherrypicked import CHERRYPICKED_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.cherrypicked import (
+    generate_data as cherrypicked_generate_data,  # noqa: E402
+)
 from benchmarks.datasets.feynman import FEYNMAN_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.feynman import generate_data as feynman_generate_data  # noqa: E402
 from benchmarks.datasets.hard import HARD_BENCHMARKS  # noqa: E402
@@ -61,6 +65,7 @@ _BENCHMARK_REGISTRY: dict[str, tuple[list[dict[str, Any]], Any]] = {
     "nguyen": (NGUYEN_BENCHMARKS, nguyen_generate_data),
     "feynman": (FEYNMAN_BENCHMARKS, feynman_generate_data),
     "hard": (HARD_BENCHMARKS, hard_generate_data),
+    "cherrypicked": (CHERRYPICKED_BENCHMARKS, cherrypicked_generate_data),
 }
 
 
@@ -127,6 +132,15 @@ def _generate_benchmark_data(
         n_samples = train_size + test_size
         train_ratio = train_size / n_samples
         return hard_generate_data(
+            bench,
+            n_samples=n_samples,
+            train_ratio=train_ratio,
+            seed=seed,
+        )
+    elif bench_name == "cherrypicked":
+        n_samples = train_size + test_size
+        train_ratio = train_size / n_samples
+        return cherrypicked_generate_data(
             bench,
             n_samples=n_samples,
             train_ratio=train_ratio,

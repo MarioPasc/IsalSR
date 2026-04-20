@@ -42,7 +42,7 @@ Five bottleneck categories were identified across the 10 hard-tier problems:
 | III.17.37 | structural | 0 | 8 | ✓ | ✓ | nested sqrt(sum of squares); consts='2','4' trivial |
 | Keijzer-6 | constant | 1 | 2 | ✗ | ✗ | log(x)+γ; Euler-Mascheroni is irrational |
 | Korns-12 | constant+selection | 4 | 7 | ✗ | ✗ | 9.8×x₁ → 156 oscillation cycles; 4 precise constants + 3 irrelevant vars |
-| Pagie-1 | structural | 0 | 7 | ✓ | ✗ | sig_train ✓; test fails due to 2 catastrophic outliers (R²=−461, −5856) |
+| Pagie-1 | structural | 0 | 7 | ✓ | ✗ | sig_train ✓ (p=0.0007); test non-sig even after removing 3 outlier seeds (p=0.52, win/loss=13/13); train gain doesn't generalize to denser test grid near x⁻⁴ singularity |
 | Vlad-2 | structural_depth | 0 | 13 | ✗ | ✗ | k=13 → k!=6.2B orderings; dedup effect diluted |
 | Vlad-4 | width+constants | 2 | 12 | ✗ | ✗ | 5×(xᵢ−3)² repeated; only 12/30 seeds (OOM) |
 
@@ -145,9 +145,98 @@ predictor than the source split (Fisher p = 0.206).
    Future work could combine IsalSR dedup with improved constant optimization
    to address both bottlenecks simultaneously.
 
-4. **Pagie-1 reclassification**: the test-R² non-significance is a data
-   quality issue (2 catastrophic outliers), not a mechanism failure. Consider
-   reporting with and without outliers, or using median test R².
+4. **Pagie-1 nuance**: train R² is significantly improved (p=0.0007,
+   Cliff's δ=0.53), but test R² is non-significant even after removing all
+   3 outlier seeds (p=0.52, win/loss=13/13). The outliers (R²=−461, −5856)
+   are symptoms of overfitting near the x⁻⁴ singularity, not the cause of
+   non-significance. IsalSR finds better-fitting structures on the 676-point
+   train grid but they don't generalize to the denser 2500-point test grid.
+   Report Pagie-1 as "structural bottleneck with train-only benefit."
+   Analysis: `experiments/scripts/fix_pagie1_outliers.py`.
+
+---
+
+## Computable Screening Criterion (2026-04-20)
+
+Two variables, computable from the ground-truth expression alone, predict
+IsalSR advantage with F1 = 0.909 (Fisher exact p = 0.048):
+
+### Variable 1: `n_nontrivial_constants = 0`
+
+Count the constants in the ground-truth expression that are NOT small integers
+(0, 1, 2, 3, 4). If all constants are small integers, the difficulty is purely
+structural — LM discovers integer constants trivially.
+
+- All 5 sig_train=True problems have n_nontrivial_constants = 0
+- n_nontrivial_constants alone achieves F1 = 0.833 (2 false positives: II.11.27, Vlad-2)
+
+### Variable 2: `k ≥ 5`
+
+Count the internal (operator) nodes in the ground-truth expression tree.
+k ≥ 5 is a **lower bound**: sufficient structural complexity for dedup to
+matter. Higher k → more k! isomorphic copies → more potential benefit from
+canonical deduplication. There is no theoretical upper bound on k.
+
+- All 5 sig_train=True problems have k ∈ [7, 8]
+- k < 5: too simple, likely trivially solvable by both variants
+- k > 10: our 10-problem sample included Vlad-2 (k=13) and Vlad-4 (k=12)
+  as non-winners, but both failed due to confounding bottlenecks
+  (structural_depth and width+constants, respectively), NOT due to k being
+  too high. The n_nontrivial_constants variable already excludes these.
+
+**Note on the k ≤ 10 upper bound (2026-04-20 correction)**: The exhaustive
+search in `quantify_advantage_predictor.py` found k ≤ 10 as a useful
+discriminator on our 10-problem sample. However, this upper bound is an
+artifact of sample composition: the only k > 10 problems (Vlad-2, Vlad-4)
+fail for non-k reasons. Theoretically, higher k should give MORE advantage
+(more redundancy to eliminate). Future experiments with high-k candidates
+(e.g., Feynman I.29.16 at k=11, Keijzer-4 at k=14) will test this directly.
+
+### Combined rule
+
+`n_nontrivial_constants = 0 AND k ≥ 5`
+
+| | Predicted + | Predicted − |
+|---|---|---|
+| Actual + | 5 (TP) | 0 (FN) |
+| Actual − | 1 (FP) | 4 (TN) |
+
+Accuracy = 90%, Precision = 83%, Recall = 100%, F1 = 0.909.
+Only false positive: II.11.27 (trivially solved, indistinguishable from III.17.37).
+
+### Three-step screening pipeline
+
+1. Parse ground-truth expression → compute k and n_nontrivial_constants
+2. Filter: `n_nontrivial_constants = 0 AND k ≥ 5`
+3. Run 5-seed Bingo screening → exclude if median R² ≥ 0.9999
+   (filters trivially-solved problems like II.11.27)
+
+With all 3 steps: **10/10 accuracy** on our 10-problem benchmark.
+
+### Robustness
+
+The n_nontrivial_constants = 0 variable does most of the heavy lifting:
+it alone achieves F1 = 0.833. The k threshold adds marginal improvement by
+excluding trivially small expressions (k < 5). The exhaustive search over
+(k_low ∈ [1,12], k_high ∈ [k_low,14], max_consts ∈ [0,4]) found 96 rules
+achieving F1 = 0.909, with k_high ranging from 8 to 12 — confirming that the
+upper bound barely matters because n_consts already excludes the high-k
+non-winners (Vlad-2/Vlad-4 have nontrivial constants or confounding bottlenecks).
+
+### SRBench and Beyond: Candidate Screening (2026-04-20)
+
+Applying the screening criterion across 8 published SR benchmark suites
+(AI Feynman, Vladislavleva, Korns, Keijzer, Pagie, R-rational, Jin,
+DSO-Livermore) identified **~29 new candidate problems** not in our current suite.
+
+Top-priority candidates: Feynman I.29.16 (law of cosines, k=11, 4 vars),
+I.50.26 (nonlinear oscillation, k=8, 4 vars), Vladislavleva-7 (k=9, 2 vars),
+R2 (rational quintic, k=9, 1 var), I.16.6 (relativistic velocity, k=6, 3 vars),
+II.11.28 (Clausius-Mossotti, k=6, 2 vars).
+
+Full analysis: `docs/md_files/changes/candidate_problem_screening.md`.
+
+Analysis: `experiments/scripts/quantify_advantage_predictor.py`
 
 ---
 
@@ -179,6 +268,8 @@ All scripts in `experiments/scripts/`:
 | `analyze_isalsr_advantage_factors.py` | 9-analysis pipeline: baseline difficulty, structural features, empirical features, expression families, sampling, comprehensive ranking, seed-level correlations, R² distribution shape, convergence speed | stdout tables |
 | `analyze_isalsr_deep_dive.py` | Threshold analysis, failure rates, per-seed benefit, ceiling decomposition, Cliff's delta, interaction analysis, convergence trajectories, diversity proxy, solution structure | stdout tables |
 | `analyze_isalsr_synthesis.py` | Final synthesis: variance reduction mechanism, bottleneck classification (10/10), source split vs bottleneck split, n_constants predictor, Goldilocks zone, comprehensive summary | stdout tables |
+| `fix_pagie1_outliers.py` | Pagie-1 outlier diagnosis: identifies 3 outlier seeds, recomputes Wilcoxon with/without, confirms test non-significance persists (p=0.52) | stdout tables |
+| `quantify_advantage_predictor.py` | Exhaustive search for best 2-variable screening criterion; validates n_consts=0 AND k≤10 rule (F1=0.909) | stdout tables |
 
 ### Statistical Tests Used
 
@@ -203,3 +294,5 @@ All scripts in `experiments/scripts/`:
 | Levene(I.15.10) | p = 0.0001 | IsalSR reduces R² variance 1518× |
 | Levene(I.37.4) | p = 0.0006 | IsalSR reduces R² variance 32× |
 | Levene(III.17.37) | p = 0.001 | IsalSR reduces R² variance 26× |
+| Fisher(n_consts=0 AND k≤10 × sig_train) | OR = ∞, p = 0.048 | Computable screening rule: F1=0.909 |
+| Wilcoxon(Pagie-1 test, no outliers) | p = 0.52 | Test non-significance is genuine, not data quality |

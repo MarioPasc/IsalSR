@@ -1,0 +1,39 @@
+# UDFS experiment on cherrypicked benchmarks (10 problems)
+# References:
+#   docs/md_files/changes/candidate_problem_screening.md (2026-04-20)
+#   benchmarks/datasets/cherrypicked.py
+#
+# All UDFS hyperparameters match production Nguyen/Feynman/hard exactly.
+# processes: 1 is REQUIRED — UDFS spawn-mode workers bypass the IsalSR monkeypatch.
+
+experiment:
+  name: udfs_cherrypicked
+  method: udfs
+  n_seeds: 30
+
+benchmarks:
+  cherrypicked:
+    problems: all
+    train_size: 1000      # Default for uniform problems.
+    test_size: 250
+
+udfs:
+  n_calc_nodes: 5
+  max_orders: 200000
+  max_time: 43200       # 12h algorithm budget (standard).
+  processes: 1
+  mode: hierarchical
+  k: 2
+  stop_thresh: 1.0e-10
+  use_tan: false
+  # Note: UDFS hardcodes its operator set inside DAGRegressor; this list is
+  # informational only (UDFSConfig.to_dag_regressor_kwargs does not forward it).
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log", "sqrt"]
+  snapshot_frequency: 1000
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

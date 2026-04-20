@@ -1,0 +1,91 @@
+# IsalSR Cherrypicked Experiments for Picasso HPC
+# ================================================
+#
+# Runs UDFS + Bingo (baseline + isalsr) on the 10 cherrypicked problems defined
+# in benchmarks/datasets/cherrypicked.py (5 Feynman + 5 GP-classic/DSO).
+#
+# References:
+#   docs/md_files/changes/candidate_problem_screening.md (2026-04-20)
+#   docs/md_files/changes/bottleneck_type_analysis.md (2026-04-19)
+#   experiments/configs/{udfs,bingo}_cherrypicked.yaml
+#
+# Array sizing (per group): 10 problems * 30 seeds = 300 tasks.
+# Total: 4 groups * 300 = 1200 tasks.
+#
+# Time budget: 12h algorithm (max_time=43200) + 3-5h SLURM buffer.
+# This matches existing Nguyen/Feynman/hard production.
+
+# Paths (Picasso filesystem layout)
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/models_cherrypicked
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu
+account: tic_163_uma
+
+experiments:
+  # =========================================================
+  # UDFS on cherrypicked (10 problems x 30 seeds = 300 tasks/group)
+  # =========================================================
+  udfs_cherrypicked_baseline:
+    enabled: true
+    method: udfs
+    benchmark: cherrypicked
+    variant: baseline
+    config: experiments/configs/udfs_cherrypicked.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "15:00:00"    # 12h algorithm + 3h buffer
+    cpus: 1
+    mem_gb: 8
+
+  udfs_cherrypicked_isalsr:
+    enabled: true
+    method: udfs
+    benchmark: cherrypicked
+    variant: isalsr
+    config: experiments/configs/udfs_cherrypicked.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "17:00:00"    # 12h algorithm + 5h canon overhead buffer
+    cpus: 1
+    mem_gb: 8
+
+  # =========================================================
+  # Bingo on cherrypicked (10 problems x 30 seeds = 300 tasks/group)
+  # =========================================================
+  bingo_cherrypicked_baseline:
+    enabled: true
+    method: bingo
+    benchmark: cherrypicked
+    variant: baseline
+    config: experiments/configs/bingo_cherrypicked.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "15:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  bingo_cherrypicked_isalsr:
+    enabled: true
+    method: bingo
+    benchmark: cherrypicked
+    variant: isalsr
+    config: experiments/configs/bingo_cherrypicked.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "17:00:00"
+    cpus: 1
+    mem_gb: 128             # heap fragmentation on long runs + malloc_trim
+
+  # =========================================================
+  # Analysis (runs after ALL cherrypicked experiments complete)
+  # =========================================================
+  cherrypicked_analyze:
+    enabled: true
+    methods: "udfs,bingo"
+    benchmarks: "cherrypicked"
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 16
