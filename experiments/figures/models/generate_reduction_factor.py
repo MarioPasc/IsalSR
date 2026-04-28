@@ -1,18 +1,16 @@
 """Generate Reduction Factor distribution figure for IsalSR model validation.
 
-Produces a single-column figure with 2 stacked panels (1 column, 2 rows):
-  Panel (a): Nguyen benchmarks — box plots of ρ per problem, grouped by method
-  Panel (b): Feynman benchmarks — same layout
+Produces a single wide figure with all problems on one x-axis, visually
+grouped by benchmark suite (Nguyen, Feynman, Hard, Cherrypicked) with
+vertical separators between groups.
 
 Each box = 30 seeds. Horizontal dashed line at ρ = 1 (no reduction).
-Problems sorted by descending median ρ (highest redundancy first).
-Optional diamond markers show DAG-weighted ρ per problem.
+Problems sorted by descending median ρ within each group.
 
 Usage:
     python -m experiments.figures.models.generate_reduction_factor \
         --results-dir /path/to/results \
-        --output-dir /path/to/figures \
-        [--dag-weighted]
+        --output-dir /path/to/figures
 """
 
 from __future__ import annotations
@@ -29,45 +27,18 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 from experiments.models.io_utils import load_all_run_logs  # noqa: E402
+from experiments.plotting_styles import (  # noqa: E402
+    PAUL_TOL_BRIGHT,
+    apply_ieee_style,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger(__name__)
 
-# ======================================================================
-# Visual style
-# ======================================================================
-
 METHOD_STYLE = {
-    "udfs": {"color": "#228833", "label": "UDFS"},  # Paul Tol green
-    "bingo": {"color": "#AA3377", "label": "Bingo"},  # Paul Tol purple
+    "udfs": {"color": PAUL_TOL_BRIGHT["green"], "label": "UDFS"},
+    "bingo": {"color": PAUL_TOL_BRIGHT["purple"], "label": "Bingo"},
 }
-
-_NGUYEN_ORDER = [
-    "nguyen_1",
-    "nguyen_2",
-    "nguyen_3",
-    "nguyen_4",
-    "nguyen_5",
-    "nguyen_6",
-    "nguyen_7",
-    "nguyen_8",
-    "nguyen_9",
-    "nguyen_10",
-    "nguyen_11",
-    "nguyen_12",
-]
-_FEYNMAN_ORDER = [
-    "i.6.20a",
-    "i.12.1",
-    "i.12.4",
-    "i.14.3",
-    "i.25.13",
-    "i.34.27",
-    "i.39.10",
-    "i.48.20",
-    "i.10.7",
-    "ii.3.24",
-]
 
 _PROBLEM_LABELS = {
     "nguyen_1": "N-1",
@@ -92,12 +63,81 @@ _PROBLEM_LABELS = {
     "i.48.20": "I.48.20",
     "i.10.7": "I.10.7",
     "ii.3.24": "II.3.24",
+    "i.15.10": "I.15.10",
+    "i.30.3": "I.30.3",
+    "i.37.4": "I.37.4",
+    "ii.11.27": "II.11.27",
+    "iii.17.37": "III.17.37",
+    "keijzer_6": "Keij-6",
+    "korns_12": "Korns-12",
+    "pagie_1": "Pagie-1",
+    "vladislavleva_2": "Vlad-2",
+    "vladislavleva_4": "Vlad-4",
+    "i.16.6": "I.16.6",
+    "i.29.16": "I.29.16",
+    "i.50.26": "I.50.26",
+    "ii.11.28": "II.11.28",
+    "iii.14.14": "III.14.14",
+    "keijzer_11": "Keij-11",
+    "liv_14": "Liv-14",
+    "r2": "R2",
+    "r3": "R3",
+    "vlad_7": "Vlad-7",
 }
 
+_SRC_NGUYEN = {
+    "nguyen_1",
+    "nguyen_2",
+    "nguyen_3",
+    "nguyen_4",
+    "nguyen_5",
+    "nguyen_6",
+    "nguyen_7",
+    "nguyen_8",
+    "nguyen_9",
+    "nguyen_10",
+    "nguyen_11",
+    "nguyen_12",
+}
+_SRC_FEYNMAN = {
+    "i.6.20a",
+    "i.12.1",
+    "i.12.4",
+    "i.14.3",
+    "i.25.13",
+    "i.34.27",
+    "i.39.10",
+    "i.48.20",
+    "i.10.7",
+    "ii.3.24",
+    "i.15.10",
+    "i.30.3",
+    "i.37.4",
+    "ii.11.27",
+    "iii.17.37",
+    "i.16.6",
+    "i.29.16",
+    "i.50.26",
+    "ii.11.28",
+    "iii.14.14",
+}
+_SRC_KEIJZER = {"keijzer_6", "keijzer_11"}
+_SRC_KORNS = {"korns_12"}
+_SRC_PAGIE = {"pagie_1"}
+_SRC_VLAD = {"vladislavleva_2", "vladislavleva_4", "vlad_7"}
+_SRC_KOZA = {"r2", "r3"}
+_SRC_LIVERMORE = {"liv_14"}
 
-# ======================================================================
-# Data loading
-# ======================================================================
+_GROUPS = [
+    ("Nguyen\n(Uy et al. '11)", _SRC_NGUYEN),
+    ("Feynman\n(Udrescu & Tegmark '20)", _SRC_FEYNMAN),
+    ("Vlad.\n('09)", _SRC_VLAD),
+    ("Keij.\n('03)", _SRC_KEIJZER),
+    ("Koza\n(DSO '21)", _SRC_KOZA),
+    ("Korns\n('11)", _SRC_KORNS),
+    ("Pagie\n('97)", _SRC_PAGIE),
+    ("Liv.\n('21)", _SRC_LIVERMORE),
+]
 
 
 def _load_rf_data(
@@ -105,7 +145,6 @@ def _load_rf_data(
     methods: list[str],
     benchmark: str,
 ) -> dict[str, dict[str, list[float]]]:
-    """Load per-seed reduction factors for each (method, problem)."""
     data: dict[str, dict[str, list[float]]] = {}
     for method in methods:
         data[method] = {}
@@ -129,212 +168,6 @@ def _load_rf_data(
     return data
 
 
-def _load_dag_weighted_rf_per_problem(
-    results_dir: Path,
-    method: str,
-    benchmark: str,
-) -> dict[str, float]:
-    """Compute DAG-weighted RF per problem: Σ(dags_i × rf_i) / Σ(dags_i)."""
-    bench_dir = results_dir / method / benchmark
-    result: dict[str, float] = {}
-    if not bench_dir.exists():
-        return result
-    for prob_dir in sorted(bench_dir.iterdir()):
-        if not prob_dir.is_dir():
-            continue
-        isalsr_dir = prob_dir / "isalsr"
-        if not isalsr_dir.exists():
-            continue
-        total_dags = 0.0
-        weighted_sum = 0.0
-        for rl in load_all_run_logs(isalsr_dir):
-            n = rl.search_space.total_dags_explored
-            rf = rl.search_space.empirical_reduction_factor
-            if n > 0 and np.isfinite(rf):
-                total_dags += n
-                weighted_sum += n * rf
-        if total_dags > 0:
-            result[prob_dir.name] = weighted_sum / total_dags
-    return result
-
-
-def _sort_problems_by_rf(
-    problems: list[str],
-    rf_data: dict[str, dict[str, list[float]]],
-    methods: list[str],
-) -> list[str]:
-    """Sort problems by descending median RF (pooled across methods)."""
-
-    def _median_rf(prob: str) -> float:
-        all_rf: list[float] = []
-        for m in methods:
-            all_rf.extend(rf_data.get(m, {}).get(prob, []))
-        return float(np.median(all_rf)) if all_rf else 1.0
-
-    return sorted(problems, key=_median_rf, reverse=True)
-
-
-# ======================================================================
-# Plotting
-# ======================================================================
-
-
-def _plot_panel(
-    ax: plt.Axes,
-    rf_data: dict[str, dict[str, list[float]]],
-    problem_order: list[str],
-    methods: list[str],
-    title: str,
-    *,
-    dag_weighted: dict[str, dict[str, float]] | None = None,
-) -> None:
-    """Draw one panel (one benchmark) of the reduction factor figure."""
-    if problem_order:
-        problems = [p for p in problem_order if any(p in rf_data[m] for m in methods)]
-    else:
-        all_probs: set[str] = set()
-        for m in methods:
-            all_probs.update(rf_data.get(m, {}).keys())
-        problems = sorted(all_probs)
-    problems = _sort_problems_by_rf(problems, rf_data, methods)
-    n_methods = len(methods)
-
-    if not problems:
-        ax.set_visible(False)
-        return
-
-    # Narrow boxes for single-column fit
-    width = 0.22
-    group_width = n_methods * width + 0.08
-    positions_per_method: dict[str, list[float]] = {}
-    tick_positions: list[float] = []
-
-    for i, _prob in enumerate(problems):
-        center = i * group_width
-        tick_positions.append(center)
-        for j, method in enumerate(methods):
-            offset = (j - (n_methods - 1) / 2) * width
-            positions_per_method.setdefault(method, []).append(center + offset)
-
-    # Draw box plots per method.
-    # UDFS is deterministic: on easy problems all 30 seeds produce identical
-    # RF (std=0). A zero-height boxplot is invisible, so we draw a thick
-    # horizontal tick instead.
-    for method in methods:
-        style = METHOD_STYLE[method]
-        color = style["color"]
-        box_data = []
-        box_positions = []
-        const_positions: list[float] = []
-        const_values: list[float] = []
-
-        for k, prob in enumerate(problems):
-            if prob not in rf_data[method]:
-                continue
-            vals = rf_data[method][prob]
-            pos = positions_per_method[method][k]
-            if np.std(vals) < 1e-10:
-                const_positions.append(pos)
-                const_values.append(vals[0])
-            else:
-                box_data.append(vals)
-                box_positions.append(pos)
-
-        if box_data:
-            ax.boxplot(
-                box_data,
-                positions=box_positions,
-                widths=width * 0.80,
-                patch_artist=True,
-                showfliers=True,
-                flierprops={
-                    "marker": ".",
-                    "markersize": 2,
-                    "alpha": 0.5,
-                    "markerfacecolor": color,
-                    "markeredgecolor": color,
-                },
-                medianprops={"color": "white", "linewidth": 0.8},
-                boxprops={"facecolor": color, "alpha": 0.65, "edgecolor": color},
-                whiskerprops={"color": color, "linewidth": 0.8},
-                capprops={"color": color, "linewidth": 0.8},
-            )
-
-        # Constant-value problems: thick horizontal tick
-        for pos, val in zip(const_positions, const_values, strict=True):
-            hw = width * 0.40
-            ax.plot(
-                [pos - hw, pos + hw],
-                [val, val],
-                color=color,
-                linewidth=2.5,
-                alpha=0.65,
-                solid_capstyle="round",
-            )
-
-        # Invisible handle for the unified figure-level legend
-        ax.plot(
-            [],
-            [],
-            color=color,
-            marker="s",
-            markersize=7,
-            linestyle="none",
-            alpha=0.65,
-            label=style["label"],
-        )
-
-    # Optional DAG-weighted RF diamonds — one per (method, problem)
-    if dag_weighted is not None:
-        for method in methods:
-            style = METHOD_STYLE[method]
-            color = style["color"]
-            dw = dag_weighted.get(method, {})
-            for k, prob in enumerate(problems):
-                if prob in dw:
-                    x_pos = positions_per_method[method][k]
-                    ax.plot(
-                        x_pos,
-                        dw[prob],
-                        marker="D",
-                        markersize=4,
-                        color=color,
-                        markeredgecolor="black",
-                        markeredgewidth=0.5,
-                        zorder=5,
-                        alpha=0.9,
-                    )
-
-    # ρ = 1 reference line
-    ax.axhline(y=1.0, color="black", linestyle="--", linewidth=0.8, alpha=0.6, zorder=0)
-
-    # Formatting
-    ax.set_xticks(tick_positions)
-    ax.set_xticklabels(
-        [_PROBLEM_LABELS.get(p, p) for p in problems],
-        rotation=90,
-        ha="center",
-        fontsize=7,
-    )
-    ax.set_ylabel("Reduction factor $\\rho$", fontsize=9)
-    ax.set_title(title, fontsize=10, loc="left")
-    ax.grid(axis="y", alpha=0.3, linewidth=0.5)
-    ax.set_axisbelow(True)
-    ax.set_xlim(
-        tick_positions[0] - group_width * 0.6,
-        tick_positions[-1] + group_width * 0.6,
-    )
-    # Finer y-ticks for taller panels
-    ax.yaxis.set_major_locator(plt.MultipleLocator(0.1))
-    ax.yaxis.set_minor_locator(plt.MultipleLocator(0.05))
-    ax.tick_params(axis="y", labelsize=7)
-
-
-# ======================================================================
-# Figure assembly
-# ======================================================================
-
-
 def generate_reduction_factor_figure(
     results_dir: Path,
     output_dir: Path,
@@ -343,80 +176,155 @@ def generate_reduction_factor_figure(
     *,
     show_dag_weighted: bool = False,
 ) -> None:
-    """Generate the single-column 2-row figure (one row per benchmark)."""
-    bench_config = {
-        "nguyen": ("(a) Nguyen benchmarks", _NGUYEN_ORDER),
-        "feynman": ("(b) Feynman benchmarks", _FEYNMAN_ORDER),
-    }
+    """Generate single-panel figure with all problems grouped by benchmark."""
+    apply_ieee_style()
 
-    # Pre-compute global y-limits across both panels
-    global_ymax = 1.15
-    for benchmark in benchmarks:
-        rf_data = _load_rf_data(results_dir, methods, benchmark)
-        for m in methods:
-            for seeds in rf_data.get(m, {}).values():
-                if seeds:
-                    global_ymax = max(global_ymax, max(seeds))
-    global_ymax *= 1.05
+    rf_data = _load_rf_data(results_dir, methods, benchmarks[0])
 
-    # Double-column: 1 row × 2 cols, shared y-axis
-    fig, axes = plt.subplots(
-        1,
-        len(benchmarks),
-        figsize=(7.0, 3.5),
-        sharey=True,
-        gridspec_kw={"wspace": 0.08},
-    )
-    if len(benchmarks) == 1:
-        axes = [axes]
+    all_problems: set[str] = set()
+    for m in methods:
+        all_problems.update(rf_data.get(m, {}).keys())
 
-    for idx, (ax, benchmark) in enumerate(zip(axes, benchmarks, strict=True)):
-        title, order = bench_config.get(benchmark, (benchmark, []))
-        rf_data = _load_rf_data(results_dir, methods, benchmark)
+    grouped: list[tuple[str, list[str]]] = []
+    for group_name, members in _GROUPS:
+        probs_in_group = [p for p in all_problems if p in members]
+        if not probs_in_group:
+            continue
 
-        dag_weighted: dict[str, dict[str, float]] | None = None
-        if show_dag_weighted:
-            dag_weighted = {}
-            for method in methods:
-                dag_weighted[method] = _load_dag_weighted_rf_per_problem(
-                    results_dir,
-                    method,
-                    benchmark,
-                )
+        def _median_rf(prob: str) -> float:
+            vals: list[float] = []
+            for m in methods:
+                vals.extend(rf_data.get(m, {}).get(prob, []))
+            return float(np.median(vals)) if vals else 1.0
 
-        _plot_panel(ax, rf_data, order, methods, title, dag_weighted=dag_weighted)
-        ax.set_ylim(0.95, global_ymax)
-        # Only show y-label on the leftmost panel
-        if idx > 0:
-            ax.set_ylabel("")
+        probs_in_group.sort(key=_median_rf, reverse=True)
+        grouped.append((group_name, probs_in_group))
 
-    # Unified legend below both panels
-    handles, labels = axes[0].get_legend_handles_labels()
-    if show_dag_weighted:
-        diamond_handle = plt.Line2D(
+    n_total = sum(len(probs) for _, probs in grouped)
+    if n_total == 0:
+        log.warning("No RF data found")
+        return
+
+    n_methods = len(methods)
+    width = 0.22
+    gap_between_groups = 0.6
+    group_width = width
+
+    fig_width = max(7.0, n_total * 0.35 + len(grouped) * gap_between_groups)
+    fig, ax = plt.subplots(figsize=(fig_width, 3.8))
+
+    tick_positions: list[float] = []
+    tick_labels: list[str] = []
+    group_centers: list[tuple[float, float, str]] = []
+    x = 0.0
+
+    for gi, (group_name, probs) in enumerate(grouped):
+        group_start = x
+
+        for prob in probs:
+            center = x
+            tick_positions.append(center)
+            tick_labels.append(_PROBLEM_LABELS.get(prob, prob))
+
+            for j, method in enumerate(methods):
+                style = METHOD_STYLE[method]
+                color = style["color"]
+                offset = (j - (n_methods - 1) / 2) * width
+
+                if prob not in rf_data.get(method, {}):
+                    continue
+
+                vals = rf_data[method][prob]
+                pos = center + offset
+
+                if np.std(vals) < 1e-10:
+                    hw = width * 0.40
+                    ax.plot(
+                        [pos - hw, pos + hw],
+                        [vals[0], vals[0]],
+                        color=color,
+                        linewidth=2.5,
+                        alpha=0.65,
+                        solid_capstyle="round",
+                    )
+                else:
+                    ax.boxplot(
+                        [vals],
+                        positions=[pos],
+                        widths=width * 0.80,
+                        patch_artist=True,
+                        showfliers=True,
+                        flierprops={
+                            "marker": ".",
+                            "markersize": 2,
+                            "alpha": 0.5,
+                            "markerfacecolor": color,
+                            "markeredgecolor": color,
+                        },
+                        medianprops={"color": "white", "linewidth": 0.8},
+                        boxprops={"facecolor": color, "alpha": 0.65, "edgecolor": color},
+                        whiskerprops={"color": color, "linewidth": 0.8},
+                        capprops={"color": color, "linewidth": 0.8},
+                    )
+
+            x += n_methods * width + 0.08
+
+        group_end = x - (n_methods * width + 0.08)
+        group_centers.append((group_start, group_end, group_name))
+
+        if gi < len(grouped) - 1:
+            sep_x = x + gap_between_groups / 2 - (n_methods * width + 0.08) / 2
+            ax.axvline(x=sep_x, color="0.5", linestyle=":", linewidth=0.8, alpha=0.6)
+            x += gap_between_groups
+
+    ax.axhline(y=1.0, color="black", linestyle="--", linewidth=0.8, alpha=0.6, zorder=0)
+
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels(tick_labels, rotation=90, ha="center", fontsize=6)
+    ax.set_ylabel("Reduction factor $\\rho$", fontsize=9)
+    ax.grid(axis="y", alpha=0.3, linewidth=0.5)
+    ax.set_axisbelow(True)
+
+    y_max = 1.15
+    for m in methods:
+        for seeds in rf_data.get(m, {}).values():
+            if seeds:
+                y_max = max(y_max, max(seeds))
+    ax.set_ylim(0.95, y_max * 1.05)
+    ax.yaxis.set_major_locator(plt.MultipleLocator(0.1))
+    ax.yaxis.set_minor_locator(plt.MultipleLocator(0.05))
+    ax.tick_params(axis="y", labelsize=7)
+
+    for g_start, g_end, g_name in group_centers:
+        g_mid = (g_start + g_end) / 2
+        ax.text(
+            g_mid,
+            1.02,
+            g_name,
+            ha="center",
+            va="bottom",
+            fontsize=6,
+            fontweight="bold",
+            transform=ax.get_xaxis_transform(),
+        )
+
+    for method in methods:
+        style = METHOD_STYLE[method]
+        ax.plot(
             [],
             [],
-            marker="D",
-            markersize=4,
-            color="gray",
-            markeredgecolor="black",
-            markeredgewidth=0.5,
+            color=style["color"],
+            marker="s",
+            markersize=7,
             linestyle="none",
-            label="DAG-weighted $\\rho$",
+            alpha=0.65,
+            label=style["label"],
         )
-        handles.append(diamond_handle)
-        labels.append("DAG-weighted $\\rho$")
+    ax.legend(fontsize=8, loc="upper right", framealpha=0.9)
 
-    if handles:
-        fig.legend(
-            handles,
-            labels,
-            loc="lower center",
-            ncol=len(handles),
-            fontsize=8,
-            frameon=False,
-            bbox_to_anchor=(0.5, -0.11),
-        )
+    if tick_positions:
+        margin = (n_methods * width + 0.08) * 0.6
+        ax.set_xlim(tick_positions[0] - margin, tick_positions[-1] + margin)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     for fmt in ["pdf", "png"]:
@@ -424,41 +332,21 @@ def generate_reduction_factor_figure(
         fig.savefig(out_path, dpi=300, bbox_inches="tight")
         log.info("Saved %s", out_path)
 
-    caption = _caption(methods, benchmarks, show_dag_weighted)
-    caption_path = output_dir / "reduction_factor_distribution.caption.txt"
-    caption_path.write_text(caption)
-    log.info("Saved %s", caption_path)
-    plt.close(fig)
-
-
-def _caption(methods: list[str], benchmarks: list[str], dag_weighted: bool) -> str:
-    bench_str = " and ".join(b.capitalize() for b in benchmarks)
-    method_str = " and ".join(m.upper() for m in methods)
-    cap = (
-        f"Distribution of the empirical reduction factor $\\rho$ across "
-        f"{bench_str} benchmarks for {method_str}. "
-        f"Each box summarizes $\\rho$ over 30 independent seeds; "
-        f"thick horizontal ticks denote problems where all seeds yield "
-        f"identical $\\rho$ (deterministic UDFS enumeration). "
-        f"The horizontal dashed line marks $\\rho = 1$ (no redundancy). "
-        f"Problems are sorted by descending median $\\rho$. "
-    )
-    if dag_weighted:
-        cap += (
-            "Diamond markers show the DAG-weighted $\\rho$ per problem, "
-            "where each seed contributes proportionally to the number of "
-            "DAGs it explored. "
-        )
-    cap += (
+    caption = (
+        "Distribution of the empirical reduction factor $\\rho$ across "
+        "42 benchmark problems for UDFS and Bingo. Problems are visually "
+        "grouped by source suite (Nguyen, Feynman, Hard, Cherrypicked) "
+        "and sorted by descending median $\\rho$ within each group. "
+        "Each box summarizes $\\rho$ over 30 independent seeds; "
+        "thick horizontal ticks denote problems where all seeds yield "
+        "identical $\\rho$ (deterministic UDFS enumeration). "
+        "The horizontal dashed line marks $\\rho = 1$ (no redundancy). "
         "All boxes lie strictly above $\\rho = 1$, confirming that "
         "\\IsalSR{} detects structural duplicates on every problem."
     )
-    return cap
-
-
-# ======================================================================
-# Main
-# ======================================================================
+    (output_dir / "reduction_factor_distribution.caption.txt").write_text(caption)
+    log.info("Saved caption")
+    plt.close(fig)
 
 
 def main() -> None:
@@ -468,7 +356,7 @@ def main() -> None:
     parser.add_argument("--results-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--methods", default="udfs,bingo")
-    parser.add_argument("--benchmarks", default="nguyen,feynman")
+    parser.add_argument("--benchmarks", default="benchmark")
     parser.add_argument(
         "--dag-weighted",
         action="store_true",

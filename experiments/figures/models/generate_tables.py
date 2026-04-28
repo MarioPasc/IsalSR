@@ -170,6 +170,7 @@ def _holm_bonferroni(p_values: list[float]) -> list[float]:
 # ======================================================================
 
 _PROBLEM_LABELS = {
+    # Nguyen
     "nguyen_1": "N-1",
     "nguyen_2": "N-2",
     "nguyen_3": "N-3",
@@ -182,6 +183,7 @@ _PROBLEM_LABELS = {
     "nguyen_10": "N-10",
     "nguyen_11": "N-11",
     "nguyen_12": "N-12",
+    # Feynman
     "i.6.20a": "I.6.20a",
     "i.12.1": "I.12.1",
     "i.12.4": "I.12.4",
@@ -192,7 +194,56 @@ _PROBLEM_LABELS = {
     "i.48.20": "I.48.20",
     "i.10.7": "I.10.7",
     "ii.3.24": "II.3.24",
+    # Hard
+    "i.15.10": "I.15.10",
+    "i.30.3": "I.30.3",
+    "i.37.4": "I.37.4",
+    "ii.11.27": "II.11.27",
+    "iii.17.37": "III.17.37",
+    "keijzer_6": "Keij-6",
+    "korns_12": "Korns-12",
+    "pagie_1": "Pagie-1",
+    "vladislavleva_2": "Vlad-2",
+    "vladislavleva_4": "Vlad-4",
+    # Cherrypicked
+    "i.16.6": "I.16.6",
+    "i.29.16": "I.29.16",
+    "i.50.26": "I.50.26",
+    "ii.11.28": "II.11.28",
+    "iii.14.14": "III.14.14",
+    "keijzer_11": "Keij-11",
+    "liv_14": "Liv-14",
+    "r2": "R2",
+    "r3": "R3",
+    "vlad_7": "Vlad-7",
 }
+
+
+def _load_cpdt(
+    results_dir: Path,
+    method: str,
+    benchmark: str,
+) -> dict | None:
+    """Load CPDT results from analysis directory."""
+    import json
+
+    cpdt_path = results_dir / "analysis" / f"cross_problem_dominance_{method}_{benchmark}.json"
+    if not cpdt_path.exists():
+        return None
+    with open(cpdt_path) as f:
+        return json.load(f)
+
+
+def _fmt_cpdt_p(p: float) -> str:
+    """Format a CPDT p-value for LaTeX with significance stars."""
+    if p < 0.001:
+        return "$<$0.001$^{***}$"
+    sig = ""
+    if p < 0.01:
+        sig = "$^{**}$"
+    elif p < 0.05:
+        sig = "$^{*}$"
+    return f"${p:.3f}${sig}"
 
 
 # ======================================================================
@@ -232,8 +283,8 @@ def generate_table1(
                 if not d.get("bl_r2_test") or not d.get("is_r2_test"):
                     continue
                 n_prob += 1
-                bl_r2s.append(np.mean(d["bl_r2_test"]))
-                is_r2s.append(np.mean(d["is_r2_test"]))
+                bl_r2s.append(float(np.nanmean(d["bl_r2_test"])))
+                is_r2s.append(float(np.nanmean(d["is_r2_test"])))
                 _, p = _paired_test(d["bl_r2_test"], d["is_r2_test"])
                 p_values.append(p)
 
@@ -253,17 +304,26 @@ def generate_table1(
                     if is_s > 0:
                         speedups.append(bl_s / is_s)
 
-            # Holm correction for R² significance count
-            adjusted = _holm_bonferroni(p_values) if p_values else []
-            n_sig = sum(1 for p in adjusted if p < 0.05)
+            # CPDT (primary) — load pre-computed cross-problem dominance test
+            cpdt = _load_cpdt(results_dir, method, benchmark)
+            if cpdt and "r2_test" in cpdt and "error" not in cpdt["r2_test"]:
+                cpdt_r2 = cpdt["r2_test"]
+                cpdt_p = cpdt_r2["p_value_one_sided"]
+                cpdt_d = cpdt_r2["cohens_d"]
+            else:
+                # Fallback: Holm-corrected count
+                adjusted = _holm_bonferroni(p_values) if p_values else []
+                n_sig_holm = sum(1 for p in adjusted if p < 0.05)
+                cpdt_p = float("nan")
+                cpdt_d = float("nan")
 
             rf_mean = np.mean(all_rf) if all_rf else 1.0
             rf_std = np.std(all_rf, ddof=1) if len(all_rf) > 1 else 0.0
             rr_mean = np.mean(all_rr) * 100 if all_rr else 0.0
             oh_mean = np.mean(all_oh) if all_oh else 0.0
             s_mean = np.mean(speedups) if speedups else 1.0
-            bl_r2_mean = np.mean(bl_r2s) if bl_r2s else 0.0
-            is_r2_mean = np.mean(is_r2s) if is_r2s else 0.0
+            bl_r2_mean = float(np.nanmean(bl_r2s)) if bl_r2s else 0.0
+            is_r2_mean = float(np.nanmean(is_r2s)) if is_r2s else 0.0
             canon_mean = np.mean(all_canon_ms) if all_canon_ms else 0.0
             eval_mean = np.mean(all_eval_ms) if all_eval_ms else 0.0
             ratio = canon_mean / eval_mean if eval_mean > 0 else float("inf")
@@ -271,12 +331,20 @@ def generate_table1(
 
             method_label = method.upper()
             bench_label = benchmark.capitalize()
+
+            if np.isfinite(cpdt_p):
+                cpdt_p_str = _fmt_cpdt_p(cpdt_p)
+                cpdt_d_str = f"${cpdt_d:+.2f}$"
+            else:
+                cpdt_p_str = f"{n_sig_holm}/{n_prob}"
+                cpdt_d_str = "--"
+
             rows.append(
-                f"    {method_label:<6} & {bench_label:<8} & {n_prob:>2} "
+                f"    {method_label:<6} & {bench_label:<12} & {n_prob:>2} "
                 f"& ${rf_mean:.2f} \\pm {rf_std:.2f}$ "
                 f"& ${rr_mean:.1f}\\%$ "
                 f"& ${bl_r2_mean:.3f}$ / ${is_r2_mean:.3f}$ "
-                f"& {n_sig}/{n_prob} "
+                f"& {cpdt_d_str} & {cpdt_p_str} "
                 f"& ${canon_mean:.3f}$ & ${eval_mean:.2f}$ "
                 f"& ${ratio_str}$ "
                 f"& ${oh_mean:.1f}\\%$ "
@@ -289,22 +357,22 @@ def generate_table1(
         "\\small\n"
         "\\caption{Unified three-axis summary of \\IsalSR{} integration. "
         "$\\rho$: empirical reduction factor. "
-        "$R^2$ sig.: number of problems with significant improvement "
-        "(Holm-corrected, $\\alpha{=}0.05$). "
+        "$d_{\\mathrm{CPDT}}$/$p_{\\mathrm{CPDT}}$: Cross-Problem Dominance Test "
+        "(one-sided paired test across problems, treating each problem's mean $R^2$ "
+        "as one observation; $^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$). "
         "$T_{\\mathrm{canon}}$/$T_{\\mathrm{eval}}$: per-DAG "
         "canonicalization/evaluation cost (ms). "
-        "OH: canonicalization overhead as percentage of total time. "
-        "$S$: search-only speedup (baseline/IsalSR).}\n"
+        "OH: overhead. $S$: speedup.}\n"
         "\\label{tab:three_axis}\n"
-        "\\begin{tabular}{@{}llc cc cc rrr cc@{}}\n"
+        "\\begin{tabular}{@{}llc cc cc c rrr cc@{}}\n"
         "\\toprule\n"
         " & & & \\multicolumn{2}{c}{Search Space} "
-        "& \\multicolumn{2}{c}{Regression Quality} "
+        "& \\multicolumn{3}{c}{Regression Quality (CPDT)} "
         "& \\multicolumn{5}{c}{Computational Cost} \\\\\n"
-        "\\cmidrule(lr){4-5} \\cmidrule(lr){6-7} \\cmidrule(lr){8-12}\n"
-        "Method & Bench. & $n$ "
+        "\\cmidrule(lr){4-5} \\cmidrule(lr){6-8} \\cmidrule(lr){9-13}\n"
+        "Method & Benchmark & $n$ "
         "& $\\rho$ & Red. "
-        "& $R^2$ test (BL/IS) & Sig. "
+        "& $R^2$ (BL/IS) & $d$ & $p$ "
         "& $T_{\\mathrm{canon}}$ & $T_{\\mathrm{eval}}$ & Ratio "
         "& OH & $S$ \\\\\n"
         "\\midrule\n"
@@ -383,14 +451,39 @@ def generate_table2(
                     f"& ${p_adj:.3f}${sig} \\\\"
                 )
 
+        # Add CPDT summary rows (one per benchmark, plus pooled "all")
+        rows.append("    \\midrule")
+        for cpdt_bench in benchmarks + ["all"]:
+            cpdt = _load_cpdt(results_dir, method, cpdt_bench)
+            if cpdt and "r2_test" in cpdt and "error" not in cpdt["r2_test"]:
+                cr = cpdt["r2_test"]
+                cpdt_label = (
+                    f"CPDT ({cpdt_bench})" if cpdt_bench != "all" else "\\textbf{CPDT (all)}"
+                )
+                n_p = cr["n_problems"]
+                w = cr["n_wins"]
+                t = cr["n_ties"]
+                lo = cr["n_losses"]
+                d_val = cr["cohens_d"]
+                p_val = cr["p_value_one_sided"]
+                wt_str = f"W{w}/T{t}/L{lo}"
+                rows.append(
+                    f"    {cpdt_label} & \\multicolumn{{2}}{{c}}{{{wt_str}}} "
+                    f"& $n$={n_p} "
+                    f"& ${d_val:+.2f}$ "
+                    f"& {_fmt_cpdt_p(p_val)} \\\\"
+                )
+
         method_label = method.upper()
         tex = (
             "\\begin{table}[t]\n"
             "\\centering\n"
             "\\small\n"
             f"\\caption{{Per-problem $R^2$ test comparison for {method_label}. "
-            f"Cohen's $d$: paired effect size. "
+            f"Cohen's $d$: per-problem paired effect size. "
             f"$p$: Holm-adjusted. "
+            f"Bottom rows: Cross-Problem Dominance Test (CPDT) — one-sided paired "
+            f"test across problems. W/T/L: wins/ties/losses. "
             f"$^{{*}}p<0.05$, $^{{**}}p<0.01$, $^{{***}}p<0.001$.}}\n"
             f"\\label{{tab:r2_per_problem_{method}}}\n"
             "\\begin{tabular}{@{}l rr r r r@{}}\n"
@@ -619,6 +712,33 @@ def generate_table_supplementary(
                     f"& {bl_t_f} & {is_t_f} & {oh_str} \\\\"
                 )
 
+        # CPDT summary rows
+        all_rows.append("    \\midrule")
+        for cpdt_bench in benchmarks + ["all"]:
+            cpdt = _load_cpdt(results_dir, method, cpdt_bench)
+            if cpdt and "r2_test" in cpdt and "error" not in cpdt["r2_test"]:
+                cr = cpdt["r2_test"]
+                cpdt_label = (
+                    f"CPDT ({cpdt_bench})" if cpdt_bench != "all" else "\\textbf{CPDT (all)}"
+                )
+                n_p = cr["n_problems"]
+                w, t_cnt, lo = cr["n_wins"], cr["n_ties"], cr["n_losses"]
+                d_val = cr["cohens_d"]
+                p_val = cr["p_value_one_sided"]
+                # CPDT for RF
+                cpdt_rf = cpdt.get("empirical_reduction_factor", {})
+                rf_d = cpdt_rf.get("cohens_d", 0.0) if isinstance(cpdt_rf, dict) else 0.0
+                rf_p = cpdt_rf.get("p_value_one_sided", 1.0) if isinstance(cpdt_rf, dict) else 1.0
+
+                all_rows.append(
+                    f"    {cpdt_label} "
+                    f"& \\multicolumn{{2}}{{c}}{{W{w}/T{t_cnt}/L{lo}}} "
+                    f"& \\multicolumn{{2}}{{c}}{{$n$={n_p}}} "
+                    f"& ${d_val:+.2f}$ & {_fmt_cpdt_p(p_val)} "
+                    f"& ${rf_d:+.1f}$ & {_fmt_cpdt_p(rf_p)} "
+                    f"& \\multicolumn{{3}}{{c}}{{}} \\\\"
+                )
+
         if not all_rows:
             continue
 
@@ -630,14 +750,12 @@ def generate_table_supplementary(
             f"\\caption{{Per-problem comparison of native DAG representation "
             f"(BL) versus \\IsalSR{{}} canonicalization (IS) for "
             f"{method_label}. "
-            f"Cohen's $d$: paired effect size with 95\\% bootstrap CI "
-            f"(10,000 resamples). "
-            f"$p$: Holm-adjusted ($^{{*}}p<0.05$, $^{{**}}p<0.01$, "
-            f"$^{{***}}p<0.001$). "
+            f"Cohen's $d$: per-problem paired effect size with 95\\% bootstrap CI. "
+            f"$p$: Holm-adjusted. "
+            f"Bottom rows: Cross-Problem Dominance Test (CPDT) — "
+            f"one-sided paired test treating each problem's mean as one observation "
+            f"($^{{*}}p<0.05$, $^{{**}}p<0.01$, $^{{***}}p<0.001$). "
             f"$\\rho$: empirical reduction factor. "
-            f"Red.: redundancy rate. "
-            f"$T$: mean wall-clock time (s). "
-            f"OH: canonicalization overhead. "
             f"\\textbf{{Bold}}: better of BL/IS. "
             f"\\underline{{Underline}}: worse of BL/IS.}}\n"
             f"\\label{{tab:supplementary_{method}}}\n"

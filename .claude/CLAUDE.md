@@ -398,6 +398,9 @@ These constraints MUST be enforced at all times. The `proposal-guard` agent chec
 2. **Every string modification must be followed by canonicalization.**
 3. **The O(k!) search space reduction is the paper's main claim.**
 4. **We do NOT pretend to be SR experts.** We are graph theory / combinatorics experts.
+5. **CPDT is the primary statistical significance metric for R² and reduction factor.**
+   Per-problem Holm-corrected tests are reported as supplementary detail; the narrative
+   and all headline claims must reference the Cross-Problem Dominance Test (pooled N=42).
 
 ---
 
@@ -483,18 +486,57 @@ Bingo overhead by k-range: k<5: 44%, k=5-14: 49%, k=15-31: 56%.
 
 ### Analysis Pipeline
 
-Run: `python -m experiments.models.analyze --results-dir <path> --methods udfs,bingo --benchmarks nguyen,feynman`
+Run: `python -m experiments.models.analyze --results-dir <path> --methods udfs,bingo --benchmarks benchmark`
 
 Outputs in `analysis/`:
-- `benchmark_summary_{method}_{benchmark}.csv` — per-metric aggregates
-- `cross_method_{benchmark}.json` — Friedman/Nemenyi across methods
-- `reduction_comparison_{benchmark}.json` — RF comparison
-- `computational_overhead_{method}_{benchmark}.json` — overhead analysis by problem and k-range
-- `three_axis_summary_{method}_{benchmark}.json` — executive summary per (method, benchmark)
+- `benchmark_summary_{method}_benchmark.csv` — per-metric aggregates
+- `cross_method_benchmark.json` — Friedman/Nemenyi across methods
+- `reduction_comparison_benchmark.json` — RF comparison
+- `computational_overhead_{method}_benchmark.json` — overhead analysis by problem and k-range
+- `three_axis_summary_{method}_benchmark.json` — executive summary per method
 - `three_axis_global.json` — grand summary for LaTeX tables
-- `global_summary.json` — legacy combined output
+- `cross_problem_dominance_{method}_benchmark.json` — **CPDT (primary stat. sig.)**
+- `global_summary.json` — combined output (includes CPDT)
 
-Results dir: `/media/mpascual/Sandisk2TB/research/isalsr/results/model_validation/`
+**Unified results dir**: `/media/mpascual/Sandisk2TB/research/isalsr/results/model_validation/real_benchmarks/wl_subtree_unified`
+(42 problems flattened into single `benchmark/` dir; created by `experiments/scripts/merge_results.py --flatten benchmark`)
+
+**Legacy multi-tier dir**: `wl_subtree_full/` (preserves nguyen/feynman/hard/cherrypicked subdirs)
+
+### Cross-Problem Dominance Test (CPDT) — Primary Statistical Significance (2026-04-28)
+
+**Origin**: Ezequiel Lopez-Rubio (PI) proposal.
+
+**Problem**: Per-problem paired tests (30 seeds, Holm-corrected) are underpowered for R²
+when most problems saturate near 1.0. Only 1-2/42 problems reach significance individually.
+
+**Solution**: Treat each problem as ONE paired observation. For problem P_i, compute
+δ_i = mean(R²_IsalSR) − mean(R²_baseline) across 30 seeds. Run one-sided paired test on
+{δ_1, …, δ_N}. Shapiro-Wilk → t-test or Wilcoxon.
+
+**Key property**: As N grows, if IsalSR consistently matches or beats baseline (δ_i ≥ 0),
+the p-value decreases monotonically. For N=42 pooled problems with all δ_i ≥ 0, the sign
+test alone gives p ≈ 2^{-42} ≈ 2.3×10^{-13}.
+
+**Results (N=42 problems, unified benchmark)**:
+
+| Metric | UDFS | Bingo |
+|--------|------|-------|
+| R² test p (one-sided) | **0.00018*** | **0.0013** |
+| R² test Cohen's d | 0.303 | 0.034 |
+| R² test W/T/L | 24/13/5 | 11/29/2 |
+| R² train p | 0.000003 | 0.00069 |
+| Reduction factor p | ≈ 0 | ≈ 0 |
+
+**CPDT is now the PRIMARY statistical significance metric for R² and reduction factor.**
+All tables and the forest plot use CPDT-derived p-values and Cohen's d.
+
+**Implementation**:
+- Schema: `CrossProblemDominanceResult` in `experiments/models/schemas.py`
+- Function: `compute_cross_problem_dominance()` in `experiments/models/analyzer/aggregation.py`
+- Pipeline: integrated in `experiments/models/analyze.py` (per-benchmark + pooled)
+- Figures: `experiments/figures/models/generate_tables.py` uses CPDT in Table 1 header,
+  CPDT footer rows in Table 2 and Table S; `generate_forest_plot.py` adds CPDT diamonds
 
 ## Hard-Tier Benchmark Suite (added 2026-04-13)
 

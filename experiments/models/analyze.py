@@ -248,6 +248,59 @@ def run_reduction_comparison(
 
 
 # ======================================================================
+# Cross-Problem Dominance Test (CPDT)
+# ======================================================================
+
+
+def run_cross_problem_dominance_test(
+    paired_stats_list: list[Any],
+    method: str,
+    benchmark: str,
+    output_dir: Path,
+) -> dict[str, Any]:
+    """Run CPDT for all relevant metrics for one (method, benchmark).
+
+    Saves analysis/cross_problem_dominance_{method}_{benchmark}.json.
+    """
+    from experiments.models.analyzer.aggregation import (
+        CPDT_METRIC_ALTERNATIVES,
+        compute_cross_problem_dominance,
+    )
+
+    results: dict[str, Any] = {}
+    for metric_name in CPDT_METRIC_ALTERNATIVES:
+        try:
+            cpdt = compute_cross_problem_dominance(
+                paired_stats_list,
+                metric_name,
+                method=method,
+                benchmark=benchmark,
+            )
+            results[metric_name] = cpdt.to_dict()
+            log.info(
+                "  CPDT %s: N=%d wins=%d ties=%d losses=%d p_1s=%.6f p_2s=%.6f d=%.4f",
+                metric_name,
+                cpdt.n_problems,
+                cpdt.n_wins,
+                cpdt.n_ties,
+                cpdt.n_losses,
+                cpdt.p_value_one_sided,
+                cpdt.p_value_two_sided,
+                cpdt.cohens_d,
+            )
+        except Exception as e:  # noqa: BLE001
+            results[metric_name] = {"error": str(e)}
+            log.warning("  CPDT %s failed: %s", metric_name, e)
+
+    out_path = output_dir / f"cross_problem_dominance_{method}_{benchmark}.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=2, default=str)
+    log.info("Saved CPDT: %s", out_path)
+    return results
+
+
+# ======================================================================
 # Three-axis computational overhead analysis
 # ======================================================================
 
@@ -412,6 +465,7 @@ def compute_three_axis_summary(
     benchmark_summaries: list[dict[str, Any]],
     reduction: dict[str, Any],
     output_dir: Path,
+    cpdt_results: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Combine overhead + benchmark summaries + reduction into a 3-axis summary."""
 
@@ -493,6 +547,9 @@ def compute_three_axis_summary(
         "solution_rate": solution_rate,
     }
 
+    if cpdt_results:
+        result["cross_problem_dominance"] = cpdt_results
+
     out_path = output_dir / f"three_axis_summary_{method}_{benchmark}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
@@ -526,6 +583,7 @@ def build_global_summary(
     all_cross_method: dict[str, dict[str, Any]],
     all_reduction: dict[str, dict[str, Any]],
     output_dir: Path,
+    all_cpdt: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """Build and save the global summary JSON."""
     from experiments.models.hardware_info import collect_hardware_info
@@ -540,6 +598,9 @@ def build_global_summary(
         "cross_method": all_cross_method,
         "reduction_comparison": all_reduction,
     }
+
+    if all_cpdt:
+        summary["cross_problem_dominance"] = all_cpdt
 
     # Extract key highlights
     highlights: dict[str, Any] = {}
@@ -587,6 +648,8 @@ def run_analysis(
     all_reduction: dict[str, dict[str, Any]] = {}
     all_overhead: dict[str, dict[str, Any]] = {}
     all_three_axis: dict[str, dict[str, Any]] = {}
+    all_cpdt: dict[str, dict[str, Any]] = {}
+    all_paired_stats: dict[str, list[Any]] = {}
 
     # Per-method per-benchmark analysis
     for method in methods:
@@ -605,6 +668,7 @@ def run_analysis(
             )
 
             if paired_stats:
+                all_paired_stats[key] = paired_stats
                 summaries = compute_and_save_benchmark_summaries(
                     paired_stats,
                     method,
@@ -613,6 +677,13 @@ def run_analysis(
                 )
                 all_benchmark_summaries[key] = summaries
                 log.info("  %d problems with paired stats", len(paired_stats))
+
+                # Cross-Problem Dominance Test (per benchmark)
+                log.info("  Computing CPDT for %s/%s...", method, benchmark)
+                cpdt = run_cross_problem_dominance_test(
+                    paired_stats, method, benchmark, analysis_dir
+                )
+                all_cpdt[key] = cpdt
             else:
                 log.warning("  No paired stats found for %s/%s", method, benchmark)
 
@@ -644,6 +715,18 @@ def run_analysis(
     else:
         log.info("Skipping cross-method analysis (need >= 2 methods, got %d)", len(methods))
 
+    # Pooled CPDT across all benchmarks per method
+    for method in methods:
+        pooled_ps: list[Any] = []
+        for benchmark in benchmarks:
+            key = f"{method}_{benchmark}"
+            if key in all_paired_stats:
+                pooled_ps.extend(all_paired_stats[key])
+        if pooled_ps:
+            log.info("=== Pooled CPDT: %s (N=%d problems) ===", method, len(pooled_ps))
+            cpdt_all = run_cross_problem_dominance_test(pooled_ps, method, "all", analysis_dir)
+            all_cpdt[f"{method}_all"] = cpdt_all
+
     # Three-axis summaries (per method per benchmark)
     for method in methods:
         for benchmark in benchmarks:
@@ -652,8 +735,15 @@ def run_analysis(
             overhead = all_overhead.get(key, {})
             summaries = all_benchmark_summaries.get(key, [])
             reduction = all_reduction.get(benchmark, {})
+            cpdt = all_cpdt.get(key)
             three_axis = compute_three_axis_summary(
-                method, benchmark, overhead, summaries, reduction, analysis_dir
+                method,
+                benchmark,
+                overhead,
+                summaries,
+                reduction,
+                analysis_dir,
+                cpdt_results=cpdt,
             )
             all_three_axis[key] = three_axis
 
@@ -670,6 +760,7 @@ def run_analysis(
         all_cross_method,
         all_reduction,
         analysis_dir,
+        all_cpdt=all_cpdt,
     )
 
     log.info("Analysis complete. Results in %s", analysis_dir)

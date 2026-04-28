@@ -389,3 +389,60 @@ BENCHMARK_SUMMARY_COLUMNS = [
     "solution_rate_baseline",
     "solution_rate_isalsr",
 ]
+
+
+# ======================================================================
+# Cross-Problem Dominance Test (CPDT)
+# ======================================================================
+
+
+@dataclass
+class CrossProblemDominanceResult:
+    """Result of a cross-problem dominance test.
+
+    Treats each problem as one paired observation (mean metric across seeds)
+    and runs a single paired test across all N problems. Tests whether
+    IsalSR systematically improves over baseline at the population level.
+
+    Reference: Ezequiel Lopez-Rubio proposal (2026-04-28).
+    """
+
+    method: str
+    benchmark: str  # specific benchmark or "all" for pooled
+    metric: str
+    alternative: str  # "greater" or "less"
+    n_problems: int
+    n_wins: int  # delta_i > tie_threshold
+    n_ties: int  # |delta_i| <= tie_threshold
+    n_losses: int  # delta_i < -tie_threshold
+    problem_names: list[str]
+    problem_deltas: list[float]
+    shapiro_wilk_p: float
+    normality_assumed: bool
+    test_used: str  # "t_one_sample" or "wilcoxon_signed_rank"
+    statistic: float
+    p_value_one_sided: float
+    p_value_two_sided: float
+    cohens_d: float
+    cohens_d_ci_lower: float
+    cohens_d_ci_upper: float
+    mean_delta: float
+    mean_delta_ci_lower: float
+    mean_delta_ci_upper: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> CrossProblemDominanceResult:
+        return cls(**d)
+
+    def save_json(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(self.to_dict(), f, indent=2, default=str)
+
+    @classmethod
+    def load_json(cls, path: Path) -> CrossProblemDominanceResult:
+        with open(path) as f:
+            return cls.from_dict(json.load(f))

@@ -33,6 +33,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger(__name__)
 
 _PROBLEM_LABELS = {
+    # Nguyen
     "nguyen_1": "N-1",
     "nguyen_2": "N-2",
     "nguyen_3": "N-3",
@@ -45,6 +46,7 @@ _PROBLEM_LABELS = {
     "nguyen_10": "N-10",
     "nguyen_11": "N-11",
     "nguyen_12": "N-12",
+    # Feynman
     "i.6.20a": "I.6.20a",
     "i.12.1": "I.12.1",
     "i.12.4": "I.12.4",
@@ -55,6 +57,28 @@ _PROBLEM_LABELS = {
     "i.48.20": "I.48.20",
     "i.10.7": "I.10.7",
     "ii.3.24": "II.3.24",
+    # Hard
+    "i.15.10": "I.15.10",
+    "i.30.3": "I.30.3",
+    "i.37.4": "I.37.4",
+    "ii.11.27": "II.11.27",
+    "iii.17.37": "III.17.37",
+    "keijzer_6": "Keij-6",
+    "korns_12": "Korns-12",
+    "pagie_1": "Pagie-1",
+    "vladislavleva_2": "Vlad-2",
+    "vladislavleva_4": "Vlad-4",
+    # Cherrypicked
+    "i.16.6": "I.16.6",
+    "i.29.16": "I.29.16",
+    "i.50.26": "I.50.26",
+    "ii.11.28": "II.11.28",
+    "iii.14.14": "III.14.14",
+    "keijzer_11": "Keij-11",
+    "liv_14": "Liv-14",
+    "r2": "R2",
+    "r3": "R3",
+    "vlad_7": "Vlad-7",
 }
 
 METHOD_COLORS = {
@@ -130,22 +154,39 @@ def generate_forest_plot(
         log.warning("No data for forest plot")
         return
 
+    # Load CPDT pooled results per method
+    import json
+
+    cpdt_summaries: list[tuple[str, float, float, float, str]] = []
+    for method in methods:
+        cpdt_path = results_dir / "analysis" / f"cross_problem_dominance_{method}_all.json"
+        if cpdt_path.exists():
+            with open(cpdt_path) as f:
+                cpdt_data = json.load(f)
+            r2_cpdt = cpdt_data.get("r2_test", {})
+            if "error" not in r2_cpdt:
+                d_val = r2_cpdt.get("cohens_d", 0.0)
+                ci_lo_val = r2_cpdt.get("cohens_d_ci_lower", 0.0)
+                ci_hi_val = r2_cpdt.get("cohens_d_ci_upper", 0.0)
+                p_val = r2_cpdt.get("p_value_one_sided", 1.0)
+                p_str = f"p={p_val:.4f}" if p_val >= 0.001 else "p<0.001"
+                cpdt_summaries.append((method, d_val, ci_lo_val, ci_hi_val, p_str))
+
     # Sort by Cohen's d descending
     rows.sort(key=lambda r: r[3], reverse=True)
 
-    n = len(rows)
-    fig_height = max(3.5, 0.28 * n + 1.0)
+    n_per_problem = len(rows)
+    n_cpdt = len(cpdt_summaries)
+    n_total = n_per_problem + n_cpdt + (1 if n_cpdt > 0 else 0)
+    fig_height = max(3.5, 0.28 * n_total + 1.0)
     fig, ax = plt.subplots(figsize=(3.5, fig_height))
 
-    y_positions = np.arange(n)
-
+    # Per-problem rows (top section)
     for i, (method, bench, label, d, ci_lo, ci_hi) in enumerate(rows):
         color = METHOD_COLORS.get(method, "black")
-        y = n - 1 - i  # top-to-bottom
+        y = n_total - 1 - i
 
-        # CI horizontal line
         ax.plot([ci_lo, ci_hi], [y, y], color=color, linewidth=1.0, alpha=0.6)
-        # Point estimate
         ax.plot(
             d,
             y,
@@ -157,6 +198,36 @@ def generate_forest_plot(
             zorder=3,
         )
 
+    # CPDT summary diamonds (bottom section, below a separator)
+    if n_cpdt > 0:
+        separator_y = n_total - n_per_problem - 1
+        ax.axhline(y=separator_y + 0.5, color="black", linewidth=0.8, linestyle="-", alpha=0.4)
+
+        for j, (method, d_val, ci_lo_val, ci_hi_val, p_str) in enumerate(cpdt_summaries):
+            color = METHOD_COLORS.get(method, "black")
+            y = separator_y - j
+
+            ax.plot([ci_lo_val, ci_hi_val], [y, y], color=color, linewidth=1.5, alpha=0.8)
+            ax.plot(
+                d_val,
+                y,
+                "D",
+                color=color,
+                markersize=7,
+                markeredgecolor="black",
+                markeredgewidth=0.5,
+                zorder=4,
+            )
+            ax.annotate(
+                p_str,
+                (d_val, y),
+                textcoords="offset points",
+                xytext=(8, 0),
+                fontsize=6,
+                color=color,
+                va="center",
+            )
+
     # Zero reference line
     ax.axvline(x=0, color="black", linestyle="--", linewidth=0.7, alpha=0.5)
 
@@ -166,14 +237,19 @@ def generate_forest_plot(
         ax.axvline(x=-threshold, color="0.7", linestyle=":", linewidth=0.5)
 
     # Y-axis labels
-    y_labels = []
+    y_labels_list: list[str] = []
     for i, (method, bench, label, d, ci_lo, ci_hi) in enumerate(rows):
-        y_labels.append(f"{label} ({method.upper()})")
-    ax.set_yticks(np.arange(n))
-    ax.set_yticklabels(reversed(y_labels), fontsize=7)
+        y_labels_list.append(f"{label} ({method.upper()})")
+    if n_cpdt > 0:
+        y_labels_list.append("")
+        for method, _, _, _, _ in cpdt_summaries:
+            y_labels_list.append(f"CPDT pooled ({method.upper()})")
+
+    ax.set_yticks(np.arange(n_total))
+    ax.set_yticklabels(reversed(y_labels_list), fontsize=7)
     ax.set_xlabel("Cohen's $d$ ($R^2$ test, IsalSR $-$ baseline)", fontsize=9)
     ax.set_title("Effect size per problem", fontsize=10, fontweight="bold", loc="left")
-    ax.set_ylim(-0.5, n - 0.5)
+    ax.set_ylim(-0.5, n_total - 0.5)
 
     # Legend for methods
     for method in methods:
@@ -185,7 +261,8 @@ def generate_forest_plot(
             markersize=5,
             label=method.upper(),
         )
-    ax.legend(fontsize=8, loc="lower right", framealpha=0.9)
+    ax.plot([], [], "D", color="gray", markersize=7, markeredgecolor="black", label="CPDT pooled")
+    ax.legend(fontsize=7, loc="lower right", framealpha=0.9)
 
     ax.grid(axis="x", alpha=0.25, linewidth=0.5)
     ax.set_axisbelow(True)
@@ -199,13 +276,11 @@ def generate_forest_plot(
     caption = (
         "Forest plot of Cohen's $d$ (paired) for $R^2$ test on each "
         "benchmark problem. Positive $d$: \\IsalSR{} improves over the "
-        "native-DAG baseline. Horizontal bars: 95\\% bootstrap confidence "
-        "intervals (10,000 resamples). Vertical dashed lines mark $d=0$ "
-        "(no effect) and Cohen's benchmarks for small (0.2), medium (0.5), "
-        "and large (0.8) effects. Problems where both variants achieve "
-        "$R^2 = 1.0$ on all seeds yield $d = 0$ (ceiling effect); "
-        "the concentrated large effects on hard problems (I.12.4, I.48.20) "
-        "drive the aggregate improvement."
+        "native-DAG baseline. Circles: per-problem effects with 95\\% "
+        "bootstrap CIs (10,000 resamples). Diamonds (bottom): Cross-Problem "
+        "Dominance Test (CPDT) pooled across all 42 problems — each problem's "
+        "mean $R^2$ is one paired observation. CPDT one-sided $p$-values "
+        "annotated. Vertical dashed lines mark $d=0$ and Cohen's benchmarks."
     )
     (output_dir / "forest_plot_cohens_d.caption.txt").write_text(caption)
     log.info("Saved caption")

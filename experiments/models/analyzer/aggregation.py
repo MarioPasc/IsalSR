@@ -27,6 +27,7 @@ from experiments.models.analyzer.statistical_tests import (
 from experiments.models.schemas import (
     AggregateRow,
     BenchmarkSummaryRow,
+    CrossProblemDominanceResult,
     PairedStats,
     PairedStatsMetric,
     RunLog,
@@ -392,4 +393,152 @@ def benchmark_summary(
         mean_reduction_factor=float(np.mean(reduction_factors)) if reduction_factors else 0.0,
         solution_rate_baseline=sol_baseline,
         solution_rate_isalsr=sol_isalsr,
+    )
+
+
+# ======================================================================
+# Cross-Problem Dominance Test (CPDT)
+# ======================================================================
+
+CPDT_METRIC_ALTERNATIVES: dict[str, str] = {
+    "r2_test": "greater",
+    "r2_train": "greater",
+    "nrmse_test": "less",
+    "empirical_reduction_factor": "greater",
+    "redundancy_rate": "greater",
+}
+
+_CPDT_TIE_THRESHOLD = 1e-6
+
+
+def compute_cross_problem_dominance(
+    paired_stats_list: list[PairedStats],
+    metric_name: str,
+    method: str,
+    benchmark: str,
+    alpha: float = 0.05,
+    alternative: str | None = None,
+    bootstrap_seed: int = 42,
+) -> CrossProblemDominanceResult:
+    """Cross-problem dominance test: one paired observation per problem.
+
+    For each problem P_i, computes delta_i = mean(isalsr) - mean(baseline)
+    across seeds, then tests H_0: E[delta] <= 0 (or >= 0 for "less") via
+    Shapiro-Wilk -> one-sample t-test or Wilcoxon signed-rank.
+
+    Args:
+        paired_stats_list: PairedStats for each problem (already computed).
+        metric_name: Which metric to test.
+        method: Method name (for labeling).
+        benchmark: Benchmark name or "all" for pooled.
+        alpha: Significance level for normality test.
+        alternative: "greater" or "less". If None, uses CPDT_METRIC_ALTERNATIVES.
+        bootstrap_seed: Seed for bootstrap CI.
+
+    Returns:
+        CrossProblemDominanceResult.
+    """
+    from scipy import stats as sp_stats
+
+    if alternative is None:
+        alternative = CPDT_METRIC_ALTERNATIVES.get(metric_name, "greater")
+
+    names: list[str] = []
+    deltas: list[float] = []
+
+    for ps in paired_stats_list:
+        m = ps.metrics.get(metric_name)
+        if m is None:
+            continue
+        if not (np.isfinite(m.isalsr_mean) and np.isfinite(m.baseline_mean)):
+            continue
+        names.append(ps.problem)
+        deltas.append(m.isalsr_mean - m.baseline_mean)
+
+    n = len(deltas)
+    if n < 3:
+        return CrossProblemDominanceResult(
+            method=method,
+            benchmark=benchmark,
+            metric=metric_name,
+            alternative=alternative,
+            n_problems=n,
+            n_wins=0,
+            n_ties=n,
+            n_losses=0,
+            problem_names=names,
+            problem_deltas=deltas,
+            shapiro_wilk_p=float("nan"),
+            normality_assumed=False,
+            test_used="insufficient_data",
+            statistic=float("nan"),
+            p_value_one_sided=float("nan"),
+            p_value_two_sided=float("nan"),
+            cohens_d=float("nan"),
+            cohens_d_ci_lower=float("nan"),
+            cohens_d_ci_upper=float("nan"),
+            mean_delta=float("nan"),
+            mean_delta_ci_lower=float("nan"),
+            mean_delta_ci_upper=float("nan"),
+        )
+
+    d_arr = np.array(deltas)
+
+    n_wins = int(np.sum(d_arr > _CPDT_TIE_THRESHOLD))
+    n_losses = int(np.sum(d_arr < -_CPDT_TIE_THRESHOLD))
+    n_ties = n - n_wins - n_losses
+
+    # Normality test
+    _sw_stat, sw_p = shapiro_wilk(d_arr)
+    normal = sw_p > alpha
+
+    # Statistical test
+    if np.all(d_arr == 0):
+        stat = 0.0
+        p_one = 1.0
+        p_two = 1.0
+        test_used = "all_zeros"
+    elif normal:
+        test_used = "t_one_sample"
+        res_one = sp_stats.ttest_1samp(d_arr, 0.0, alternative=alternative)
+        res_two = sp_stats.ttest_1samp(d_arr, 0.0, alternative="two-sided")
+        stat = float(res_one.statistic)
+        p_one = float(res_one.pvalue)
+        p_two = float(res_two.pvalue)
+    else:
+        test_used = "wilcoxon_signed_rank"
+        res_one = sp_stats.wilcoxon(d_arr, alternative=alternative)
+        res_two = sp_stats.wilcoxon(d_arr, alternative="two-sided")
+        stat = float(res_one.statistic)
+        p_one = float(res_one.pvalue)
+        p_two = float(res_two.pvalue)
+
+    # Effect size
+    d_effect = cohens_d_paired(d_arr)
+    d_ci_lo, d_ci_hi = cohens_d_ci_bootstrap(d_arr, seed=bootstrap_seed)
+    mean_d, ci_lo, ci_hi = mean_diff_ci(d_arr)
+
+    return CrossProblemDominanceResult(
+        method=method,
+        benchmark=benchmark,
+        metric=metric_name,
+        alternative=alternative,
+        n_problems=n,
+        n_wins=n_wins,
+        n_ties=n_ties,
+        n_losses=n_losses,
+        problem_names=names,
+        problem_deltas=deltas,
+        shapiro_wilk_p=sw_p,
+        normality_assumed=normal,
+        test_used=test_used,
+        statistic=stat,
+        p_value_one_sided=p_one,
+        p_value_two_sided=p_two,
+        cohens_d=d_effect,
+        cohens_d_ci_lower=d_ci_lo,
+        cohens_d_ci_upper=d_ci_hi,
+        mean_delta=mean_d,
+        mean_delta_ci_lower=ci_lo,
+        mean_delta_ci_upper=ci_hi,
     )
