@@ -155,6 +155,10 @@ class IsalSREvaluation(Evaluation):
         self.snapshots: list[BingoTrajectorySnapshot] = []
         # Dense per-generation convergence data (all individuals' fitness).
         self.convergence_data: list[tuple[int, float, int, np.ndarray]] = []
+        # Per-generation count of penalised-in-pool duplicates
+        # (age >= _DUPLICATE_AGE_PENALTY).  Measures effective-population
+        # shortfall: N_effective = len(population) - n_penalised_per_gen[g].
+        self.n_penalised_per_gen: list[tuple[int, int, int]] = []
         # Set after build_bingo_pipeline returns
         self._fitness_counter: Any = None
         # Parent-ID registry for VarAnd clone detection (fix 2026-04-01).
@@ -184,7 +188,12 @@ class IsalSREvaluation(Evaluation):
         self.dedup.id_to_canonical = new_id_map
 
     def _capture_convergence(self, generation: int, population: Any) -> None:
-        """Record every individual's fitness for convergence analysis."""
+        """Record every individual's fitness for convergence analysis.
+
+        Also counts penalised-in-pool duplicates (age >= _DUPLICATE_AGE_PENALTY)
+        to measure the effective-population shortfall introduced by the
+        "mark +inf, age=10^7" dedup strategy (see TECHNICAL_REPORT §2.8).
+        """
         n_evals = self._fitness_counter.eval_count if self._fitness_counter is not None else 0
         fitness_arr = np.array(
             [
@@ -193,9 +202,13 @@ class IsalSREvaluation(Evaluation):
             ],
             dtype=np.float64,
         )
+        n_penalised = sum(
+            1 for indv in population if getattr(indv, "genetic_age", 0) >= _DUPLICATE_AGE_PENALTY
+        )
         self.convergence_data.append(
             (generation, time.perf_counter() - self._t0, n_evals, fitness_arr)
         )
+        self.n_penalised_per_gen.append((generation, n_penalised, len(population)))
 
     def __call__(self, population: Any) -> None:
         # Detect the parent call: all individuals already evaluated AND
