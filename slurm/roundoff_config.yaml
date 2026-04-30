@@ -1,0 +1,91 @@
+# IsalSR Roundoff Experiments for Picasso HPC
+# =============================================
+#
+# Runs UDFS + Bingo (baseline + isalsr) on the 8 roundoff problems defined
+# in benchmarks/datasets/roundoff.py (4 Feynman + 4 GP-classic/DSO).
+# These 8 problems bring the total benchmark cohort from 42 to 50 (N=50).
+#
+# References:
+#   docs/md_files/changes/roundoff_problem_selection.md (2026-04-30)
+#   docs/md_files/changes/candidate_problem_screening.md (2026-04-20)
+#   experiments/configs/{udfs,bingo}_roundoff.yaml
+#
+# Array sizing (per group): 8 problems * 30 seeds = 240 tasks.
+# Total: 4 groups * 240 = 960 tasks.
+# Time budget: 12h algorithm (max_time=43200) + 3-5h SLURM buffer.
+# This matches existing Nguyen/Feynman/hard/cherrypicked production.
+
+# Paths (Picasso filesystem layout)
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/models_roundoff
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu
+account: tic_163_uma
+
+experiments:
+  # =========================================================
+  # UDFS on roundoff (8 problems x 30 seeds = 240 tasks/group)
+  # =========================================================
+  udfs_roundoff_baseline:
+    enabled: true
+    method: udfs
+    benchmark: roundoff
+    variant: baseline
+    config: experiments/configs/udfs_roundoff.yaml
+    n_seeds: 30
+    n_problems: 8
+    time_limit: "15:00:00"    # 12h algorithm + 3h buffer
+    cpus: 1
+    mem_gb: 8
+
+  udfs_roundoff_isalsr:
+    enabled: true
+    method: udfs
+    benchmark: roundoff
+    variant: isalsr
+    config: experiments/configs/udfs_roundoff.yaml
+    n_seeds: 30
+    n_problems: 8
+    time_limit: "17:00:00"    # 12h algorithm + 5h canon overhead buffer
+    cpus: 1
+    mem_gb: 8
+
+  # =========================================================
+  # Bingo on roundoff (8 problems x 30 seeds = 240 tasks/group)
+  # =========================================================
+  bingo_roundoff_baseline:
+    enabled: true
+    method: bingo
+    benchmark: roundoff
+    variant: baseline
+    config: experiments/configs/bingo_roundoff.yaml
+    n_seeds: 30
+    n_problems: 8
+    time_limit: "15:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  bingo_roundoff_isalsr:
+    enabled: true
+    method: bingo
+    benchmark: roundoff
+    variant: isalsr
+    config: experiments/configs/bingo_roundoff.yaml
+    n_seeds: 30
+    n_problems: 8
+    time_limit: "17:00:00"
+    cpus: 1
+    mem_gb: 128             # heap fragmentation on hard problems + malloc_trim
+
+  # =========================================================
+  # Analysis (runs after ALL roundoff experiments complete)
+  # =========================================================
+  roundoff_analyze:
+    enabled: true
+    methods: "udfs,bingo"
+    benchmarks: "roundoff"
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 16

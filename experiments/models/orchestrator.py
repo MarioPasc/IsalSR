@@ -35,6 +35,8 @@ from benchmarks.datasets.hard import HARD_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.hard import generate_data as hard_generate_data  # noqa: E402
 from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.nguyen import generate_data as nguyen_generate_data  # noqa: E402
+from benchmarks.datasets.roundoff import ROUNDOFF_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.roundoff import generate_data as roundoff_generate_data  # noqa: E402
 from experiments.models.analyzer.aggregation import (  # noqa: E402
     aggregate_all_metrics,
     apply_holm_correction,
@@ -66,6 +68,7 @@ _BENCHMARK_REGISTRY: dict[str, tuple[list[dict[str, Any]], Any]] = {
     "feynman": (FEYNMAN_BENCHMARKS, feynman_generate_data),
     "hard": (HARD_BENCHMARKS, hard_generate_data),
     "cherrypicked": (CHERRYPICKED_BENCHMARKS, cherrypicked_generate_data),
+    "roundoff": (ROUNDOFF_BENCHMARKS, roundoff_generate_data),
 }
 
 
@@ -141,6 +144,15 @@ def _generate_benchmark_data(
         n_samples = train_size + test_size
         train_ratio = train_size / n_samples
         return cherrypicked_generate_data(
+            bench,
+            n_samples=n_samples,
+            train_ratio=train_ratio,
+            seed=seed,
+        )
+    elif bench_name == "roundoff":
+        n_samples = train_size + test_size
+        train_ratio = train_size / n_samples
+        return roundoff_generate_data(
             bench,
             n_samples=n_samples,
             train_ratio=train_ratio,

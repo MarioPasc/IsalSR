@@ -426,6 +426,7 @@ These constraints MUST be enforced at all times. The `proposal-guard` agent chec
 - @docs/md_files/changes/bottleneck_type_analysis.md -- Bottleneck-type analysis: when does IsalSR help? (2026-04-19)
 - @docs/md_files/changes/hard_problem_selection_rationale.md -- Why we chose the 10 hard problems (SRBench, McDermott, screening)
 - @docs/md_files/changes/candidate_problem_screening.md -- Screening 8 SR benchmark suites for IsalSR-compatible candidates (2026-04-20)
+- @docs/md_files/changes/roundoff_problem_selection.md -- 8 problems to round from 42 to N=50 (2026-04-30)
 - Save every output in `/media/mpascual/Sandisk2TB/research/isalsr`
 
 ## arXiv Search Space Experiment: Controlled Permutation Analysis
@@ -656,14 +657,15 @@ favorable problems.
 
 **Source**: `docs/md_files/changes/candidate_problem_screening.md` (2026-04-20)
 
-### 42-problem, 4-tier benchmark
+### 50-problem, 5-tier benchmark
 
 | Tier | Source file | n | Difficulty | Suite key |
 |------|-------------|---|------------|-----------|
 | Nguyen | `benchmarks/datasets/nguyen.py` | 12 | Easy–Medium | `nguyen` |
 | Feynman | `benchmarks/datasets/feynman.py` | 10 | Medium | `feynman` |
 | Hard | `benchmarks/datasets/hard.py` | 10 | Hard | `hard` |
-| **Cherrypicked** | `benchmarks/datasets/cherrypicked.py` | **10** | **Predicted IsalSR advantage** | `cherrypicked` |
+| Cherrypicked | `benchmarks/datasets/cherrypicked.py` | 10 | Predicted IsalSR advantage | `cherrypicked` |
+| **Roundoff** | `benchmarks/datasets/roundoff.py` | **8** | **Portfolio completion (N=50)** | `roundoff` |
 
 ### Cherrypicked suite (10 problems)
 
@@ -708,3 +710,47 @@ problem set and output folder (`models_cherrypicked`) change.
 | `bash slurm/cherrypicked_launch.sh --experiment udfs_cherrypicked_baseline` | Single group |
 
 Resources per task: identical to `models_hard`.
+
+## Roundoff Benchmark Suite (added 2026-04-30)
+
+**Why**: Bring the total benchmark cohort from 42 to N=50. Fills gaps in
+DSO-Livermore (only Liv-14), R-rational (R2/R3 but not R1), Pagie (only
+Pagie-1), and adds log-heavy and L2-norm structures.
+
+**Source**: `docs/md_files/changes/roundoff_problem_selection.md` (2026-04-30)
+
+### Roundoff suite (8 problems)
+
+| Problem | k | n_vars | Source | Sampling |
+|---|---|---|---|---|
+| III.10.19 (magnetic moment × L2-norm) | 7 | 4 | AI Feynman | uniform 1000/250 |
+| II.11.3 (driven oscillator) | 6 | 5 | AI Feynman | uniform 1000/250 |
+| I.13.12 (gravitational PE) | 6 | 5 | AI Feynman | uniform 1000/250 |
+| I.44.4 (isothermal work) | 5 | 5 | AI Feynman | uniform 1000/250 |
+| R1 (rational cubic) | 7 | 1 | DSO/Koza | uniform 1000/250 |
+| Pagie-2 (3D Pagie) | 10 | 3 | Pagie & Hogeweg | uniform 1000/250 |
+| Liv-4 (three-log sum) | 8 | 1 | DSO-Livermore | uniform 1000/250 |
+| Liv-19 (log-of-polynomial) | 9 | 1 | DSO-Livermore | uniform 1000/250 |
+
+k-range: [5, 10]. n_vars range: [1, 5]. All uniform sampling, 1000/250.
+
+### Key files
+
+| File | Role |
+|---|---|
+| `benchmarks/datasets/roundoff.py` | 8 problem definitions |
+| `experiments/configs/bingo_roundoff.yaml` | Bingo config |
+| `experiments/configs/udfs_roundoff.yaml` | UDFS config |
+| `slurm/roundoff_config.yaml` | SLURM resource config |
+| `slurm/roundoff_launch.sh` | Phased launcher (UDFS → Bingo → Analysis) |
+| `tests/unit/test_roundoff_benchmarks.py` | 48 unit tests |
+
+### SLURM launchers
+
+| Command | Effect |
+|---------|--------|
+| `bash slurm/roundoff_launch.sh` | All 4 groups (960 tasks total) |
+| `bash slurm/roundoff_launch.sh --dry-run` | Preview sbatch commands |
+| `bash slurm/roundoff_launch.sh --experiment udfs_roundoff_baseline` | Single group |
+
+Resources per task: identical to `models_hard`/`models_cherrypicked`.

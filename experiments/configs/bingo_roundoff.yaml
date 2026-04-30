@@ -1,0 +1,39 @@
+# Bingo experiment on roundoff benchmarks (8 problems)
+#
+# References:
+#   docs/md_files/changes/roundoff_problem_selection.md (2026-04-30)
+#   benchmarks/datasets/roundoff.py
+#
+# Operator set: identical to bingo_hard.yaml (sqrt, pow included).
+# All Bingo hyperparameters match production Nguyen/Feynman/hard/cherrypicked exactly.
+
+experiment:
+  name: bingo_roundoff
+  method: bingo
+  n_seeds: 30
+
+benchmarks:
+  roundoff:
+    problems: all
+    train_size: 1000
+    test_size: 250
+
+bingo:
+  population_size: 500
+  stack_size: 32
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  max_generations: 100000
+  max_time: 43200       # 12h algorithm budget (standard).
+  fitness_metric: "lm"
+  convergence_check_frequency: 50
+  snapshot_frequency: 50
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

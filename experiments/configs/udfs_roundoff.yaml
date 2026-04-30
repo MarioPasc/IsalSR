@@ -1,0 +1,38 @@
+# UDFS experiment on roundoff benchmarks (8 problems)
+#
+# References:
+#   docs/md_files/changes/roundoff_problem_selection.md (2026-04-30)
+#   benchmarks/datasets/roundoff.py
+#
+# All UDFS hyperparameters match production Nguyen/Feynman/hard/cherrypicked exactly.
+# processes: 1 is REQUIRED — UDFS spawn-mode workers bypass the IsalSR monkeypatch.
+
+experiment:
+  name: udfs_roundoff
+  method: udfs
+  n_seeds: 30
+
+benchmarks:
+  roundoff:
+    problems: all
+    train_size: 1000
+    test_size: 250
+
+udfs:
+  n_calc_nodes: 5
+  max_orders: 200000
+  max_time: 43200       # 12h algorithm budget (standard).
+  processes: 1
+  mode: hierarchical
+  k: 2
+  stop_thresh: 1.0e-10
+  use_tan: false
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log", "sqrt"]
+  snapshot_frequency: 1000
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results
