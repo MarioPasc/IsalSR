@@ -211,7 +211,7 @@ def generate_reduction_factor_figure(
     group_width = width
 
     fig_width = max(7.0, n_total * 0.35 + len(grouped) * gap_between_groups)
-    fig, ax = plt.subplots(figsize=(fig_width, 3.8))
+    fig, ax = plt.subplots(figsize=(fig_width, 4.6))
 
     tick_positions: list[float] = []
     tick_labels: list[str] = []
@@ -280,8 +280,8 @@ def generate_reduction_factor_figure(
     ax.axhline(y=1.0, color="black", linestyle="--", linewidth=0.8, alpha=0.6, zorder=0)
 
     ax.set_xticks(tick_positions)
-    ax.set_xticklabels(tick_labels, rotation=90, ha="center", fontsize=6)
-    ax.set_ylabel("Reduction factor $\\rho$", fontsize=9)
+    ax.set_xticklabels(tick_labels, rotation=90, ha="center", fontsize=12)
+    ax.set_ylabel("Reduction factor $\\rho$", fontsize=14)
     ax.grid(axis="y", alpha=0.3, linewidth=0.5)
     ax.set_axisbelow(True)
 
@@ -293,7 +293,7 @@ def generate_reduction_factor_figure(
     ax.set_ylim(0.95, y_max * 1.05)
     ax.yaxis.set_major_locator(plt.MultipleLocator(0.1))
     ax.yaxis.set_minor_locator(plt.MultipleLocator(0.05))
-    ax.tick_params(axis="y", labelsize=7)
+    ax.tick_params(axis="y", labelsize=12)
 
     for g_start, g_end, g_name in group_centers:
         g_mid = (g_start + g_end) / 2
@@ -303,7 +303,7 @@ def generate_reduction_factor_figure(
             g_name,
             ha="center",
             va="bottom",
-            fontsize=6,
+            fontsize=11,
             fontweight="bold",
             transform=ax.get_xaxis_transform(),
         )
@@ -320,7 +320,7 @@ def generate_reduction_factor_figure(
             alpha=0.65,
             label=style["label"],
         )
-    ax.legend(fontsize=8, loc="upper right", framealpha=0.9)
+    ax.legend(fontsize=13, loc="lower right", framealpha=0.9)
 
     if tick_positions:
         margin = (n_methods * width + 0.08) * 0.6
