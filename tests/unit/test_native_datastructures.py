@@ -539,13 +539,17 @@ class TestInvariant8BinaryOpOperandOrder:
 
 
 class TestInvariant9NormalizeConstCreation:
-    """normalize_const_creation() moves all CONST creation edges to node 0.
+    """normalize_const_creation() repairs CONST nodes that have NO in-edge.
 
-    Iterates const_nodes in sorted order (Invariant 9).
+    Changed 2026-07-27 (T15): the method used to relocate every CONST in-edge onto
+    node 0, which dropped edges, broke completeness and could change the value of
+    the expression. It now only supplies a creation edge to orphan CONST nodes,
+    iterating const_nodes in ascending order (Invariant 9). Both engines must
+    agree on the result either way.
     """
 
-    def test_const_creation_edge_moved_to_node0(self) -> None:
-        """CONST edge created from node 1 (y) is moved to node 0 (x) after normalization."""
+    def test_existing_const_creation_edge_is_preserved(self) -> None:
+        """A CONST created from node 1 (y) keeps that edge; it is not moved to node 0."""
         py = LabeledDAG(10)
         cpp = NativeLabeledDAG(10)
 
@@ -572,17 +576,41 @@ class TestInvariant9NormalizeConstCreation:
         py_norm = py.normalize_const_creation()
         cpp_norm = cpp.normalize_const_creation()
 
-        # In the normalized DAG, CONST in-neighbor must be 0 (x), not 1 (y).
-        py_const_in = py_norm.in_neighbors(2)
-        cpp_const_in = cpp_norm.in_neighbors(2)
+        # The CONST already had an in-edge, so the repair is a no-op: still from y.
+        py_const_in = list(py_norm.in_neighbors(2))
+        cpp_const_in = list(cpp_norm.in_neighbors(2))
 
-        assert 0 in py_const_in, f"Expected node 0 in py in_neighbors(2), got {py_const_in}"
-        assert 1 not in py_const_in
-        assert 0 in cpp_const_in, f"Expected node 0 in cpp in_neighbors(2), got {cpp_const_in}"
-        assert 1 not in cpp_const_in
+        assert py_const_in == [1], f"py: CONST in_neighbors={py_const_in}"
+        assert cpp_const_in == [1], f"cpp: CONST in_neighbors={cpp_const_in}"
 
-    def test_multiple_const_nodes_normalized_sorted(self) -> None:
-        """Multiple CONST nodes: creation edges added to node 0 in sorted order."""
+        _compare_dags(py_norm, cpp_norm)
+
+    def test_orphan_const_gets_creation_edge_from_x1(self) -> None:
+        """A CONST with in-degree 0 is anchored to node 0, identically in both engines."""
+        py = LabeledDAG(10)
+        cpp = NativeLabeledDAG(10)
+
+        py.add_node(NodeType.VAR, var_index=0)  # 0 = x
+        py.add_node(NodeType.CONST, const_value=3.14)  # 1 = k (orphan leaf)
+        py.add_node(NodeType.ADD)  # 2 = add
+        cpp.add_node(NODE_TYPE_INT[NodeType.VAR], 0, float("nan"))
+        cpp.add_node(NODE_TYPE_INT[NodeType.CONST], -1, 3.14)
+        cpp.add_node(NODE_TYPE_INT[NodeType.ADD], -1, float("nan"))
+
+        for dag in (py, cpp):
+            dag.add_edge(0, 2)  # x -> ADD
+            dag.add_edge(1, 2)  # CONST -> ADD
+
+        py_norm = py.normalize_const_creation()
+        cpp_norm = cpp.normalize_const_creation()
+
+        assert list(py_norm.in_neighbors(1)) == [0]
+        assert list(cpp_norm.in_neighbors(1)) == [0]
+
+        _compare_dags(py_norm, cpp_norm)
+
+    def test_multiple_const_nodes_keep_their_sources(self) -> None:
+        """Multiple CONST nodes that already have in-edges are all left untouched."""
         py = LabeledDAG(10)
         cpp = NativeLabeledDAG(10)
 
@@ -615,12 +643,12 @@ class TestInvariant9NormalizeConstCreation:
         py_norm = py.normalize_const_creation()
         cpp_norm = cpp.normalize_const_creation()
 
-        # Both CONSTs now have node 0 as their only in-neighbor.
+        # Neither CONST was an orphan, so both keep their original source (node 1).
         for c in [3, 4]:
-            py_in = py_norm.in_neighbors(c)
-            cpp_in = cpp_norm.in_neighbors(c)
-            assert list(py_in) == [0], f"py: CONST {c} in_neighbors={py_in}"
-            assert list(cpp_in) == [0], f"cpp: CONST {c} in_neighbors={cpp_in}"
+            py_in = list(py_norm.in_neighbors(c))
+            cpp_in = list(cpp_norm.in_neighbors(c))
+            assert py_in == [1], f"py: CONST {c} in_neighbors={py_in}"
+            assert cpp_in == [1], f"cpp: CONST {c} in_neighbors={cpp_in}"
 
         # Full state must agree.
         _compare_dags(py_norm, cpp_norm)

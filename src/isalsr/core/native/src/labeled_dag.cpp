@@ -317,44 +317,62 @@ bool NativeLabeledDAG::has_const_nodes() const {
 // ---------------------------------------------------------------------------
 // normalize_const_creation (Invariant 9)
 //
-// Algorithm mirrors labeled_dag.py:591-644 exactly:
+// Minimal repair: give every CONST that has NO in-edge a single creation edge
+// from the lowest-indexed variable that does not close a cycle.  Every existing
+// edge is preserved verbatim.  Mirrors labeled_dag.py exactly.
+//
 //   1. Copy all nodes (labels, var_index, const_value).
-//   2. For each non-CONST target, re-add its in-edges in input_order_ order
+//   2. Re-add EVERY in-edge in input_order_ order, for every target
 //      (preserves operand order — Invariant 8 / B9).
-//   3. Add edge node_0 → c for each c in sorted(const_nodes).
+//   3. For each CONST c with in_degree(c) == 0, in ascending node order, add
+//      x_i → c for the first variable x_i whose edge add_edge accepts.
+//
+// On any DAG satisfying the Round-Trip Fidelity reachability hypothesis every
+// CONST already has an in-edge, so this is the identity — that is what keeps
+// the fast canonical string a complete labeled-DAG invariant.  The former
+// behaviour (relocate ALL CONST in-edges onto node 0) was non-injective and
+// could silently drop the relocated edge when add_edge refused it as
+// cycle-closing, orphaning the CONST and making D2S fail.
+// See docs/md_files/changes/d2s_canonicalisation_failures.md.
 // ---------------------------------------------------------------------------
 
 NativeLabeledDAG NativeLabeledDAG::normalize_const_creation() const {
     NativeLabeledDAG new_dag(max_nodes_);
 
-    // Step 1 — copy nodes.  Collect CONST node IDs into a std::set so that
-    // later iteration is automatically in sorted order (Invariant 9).
-    std::set<int32_t> const_nodes;
+    // Step 1 — copy nodes, recording CONST IDs in ascending order.
+    std::vector<int32_t> const_nodes;
     for (int32_t i = 0; i < node_count_; ++i) {
-        auto idx   = static_cast<std::size_t>(i);
+        auto idx = static_cast<std::size_t>(i);
         new_dag.add_node(labels_[idx], var_index_[idx], const_value_[idx]);
         if (labels_[idx] == NodeType::CONST) {
-            const_nodes.insert(i);
+            const_nodes.push_back(i);
         }
     }
 
-    // Step 2 — copy non-CONST edges, preserving operand order via input_order_.
-    // Iterating by target and using input_order_ matches the Python loop at
-    // labeled_dag.py:634-638.
+    // Step 2 — copy every edge, preserving operand order via input_order_.
     for (int32_t tgt = 0; tgt < node_count_; ++tgt) {
-        if (const_nodes.count(tgt)) {
-            continue;  // CONST targets get a new creation edge below
-        }
         for (int32_t src : input_order_[static_cast<std::size_t>(tgt)]) {
             // add_edge performs cycle/duplicate check; safe since source DAG is acyclic.
             new_dag.add_edge(src, tgt);
         }
     }
 
-    // Step 3 — normalized CONST creation edges from node 0 (x_1) in sorted order.
-    // std::set iterates sorted — matches Python's `for c in sorted(const_nodes)`.
+    // Step 3 — repair orphan CONST nodes only.  add_edge returns false when the
+    // edge would close a cycle, so the loop settles on the lowest-indexed
+    // variable that keeps the graph acyclic.  A CONST that reaches every
+    // variable is left orphaned: the input genuinely violates the reachability
+    // precondition and the ensuing D2S failure is correct behaviour.
     for (int32_t c : const_nodes) {
-        new_dag.add_edge(0, c);
+        if (new_dag.in_adj_[static_cast<std::size_t>(c)].empty()) {
+            for (int32_t anchor = 0; anchor < new_dag.node_count_; ++anchor) {
+                if (new_dag.labels_[static_cast<std::size_t>(anchor)] != NodeType::VAR) {
+                    continue;
+                }
+                if (new_dag.add_edge(anchor, c)) {
+                    break;
+                }
+            }
+        }
     }
 
     return new_dag;

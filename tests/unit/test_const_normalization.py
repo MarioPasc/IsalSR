@@ -1,13 +1,26 @@
 """Tests for CONST creation edge normalization.
 
-CONST nodes are evaluation-neutral leaves that ignore their in-edges.
-The creation edge (from V/v instruction) is structurally required for D2S
-reachability but semantically meaningless. Different creation sources
-produce different canonical strings for the same function.
+CONST nodes are evaluation-neutral leaves that ignore their in-edges, but D2S
+can only materialize a node from a pointer already standing on one of its
+in-neighbours, so a CONST with in-degree 0 cannot be serialized at all. Supplying
+a creation edge for exactly those orphan CONST nodes is what Critical Invariant 9
+is for, and it is all ``normalize_const_creation`` does.
 
-The normalization moves all CONST creation edges to x_1 (node 0),
-eliminating this redundancy. This is applied transparently in:
-- canonical_string() / pruned_canonical_string()
+Changed 2026-07-27 (T15). The method previously relocated *every* CONST in-edge
+onto node 0. Three defects followed, all reproduced in
+``tests/unit/test_const_normalization_repair.py``:
+
+- it dropped the relocated edge whenever ``add_edge`` refused it as
+  cycle-closing, orphaning the CONST and making canonicalisation raise;
+- it was non-injective, merging non-isomorphic labeled DAGs and so refuting the
+  Complete Labeled-DAG Invariant theorem;
+- it was not evaluation-preserving: on ``x -> COS -> CONST`` it moved the output
+  sink from CONST to COS, changing the value from 1.0 to cos(x).
+
+CONST provenance is therefore now treated as ordinary structure: two DAGs whose
+CONST nodes hang off different parents are different labeled DAGs and receive
+different canonical strings. The normalization is applied transparently in:
+- canonical_string() / pruned_canonical_string() / fast_canonical_string()
 - is_isomorphic()
 - from_sympy()
 """
@@ -61,12 +74,15 @@ def _build_x_sub_k(creation_source: int) -> LabeledDAG:
 class TestNormalizationBasic:
     """normalize_const_creation produces correct results."""
 
-    def test_const_creation_moved_to_x1(self) -> None:
-        """CONST creation edge is moved to node 0 (x_1)."""
+    def test_existing_creation_edge_is_left_alone(self) -> None:
+        """A CONST that already has a creation edge keeps it, wherever it points.
+
+        The old behaviour relocated this to node 0; that is what broke
+        completeness and, on some DAGs, evaluation.
+        """
         dag = _build_y_pow_k(creation_source=1)  # from y
         norm = dag.normalize_const_creation()
-        # In normalized DAG, CONST(2) should have in-neighbor {0} (x_1).
-        assert set(norm.in_neighbors(2)) == {0}
+        assert set(norm.in_neighbors(2)) == {1}
 
     def test_already_from_x1_unchanged(self) -> None:
         """CONST already from x_1 stays the same."""
@@ -112,25 +128,36 @@ class TestNormalizationBasic:
 # ======================================================================
 
 
-class TestRedundancyElimination:
-    """Normalization collapses CONST-creation variants to one canonical."""
+class TestProvenanceIsStructural:
+    """CONST provenance is ordinary structure, so it separates canonical strings.
 
-    def test_canonical_same_regardless_of_creation_source(self) -> None:
-        """y^k with CONST from x vs from y: same canonical string."""
+    This class asserts the *completeness* direction of the Complete Labeled-DAG
+    Invariant theorem: equal canonical strings imply isomorphic DAGs. The old
+    relocation violated it by collapsing the variants tested here into one string.
+    """
+
+    def test_canonical_differs_by_creation_source(self) -> None:
+        """y^k with CONST from x vs from y: different labeled DAGs, different strings."""
         dag_from_x = _build_y_pow_k(creation_source=0)
         dag_from_y = _build_y_pow_k(creation_source=1)
-        assert canonical_string(dag_from_x) == canonical_string(dag_from_y)
+        assert canonical_string(dag_from_x) != canonical_string(dag_from_y)
 
-    def test_pruned_canonical_same_regardless_of_source(self) -> None:
+    def test_pruned_canonical_differs_by_creation_source(self) -> None:
         dag_from_x = _build_y_pow_k(creation_source=0)
         dag_from_y = _build_y_pow_k(creation_source=1)
-        assert pruned_canonical_string(dag_from_x) == pruned_canonical_string(dag_from_y)
+        assert pruned_canonical_string(dag_from_x) != pruned_canonical_string(dag_from_y)
 
-    def test_isomorphic_regardless_of_creation_source(self) -> None:
-        """DAGs differing only in CONST creation source are isomorphic."""
+    def test_not_isomorphic_when_creation_source_differs(self) -> None:
+        """Variable anchoring forces phi(x_i)=x_i, so the two DAGs cannot match."""
         dag_from_x = _build_y_pow_k(creation_source=0)
         dag_from_y = _build_y_pow_k(creation_source=1)
-        assert dag_from_x.is_isomorphic(dag_from_y)
+        assert not dag_from_x.is_isomorphic(dag_from_y)
+
+    def test_canonical_agrees_when_creation_source_agrees(self) -> None:
+        """Soundness still holds: identical structure gives identical strings."""
+        assert canonical_string(_build_y_pow_k(creation_source=1)) == canonical_string(
+            _build_y_pow_k(creation_source=1)
+        )
 
     def test_sub_canonical_same_regardless_of_source(self) -> None:
         """x - k with CONST from x: same canonical for all valid sources."""
@@ -159,13 +186,17 @@ class TestRedundancyElimination:
         dag.add_edge(5, 6)  # POW2 → SUB (second)
 
         norm = dag.normalize_const_creation()
-        # Both CONSTs should have creation edge from x_1 (node 0).
-        assert set(norm.in_neighbors(2)) == {0}  # k1 from x
-        assert set(norm.in_neighbors(4)) == {0}  # k2 from x (was y)
+        # Neither CONST is an orphan, so both keep the source they were built with.
+        assert set(norm.in_neighbors(2)) == {0}  # k1 still from x
+        assert set(norm.in_neighbors(4)) == {1}  # k2 still from y
 
     @pytest.mark.parametrize("c1,c2", [(0, 0), (0, 1), (1, 0), (1, 1)])
-    def test_all_creation_combos_same_canonical(self, c1: int, c2: int) -> None:
-        """All 4 creation source combos for 2 CONSTs → same canonical."""
+    def test_creation_combos_match_reference_iff_structurally_equal(self, c1: int, c2: int) -> None:
+        """Only the (x_1, x_1) combo matches the all-from-x_1 reference DAG.
+
+        The reference hangs both CONSTs off node 0. Any other combo is a
+        structurally different labeled DAG and must canonicalise differently.
+        """
         dag = LabeledDAG(8)
         dag.add_node(NodeType.VAR, var_index=0)
         dag.add_node(NodeType.VAR, var_index=1)
@@ -183,9 +214,11 @@ class TestRedundancyElimination:
         dag.add_edge(3, 6)
         dag.add_edge(5, 6)
 
-        # All should produce the same canonical string.
         reference = canonical_string(_build_multi_const_reference())
-        assert canonical_string(dag) == reference
+        if (c1, c2) == (0, 0):
+            assert canonical_string(dag) == reference
+        else:
+            assert canonical_string(dag) != reference
 
 
 def _build_multi_const_reference() -> LabeledDAG:

@@ -406,7 +406,9 @@ std::string fast_canonical_string(
         static_cast<int32_t>(dag.var_nodes().size());
     if (dag.node_count_ == num_vars && dag.edge_count_ == 0) return {};
 
-    // Apply normalize_const_creation if any CONST nodes present (Invariant 9)
+    // Repair orphan CONST nodes if any CONST is present (Invariant 9).  This is
+    // the identity whenever every non-VAR node is already reachable from a
+    // variable, so it cannot perturb a precondition-satisfying input.
     if (dag.has_const_nodes()) {
         const NativeLabeledDAG norm = dag.normalize_const_creation();
         return fast_canonical_string_wl_only(norm, timeout_sec);

@@ -148,7 +148,10 @@ NB_MODULE(_native, m) {
              "Check if adding source→target would create a cycle.")
         .def("normalize_const_creation",
              &isalsr::NativeLabeledDAG::normalize_const_creation,
-             "Return a new DAG with all CONST creation edges moved to node 0.")
+             "Return a copy in which every CONST with in-degree 0 is given a "
+             "creation edge from the lowest-indexed variable that does not close "
+             "a cycle. Existing edges are preserved; identity on DAGs whose "
+             "non-VAR nodes are all reachable from a variable.")
         .def("has_const_nodes", &isalsr::NativeLabeledDAG::has_const_nodes,
              "Return True if any CONST node exists.");
 
@@ -178,6 +181,20 @@ NB_MODULE(_native, m) {
         "Applies normalize_const_creation() internally when CONST nodes are present.\n"
         "``timeout_sec`` < 0 means no limit.\n"
         "Raises CanonicalTimeoutError if the budget is exceeded.");
+
+    // -- fast_canonical_string_raw -------------------------------------------
+    // Skips normalize_const_creation entirely.  Exists so that experiments can
+    // compare normalization policies on one identical DAG stream (T15); not a
+    // production entry point.
+    testing.def("fast_canonical_string_raw",
+        [](const isalsr::NativeLabeledDAG& dag, double timeout_sec) -> std::string {
+            return isalsr::fast_canonical_string_wl_only(dag, timeout_sec);
+        },
+        nb::arg("dag"), nb::arg("timeout_sec"),
+        "Compute the fast canonical string WITHOUT applying "
+        "normalize_const_creation.\n\n"
+        "Raises RuntimeError if some node cannot be reached, which is exactly "
+        "what happens when a CONST node has no in-edge.");
 
     // -- tokenize ------------------------------------------------------------
     testing.def("tokenize",

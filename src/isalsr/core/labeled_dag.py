@@ -589,25 +589,48 @@ class LabeledDAG:
     # ------------------------------------------------------------------
 
     def normalize_const_creation(self) -> LabeledDAG:
-        """Return a new DAG with all CONST creation edges moved to x_1 (node 0).
+        """Return a copy in which every CONST node has at least one in-edge.
 
-        CONST nodes are evaluation-neutral leaves: they ignore in-edges and
-        return ``const_value`` directly. But D2S requires every node to be
-        reachable from a VAR via outgoing edges, so V/v creates a "creation
-        edge" pointer → CONST. The choice of creation source is semantically
-        irrelevant but produces different canonical strings.
+        CONST nodes are evaluation-neutral leaves: they ignore their in-edges
+        and return ``const_value`` directly. D2S, however, can only materialize
+        a node by emitting a V/v token from a pointer already sitting on one of
+        its in-neighbours, so a CONST with in-degree 0 is unreachable and cannot
+        be serialized at all. Producers that build DAGs from expression trees
+        (``from_sympy``, the Bingo and UDFS adapters) emit exactly such orphan
+        CONST leaves; giving them a *creation edge* is the whole purpose of
+        Critical Invariant 9.
 
-        This normalization eliminates that redundancy by standardizing all
-        CONST creation edges to come from node 0 (x_1). This is always valid
-        because x_1 has no incoming edges (no cycle risk).
+        This repair adds a single edge ``x_i -> c`` for every CONST ``c`` whose
+        in-degree is 0, taking the lowest-indexed variable that does not close a
+        cycle. Every pre-existing edge is preserved verbatim, together with its
+        position in ``_input_order`` (Invariant 8 / B9).
 
-        The normalized DAG:
-        - Computes the same function: eval(D) == eval(normalize(D))
-        - Has deterministic CONST creation edges
-        - Produces a unique canonical string for each equivalence class
+        Two properties follow, and both are load-bearing:
+
+        - **Identity on well-formed DAGs.** If every non-VAR node is reachable
+          from some variable — the hypothesis of the Round-Trip Fidelity
+          theorem — then no CONST has in-degree 0 and this returns a structural
+          copy. Canonicalization therefore never perturbs an input satisfying
+          the theorem's precondition, which is what makes the fast canonical
+          string a *complete* labeled-DAG invariant rather than a complete
+          invariant of some coarser quotient.
+        - **Reachability is never destroyed.** No edge is removed, so any node
+          reachable from a variable in ``self`` stays reachable here.
+
+        Prior to 2026-07-27 this method relocated *all* CONST in-edges onto node
+        0 unconditionally. That was non-injective (it merged non-isomorphic
+        DAGs, breaking completeness) and could silently drop the relocated edge
+        when ``add_edge`` refused it as cycle-closing, orphaning the CONST and
+        making D2S fail. See ``docs/md_files/changes/d2s_canonicalisation_failures.md``.
+
+        A CONST that reaches *every* variable is left orphaned: no anchor exists
+        that keeps the graph acyclic, the input genuinely violates the
+        reachability precondition, and the subsequent D2S failure is correct
+        behaviour rather than a defect to paper over.
 
         Returns:
-            A new LabeledDAG with normalized CONST creation edges.
+            A new LabeledDAG in which every CONST that had no in-edge has been
+            given one, and all other structure is unchanged.
         """
         new = LabeledDAG(self._max_nodes)
 
@@ -626,20 +649,26 @@ class LabeledDAG:
             if label == NodeType.CONST:
                 const_nodes.add(i)
 
-        # Copy all edges preserving _input_order for non-CONST targets.
+        # Copy EVERY edge, including in-edges of CONST targets.
         # CRITICAL: iterate by TARGET using original _input_order to preserve
         # operand ordering for binary ops (B9). The old approach iterated by
         # SOURCE, which scrambled _input_order when CONST had a lower node ID
         # than the other operand of a binary op.
         for tgt in range(self._node_count):
-            if tgt in const_nodes:
-                continue  # CONST targets get a new creation edge from x_1 below.
             for src in self._input_order[tgt]:
                 new.add_edge(src, tgt)
 
-        # Add normalized creation edges: x_1 (node 0) -> each CONST.
+        # Repair orphan CONST nodes only. add_edge returns False when the edge
+        # would close a cycle, so the loop lands on the lowest-indexed variable
+        # that keeps the graph acyclic.
         for c in sorted(const_nodes):
-            new.add_edge(0, c)
+            if new.in_degree(c) > 0:
+                continue
+            for anchor in range(new._node_count):
+                if new._labels[anchor] is not NodeType.VAR:
+                    continue
+                if new.add_edge(anchor, c):
+                    break
 
         return new
 

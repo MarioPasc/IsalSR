@@ -107,13 +107,18 @@ class TestOutputNodeNoSink:
 class TestOutputNodeConstTolerance:
     """CONST-induced multi-sinks: ignore CONST sinks when selecting output.
 
-    After normalize_const_creation() moves CONST in-edges to x_1,
-    operation nodes whose only child was a CONST become extra sinks.
-    output_node() should select the non-CONST sink as the output.
+    A DAG can carry several non-VAR sinks whenever a CONST leaf hangs off x_1
+    alongside the real output node, which is what from_sympy and the Bingo/UDFS
+    adapters produce. output_node() must select the non-CONST sink.
     """
 
-    def test_const_induced_multi_sink_after_normalization(self) -> None:
-        """x -> COS -> CONST normalizes to x -> {COS, CONST}: select COS."""
+    def test_normalization_does_not_detach_a_chained_const(self) -> None:
+        """x -> COS -> CONST is left intact, so CONST remains the sole sink.
+
+        Before 2026-07-27 (T15) normalization relocated COS -> CONST onto x_1,
+        which promoted COS to a sink and silently changed the value of the
+        expression. The repair only touches CONST nodes with in-degree 0.
+        """
         dag = LabeledDAG(4)
         dag.add_node(NodeType.VAR, var_index=0)  # 0
         dag.add_node(NodeType.COS)  # 1
@@ -122,9 +127,10 @@ class TestOutputNodeConstTolerance:
         dag.add_edge(1, 2)  # COS -> CONST
 
         normalized = dag.normalize_const_creation()
-        # After normalization: x -> {COS, CONST}, COS has no outgoing edges.
-        # COS (node 1) and CONST (node 2) are both non-VAR sinks.
-        assert normalized.output_node() == 1  # COS is the true output
+        assert normalized.has_edge(1, 2)
+        assert not normalized.has_edge(0, 2)
+        # CONST is the only sink, before and after; output selection is unchanged.
+        assert normalized.output_node() == dag.output_node() == 2
 
     def test_all_const_sinks(self) -> None:
         """DAG where all non-VAR sinks are CONST: return first CONST."""
@@ -161,7 +167,13 @@ class TestOutputNodeConstTolerance:
         assert dag.output_node() == 1
 
     def test_round_trip_evaluation_with_const(self) -> None:
-        """'vcNVk' -> S2D -> canonical -> S2D -> evaluate must not raise."""
+        """'vcNVk' -> S2D -> canonical -> S2D must preserve the value.
+
+        This is round-trip fidelity at the level of the represented function.
+        Before 2026-07-27 (T15) it failed: normalization relocated COS -> CONST
+        onto x_1, which changed the output sink from CONST to COS and the value
+        from 1.0 to cos(1.5). Canonicalisation must never alter what a DAG computes.
+        """
         from isalsr.core.canonical import pruned_canonical_string
         from isalsr.core.string_to_dag import StringToDAG
 
@@ -173,11 +185,8 @@ class TestOutputNodeConstTolerance:
 
         canon = pruned_canonical_string(dag_raw)
         dag_canon = StringToDAG(canon, num_variables=1).run()
-        # After canonicalization + S2D: x -> {COS, CONST}. Two sinks.
-        # output_node() should handle this gracefully.
         val_canon = evaluate_dag(dag_canon, {0: 1.5})
-        # COS(1.5) is the output (non-CONST sink), not the CONST value.
-        assert abs(val_canon - math.cos(1.5)) < 1e-10
+        assert abs(val_canon - val_raw) < 1e-10
 
     def test_evaluator_uses_tolerant_output_node(self) -> None:
         """evaluate_dag on CONST-normalized DAG returns operation result."""

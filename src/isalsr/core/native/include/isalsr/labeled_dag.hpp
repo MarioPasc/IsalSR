@@ -7,8 +7,9 @@
 ///   3. add_edge(source, target): edge source→target, data flows source→target.
 ///      input_order_[target] records insertion order (NOT a set; vector, ordered).
 ///   8. ordered_inputs(node) returns sources in insertion order for binary ops.
-///   9. normalize_const_creation() moves all CONST creation edges to node 0,
-///      iterating const_nodes in sorted order.
+///   9. normalize_const_creation() gives every CONST with in-degree 0 a creation
+///      edge from the lowest-indexed variable that does not close a cycle,
+///      iterating const_nodes in ascending order.  Existing edges are untouched.
 ///
 /// Reference: labeled_dag.py, IsalSR (Lopez-Rubio / Pascual, 2025).
 
@@ -122,9 +123,11 @@ public:
     /// Check if adding source→target would create a cycle.
     bool has_cycle_if_added(int32_t source, int32_t target) const;
 
-    /// Return a new DAG with all CONST creation edges moved to node 0 (x_1).
-    /// Copies non-CONST edges from input_order_ (preserves operand order, Inv. 8).
-    /// Adds node_0 → const_node edges in sorted(const_nodes) order (Invariant 9).
+    /// Return a copy in which every CONST node has at least one in-edge.
+    /// Copies ALL edges from input_order_ (preserves operand order, Inv. 8), then
+    /// adds x_i → c for each CONST c with in-degree 0, taking the lowest-indexed
+    /// variable that does not close a cycle (Invariant 9).
+    /// Identity on any DAG whose non-VAR nodes are all reachable from a variable.
     NativeLabeledDAG normalize_const_creation() const;
 
     bool has_const_nodes() const;
