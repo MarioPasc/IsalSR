@@ -3,14 +3,14 @@
 | Field | Value |
 |---|---|
 | Reviewer comments closed | none directly (feeds **R1.2** via T06, **R2.1/R1.3** via T07) |
-| Type | Investigation + theory |
+| Type | Investigation + theory + fix |
 | Owner | **Mario** (+ Claude Code); theory half needs **Ezequiel** |
 | Depends on | T01 (C++ engine, for the real-data half) |
 | Blocks | T06 (its violation-rate definition), T07 (the theorem's hypotheses) |
-| Status | **IN PROGRESS** — AC-1, AC-2, AC-5 met (root cause confirmed). **Open: AC-3 (sufficient precondition), AC-4 (rate on real data), AC-6 (regression test), AC-7.** |
+| Status | **IN PROGRESS** — AC-1, AC-2, AC-3, AC-5, AC-6 met; **fix applied** (minimal CONST repair, both engines). **Open: AC-4 (UDFS half, on Picasso), AC-7.** |
 | Target | 2026-08-17 (before Wave 1, because the real-data half needs campaign instrumentation) |
 | Opened | 2026-07-27, by Mario, from a T01 finding |
-| Last worked | 2026-07-27 — root cause confirmed, figure + write-up produced |
+| Last worked | 2026-07-27 — mechanism corrected, fix applied to both engines, Bingo half of AC-4 measured |
 
 > **Start here if you are picking this up fresh.** §3 has the confirmed root
 > cause, §2 lists every file you need with line numbers, and §7 records what was
@@ -140,12 +140,29 @@ Manuscript root:
   (`bingo/config.py:32`, `udfs/config.py:29`), so this failure mode is distinct
   from a timeout.
 
-### Root cause — CONFIRMED 2026-07-27, not a hypothesis
+### Root cause — CONFIRMED 2026-07-27, then CORRECTED the same day
 
-`normalize_const_creation` (Critical Invariant 9) relocates every CONST creation
-edge onto node 0. That closes a cycle exactly when node 0 is already reachable
-from the CONST by directed edges, and a cyclic graph leaves D2S with no legal
-instruction.
+> **The mechanism first recorded here was wrong in its final step, and the
+> correction matters for T07.** The original text said the normalised graph
+> becomes *cyclic*. It does not. `LabeledDAG.add_edge` **returns `False` and adds
+> nothing** when an edge would close a cycle (`labeled_dag.py:248`), and
+> `normalize_const_creation` discarded that return value. So the CONST's original
+> creation edge was deleted during the copy and the replacement `0 -> c` was
+> silently *refused*, leaving the CONST with **in-degree 0**. D2S cannot
+> materialise a node no pointer can reach, hence "no valid operation found".
+> Verified on all six: exactly one edge lost each, `topological_sort` succeeds
+> every time (so never cyclic), and every one of them has ≥1 non-VAR node
+> unreachable after normalisation against 0 before it.
+>
+> **Consequence: the theorem's hypothesis is sufficient and needs no new clause.**
+> The implementation applies `normalize_const_creation` *after* the hypothesis
+> holds and destroys it. The correct amendment is "the precondition must hold on
+> `normalize(D)`, not on `D`" — or, as taken below, make the normalisation
+> incapable of destroying it.
+
+`normalize_const_creation` (Critical Invariant 9) relocated every CONST creation
+edge onto node 0. That relocation is refused exactly when node 0 is already
+reachable from the CONST by directed edges, and the CONST is then orphaned.
 
 Decisive evidence — the only difference between these two rows is the
 normalisation step:
@@ -300,26 +317,43 @@ be agreed rather than applied.
 
 ## 6. Acceptance criteria
 
-- **AC-0.** §7 Work log filled as the work proceeds. — *partially filled, keep going*
+- **AC-0. ✅ MET.** §7 work log filled, including the correction to the mechanism
+  first recorded and the two further defects found while fixing it.
 - **AC-1. ✅ MET.** The 6 DAGs characterised, with figure and a stated common
   structural feature. `docs/md_files/changes/{d2s_canonicalisation_failures.md,
   fig_d2s_failures.png, fig_d2s_failures_data.json}`.
 - **AC-2. ✅ MET.** The CONST-normalisation hypothesis is **confirmed** by a
   decisive test: bypassing `normalize_const_creation` takes the failure count from
   6/6 to 0/6, with nothing else changed.
-- **AC-3. ⬜ OPEN.** A candidate sufficient precondition stated and validated on
-  ≥10⁵ DAGs with zero failures inside the satisfying class. Starting candidate in
-  §5.2.
-- **AC-4. ⬜ OPEN — the one that matters for the paper.** Failure rate measured on
-  **real** Bingo and UDFS DAGs, per method, with counts and a binomial CI. An
-  honest zero is a valid and welcome result.
+- **AC-3. ✅ MET.** Validated on 10⁵ random S2D DAGs, all satisfying the
+  reachability hypothesis: **zero** genuine canonicalisation failures under the
+  repaired policy, against 48 under the old one. The 46 residual exceptions are
+  `CanonicalTimeoutError` at k = 24–30 against the probe's 10 s budget, not
+  correctness failures. Guards: the repair dropped an edge on 0 DAGs, and agreed
+  byte-for-byte with no-normalisation on 0 disagreements.
+  `experiments/scripts/validate_const_repair_synthetic.py`.
+  **The stated hypothesis is therefore sufficient** — see AC-3′ below for the one
+  clause that still needs Ezequiel.
+- **AC-4. 🟡 HALF MET — Bingo done, UDFS on Picasso.** Bingo: 5 problems × 3 seeds
+  × 120 s, **12,176,790 DAGs, 0 failures**, Wilson 95 % CI upper bound
+  3.1×10⁻⁷, and all three policies structurally identical on 12,176,790 /
+  12,176,790. UDFS submitted as a 15-task array
+  (`slurm/t15_norm_arms_launch.sh --method udfs`); not locally practical because
+  UDFS checks `max_time` only between order-enumeration stages.
 - **AC-5. ✅ MET.** Exception path documented for both runners; ρ is inflated by
   each failure (candidate counted in `n_total`, never in `n_unique`). §3.
-- **AC-6. ⬜ OPEN.** A regression test in `tests/unit/` pinning each of the 6 DAGs
-  and its current behaviour, so any future change to D2S or to
-  `normalize_const_creation` is caught. Build it from case #4 plus the other five;
-  the source strings and the generator seed are in §3 and in the JSON.
-- **AC-7. ⬜ OPEN.** §8 filled, including hand-over notes to T07 and T06.
+  Magnitude on real Bingo data: **exactly zero**, since there are no failures.
+- **AC-6. ✅ MET.** `tests/unit/test_const_normalization_repair.py`, 30 tests,
+  both engines: each of the 6 DAGs canonicalises, the repair preserves every
+  edge, the precondition survives it, and the completeness counterexample is
+  pinned. Twelve tests that encoded the old contract were rewritten in place.
+- **AC-7. ✅ MET.** §8 filled below, with hand-over to T07, T06 and T02.
+
+**AC-3′ — NEW, OPEN, for Ezequiel.** The reachability hypothesis is sufficient
+for *success*, but not for *termination within a budget*: 46 / 100,000
+precondition-satisfying DAGs (k = 24–30) exceed 10 s. Production allows 60 s and
+sees none of this, but the theorem says nothing about cost. If T07 wants a
+complexity claim alongside the correctness one, that is the gap.
 
 ---
 
@@ -380,6 +414,134 @@ number is affected, and the ticket closes as a characterised non-issue plus a
 regression test. If it is non-zero, ρ is biased upward on the affected runs and
 that has to be quantified before T02's numbers are reported.
 
+### 2026-07-27 (later) — mechanism corrected, fix applied to both engines
+
+**The recorded mechanism was wrong in its last step.** See the box in §3. The
+normalised graph is never cyclic; `add_edge` refuses the cycle-closing edge and
+returns `False`, which `normalize_const_creation` ignored, so the CONST lost its
+only in-edge. This reframes the hand-over to T07 completely: the Round-Trip
+Fidelity hypothesis is *sufficient*, and the implementation was violating it
+after the fact. Ezequiel does not need to weaken or extend the theorem.
+
+**Two further defects surfaced while fixing it**, neither previously recorded.
+
+1. *Completeness was false as stated.* Take `{x1, x2, SIN, CONST, ADD}` with
+   `x1->SIN`, `SIN->ADD`, `x2->ADD`, and the CONST hanging off either `x1` or
+   `SIN`. Both satisfy the reachability hypothesis; they are **not** isomorphic
+   under Definition (i)-(iv) (variable anchoring forces φ(x1)=x1, and x1's
+   out-degree differs). The old relocation gave both `VkVspv+NnC`. That is a
+   direct counterexample to Theorem (Fast Canonical String is a Complete
+   Labeled-DAG Invariant), ⟹ direction.
+2. *The relocation was not evaluation-preserving*, despite its docstring claiming
+   `eval(D) == eval(normalize(D))`. On `x -> COS -> CONST` it moved the output
+   sink from CONST to COS: `1.0` became `cos(1.5) = 0.0707`. Canonicalisation
+   silently changed the function the DAG represents. The old
+   `test_round_trip_evaluation_with_const` enshrined this as correct.
+
+**The fix.** `normalize_const_creation` now adds `x_i -> c` **only for CONST nodes
+with in-degree 0**, taking the lowest-indexed variable that does not close a
+cycle, and never removes an edge. Applied identically to Python
+(`labeled_dag.py`) and C++ (`native/src/labeled_dag.cpp`), per the decision to
+keep the engines equivalent (T01). Header/binding docs updated.
+
+Why this specific policy, and not a cycle-safe version of the old one: if `D`
+satisfies the reachability hypothesis then no CONST has in-degree 0, so the
+repair is **the identity on exactly the class the theorem quantifies over**.
+Completeness therefore holds unqualified, and the theorem needs no normal-form
+caveat. A cycle-safe relocation would fix totality but leave completeness broken.
+
+**New entry point.** `_native.testing.fast_canonical_string_raw` skips
+normalization, so all three policies can be scored through one shared canonical
+core. Testing submodule only, not production API.
+
+**Verification.**
+
+| Check | Result |
+|---|---|
+| Six T15 cases canonicalise | 6/6, both engines, strings agree |
+| Repair drops an edge on the six | 0/6 (was 1 edge lost each) |
+| Precondition survives the repair | 6/6 (was 0/6) |
+| Full unit suite | 4,436 passed, 5 skipped |
+| Property + integration | 474 passed |
+| ruff `src/ tests/`, mypy strict | clean |
+
+**Ten tests encoded the old contract and were rewritten**, not deleted, each
+stating the new contract and why it changed: 8 in `test_const_normalization.py`
+(class `TestRedundancyElimination` → `TestProvenanceIsStructural`, assertions
+inverted), 2 in `test_native_datastructures.py` (plus a new orphan-CONST
+cross-engine case), 2 in `test_output_node_and_adapters.py` (the round-trip one
+now asserts the value is *preserved*). New file
+`tests/unit/test_const_normalization_repair.py`, 30 tests.
+
+**AC-4, Bingo half — done, and the answer is zero.** Structural argument first:
+neither adapter ever makes a VAR an edge target (`bingo/adapter.py:143-159`,
+`udfs/adapter.py:104-147`), so `in_degree(x1) = 0` always, no CONST can reach
+x1, and the old policy's relocation could never be refused. The trigger is
+**impossible by construction**, not merely rare. Measured on one 120 s Nguyen-5
+Bingo search: **501,500 DAGs, 0 failures in all three arms, and all three
+policies produced structurally identical DAGs on 501,500/501,500** — same
+`n_unique` (278,186), same ρ (1.803). So the submitted numbers are unaffected by
+the policy change, and were unaffected by the defect.
+
+**UDFS half deferred to Picasso.** UDFS checks its own `max_time` only between
+order-enumeration stages, so a 20 s budget ran past 900 s locally. Submitted as
+an array job instead: `slurm/t15_norm_arms_launch.sh`.
+
+**AC-3 — validated at 10⁵, and it separates the policies.**
+`experiments/scripts/validate_const_repair_synthetic.py`, 100,000 random S2D
+DAGs, **all 100,000 satisfying the reachability hypothesis**, 10 s budget:
+
+| Arm | Failures | Genuine (`no valid operation`) | Distinct strings | ρ |
+|---|---|---|---|---|
+| `submitted` (old) | 94 | **48** | 95,899 | 1.042 |
+| `repair` (new) | 46 | **0** | 96,068 | 1.040 |
+| `none` | 46 | **0** | 96,068 | 1.040 |
+
+Guards: the repair dropped an edge on **0** DAGs, and `repair` disagreed with
+`none` on **0** DAGs whose precondition holds — the identity property the
+completeness argument needs, confirmed empirically at 10⁵.
+
+**All 46 residual failures are `CanonicalTimeoutError`, not correctness
+failures.** They are large DAGs (k = 24–30) exceeding the probe's 10 s budget;
+production allows 60 s. Both surviving arms time out on exactly the same DAGs.
+So on this population the fix takes genuine canonicalisation failures from 48 to
+**zero**, and the reachability hypothesis *is* sufficient for success —
+the ticket's original AC-3 suspicion that it was insufficient was an artefact of
+the normalisation bug, not a property of the theorem.
+
+The distinct-string columns are the completeness gap made quantitative: the old
+policy merged **169** extra equivalence classes it should have kept apart,
+inflating ρ from 1.040 to 1.042 in the flattering direction.
+
+**AC-4, Bingo half — complete, N = 12.2 million.** 5 problems (one per tier)
+× 3 seeds × 120 s, `experiments/scripts/measure_const_normalization_arms.py`:
+
+| Arm | DAGs | Failures | 95% CI upper | ρ |
+|---|---|---|---|---|
+| `submitted` | 12,176,790 | **0** | < 3.1×10⁻⁷ | 1.793 |
+| `repair` | 12,176,790 | **0** | < 3.1×10⁻⁷ | 1.793 |
+| `none` | 12,176,790 | **0** | < 3.1×10⁻⁷ | 1.793 |
+
+**All three policies produced structurally identical DAGs on 12,176,790 /
+12,176,790** — not merely equal canonical strings, the same graphs. So on real
+Bingo output the policy is provably irrelevant, exactly as the adapter argument
+predicts, and **no submitted Bingo number is affected by the defect or by the
+fix**. Results: `…/results/t15_norm_arms/{synthetic_100k.json,bingo_local/}`.
+
+**Still open.**
+- **UDFS half of AC-4.** Submitted to Picasso as a 15-task array;
+  `bash slurm/t15_norm_arms_launch.sh --method udfs`. Not locally practical: UDFS
+  checks its `max_time` only between order-enumeration stages, so a 20 s budget
+  ran past 900 s on the workstation. The adapter argument
+  (`udfs/adapter.py:104-147` never targets a VAR) predicts zero, same as Bingo.
+- **The precomputed HDF5 atlas fast-path was not audited.** If the atlas was
+  built over a population containing non-x1 CONST provenance, its entries encode
+  the old merge and would need regeneration. Settle this before writing "no
+  reported number is affected" in the response letter.
+- **`methodology.tex` Table 3 line 830** still describes the old relocation
+  (`// redirect all Const creation edges to x_1`). Ezequiel's call; the theorem
+  itself now holds as stated, which is the cheaper outcome.
+
 ---
 
 ## 8. Proposed answer
@@ -389,14 +551,18 @@ that has to be quantified before T02's numbers are reported.
 | Question | Answer | Evidence |
 |---|---|---|
 | Is the failure caused by pruning? | **No** — the exhaustive `canonical_string`, which prunes nothing, fails identically on all 6 | §1 table |
-| Do the failures violate the stated reachability condition? | **No** — all 6 satisfy it; the condition is not sufficient | §6 of the write-up |
-| What causes it? | **`normalize_const_creation` closes a cycle.** Bypassing it: 6/6 → 0/6 | §3 |
+| Do the failures violate the stated reachability condition? | **Not on input.** All 6 satisfy it; `normalize_const_creation` then destroyed it | §3 |
+| What causes it? | **`normalize_const_creation` dropped an edge.** `add_edge` refuses a cycle-closing edge and returns `False`; the return value was discarded, so the CONST lost its only in-edge and became unreachable. The graph is never cyclic | §3 box, §7 |
 | Which canonicaliser ran in the experiments? | `fast_canonical_string(mode="wl_only")` — greedy on the 1-WL sort key, no 6-tuple | §3 |
-| Failure rate, random DAGs | **0.15 %** (6 / 4,000) | §3 |
-| Failure rate, real Bingo DAGs | | AC-4 |
-| Failure rate, real UDFS DAGs | | AC-4 |
-| True sufficient precondition | | AC-3 |
-| Is any reported number biased? | **ρ is inflated** — failures count in `n_total`, never in `n_unique`. Magnitude depends on AC-4 | §3 |
+| Failure rate, random DAGs, old policy | **0.15 %** (6 / 4,000); at 10⁵, 48 genuine failures | §3, AC-3 |
+| Failure rate, random DAGs, repaired policy | **0** genuine failures / 100,000 | AC-3 |
+| Failure rate, real Bingo DAGs | **0 / 12,176,790** (95 % CI upper 3.1×10⁻⁷) | AC-4 |
+| Failure rate, real UDFS DAGs | pending — Picasso array submitted | AC-4 |
+| True sufficient precondition | The **stated** reachability hypothesis, once normalisation can no longer destroy it. No extra clause needed | AC-3 |
+| Was completeness actually true? | **No, under the old policy.** Two non-isomorphic DAGs differing only in CONST provenance both gave `VkVspv+NnC`, refuting Theorem (Complete Labeled-DAG Invariant), ⟹ direction. Fixed | §7 |
+| Was normalisation evaluation-preserving? | **No, under the old policy**, despite its docstring saying so. On `x→COS→CONST` it moved the output sink and turned 1.0 into cos(1.5) | §7 |
+| Is any reported number biased? | **No.** ρ inflation requires a failure, and there are none on real data. All three policies are structurally identical on 100 % of 12.2 M real Bingo DAGs, so ρ = 1.793 either way | AC-4 |
+| Does the fix change any submitted number? | **No** — the repair is the identity on adapter output, verified 12,176,790 / 12,176,790 | AC-4 |
 
 ### 8.2 Changes made to the repository
 
@@ -411,24 +577,71 @@ that has to be quantified before T02's numbers are reported.
 
 Commits on `feature/cpp-core-port`: `145d496`, `2d3231f`, `11a45e0`.
 
+**The fix and its measurement (2026-07-27, later):**
+
+| Path | Change |
+|---|---|
+| `src/isalsr/core/labeled_dag.py` | `normalize_const_creation` → minimal repair: add `x_i -> c` only for CONST with in-degree 0, lowest-indexed variable that does not close a cycle; never removes an edge |
+| `src/isalsr/core/native/src/labeled_dag.cpp` | Same, kept byte-equivalent with the Python reference (T01) |
+| `src/isalsr/core/native/include/isalsr/labeled_dag.hpp` | Invariant-9 doc comment rewritten |
+| `src/isalsr/core/native/src/bindings.cpp` | New `testing.fast_canonical_string_raw` — canonical core with no CONST handling, so policies can be compared on one implementation. Not production API |
+| `src/isalsr/core/native/src/canonical.cpp` | Entry-point comment: the repair is the identity on precondition-satisfying input |
+| `tests/unit/test_const_normalization_repair.py` | **New.** 30 tests, both engines: the 6 cases, edge preservation, precondition survival, completeness counterexample, orphan-CONST repair, cycle-avoiding anchor |
+| `tests/unit/test_const_normalization.py` | 8 tests rewritten; `TestRedundancyElimination` → `TestProvenanceIsStructural`, assertions inverted |
+| `tests/unit/test_native_datastructures.py` | 2 tests rewritten + 1 new orphan-CONST cross-engine case |
+| `tests/unit/test_output_node_and_adapters.py` | 2 tests rewritten; the round-trip one now asserts the value is *preserved* |
+| `experiments/scripts/validate_const_repair_synthetic.py` | **New.** 3-arm validation on 10⁵ synthetic DAGs (AC-3) |
+| `experiments/scripts/measure_const_normalization_arms.py` | **New.** 3-arm probe on real search output, paired on one DAG stream (AC-4) |
+| `experiments/scripts/aggregate_norm_arms.py` | **New.** Pools the Picasso array's per-task outputs |
+| `slurm/t15_norm_arms_launch.sh`, `slurm/workers/t15_norm_arms_slurm.sh` | **New.** Picasso array for the UDFS half of AC-4 |
+| `.claude/CLAUDE.md` | Critical Invariant 9 rewritten |
+
+Verification: 4,436 unit + 474 property/integration tests pass; `ruff check
+src/ tests/` and `mypy --strict src/isalsr/` clean.
+
 ### 8.3 Hand-over
 
-- **To T07** (Ezequiel): the Round-Trip Fidelity theorem's hypothesis is not
-  sufficient. Six explicit counterexamples satisfy it and still fail, the smallest
-  with k=2 and 3 edges (case #4, source `cNPNVkNCVr`). The theorem constrains the
-  *input* DAG, but `normalize_const_creation` is applied **after** that check and
-  can make the graph cyclic. Either the hypothesis gains a clause — candidate: *no
-  CONST node reaches node 0 by directed edges* — or the normalisation is changed to
-  pick a non-cycle-closing anchor. The second changes Critical Invariant 9 and with
-  it the canonical strings, so it is a decision, not a fix.
+- **To T07** (Ezequiel) — **good news, and one correction to the earlier
+  hand-over.** The Round-Trip Fidelity hypothesis **is** sufficient and needs no
+  extra clause. The earlier draft of this section said otherwise, and said the
+  normalisation "can make the graph cyclic"; both were wrong. What happened is
+  that `normalize_const_creation` was applied *after* the hypothesis held and
+  destroyed it, by dropping an edge `add_edge` had refused. With the repair, the
+  normalisation is provably the identity on every DAG satisfying the hypothesis,
+  so the theorem holds as written.
+  Two things do need your decision:
+  1. **Theorem (Complete Labeled-DAG Invariant) was false as previously
+     implemented.** Counterexample: `{x1, x2, SIN, CONST, ADD}` with `x1→SIN`,
+     `SIN→ADD`, `x2→ADD`, and the CONST hanging off `x1` in one and `SIN` in the
+     other. Both satisfy the hypothesis, they are not isomorphic under Definition
+     (i)–(iv), and both gave `VkVspv+NnC`. The repair fixes this, so the theorem
+     is now true — but it was not true of the submitted implementation, and the
+     proof in Appendix A should say why the normalisation step is harmless.
+  2. **`methodology.tex` Table 3, line 830** still reads
+     `// redirect all Const creation edges to x_1`. That line now describes
+     something the code no longer does. It should become "supply a creation edge
+     to Const nodes that have none".
 - **To T06**: *violating the precondition* and *canonicalisation failing* are
-  different events with different rates, and R1.2 asks for the second. On synthetic
-  DAGs the precondition is violated 0 % of the time while canonicalisation fails
-  0.15 % of the time. Do not report one as the other. T06 and T15 §5.3 need the
-  same instrumentation — share one hook rather than adding two.
-- **To T02 / EXECUTION-PLAN §2b**: if AC-4 finds a non-zero rate on real data, the
-  counter must be in the code **before** Wave 1 launches, because the population it
-  measures exists only while the campaign runs.
+  different events with different rates, and R1.2 asks for the second. On
+  synthetic DAGs the precondition is violated 0 % of the time; canonicalisation
+  failed 0.048 % under the old policy and **0 %** under the repaired one. Do not
+  report one as the other. T06 and T15 §5.3 need the same instrumentation —
+  `experiments/scripts/measure_const_normalization_arms.py` already provides the
+  hook (it monkey-patches `isalsr.core.canonical.fast_canonical_string`), so
+  reuse it rather than adding a second.
+- **To T02 / EXECUTION-PLAN §2b**: the counter is no longer urgent for Wave 1.
+  AC-4 found zero failures on 12.2 M real Bingo DAGs and the trigger is
+  impossible by construction on adapter output, so there is nothing for a
+  campaign-time counter to catch. Keep the probe available, but it is not a
+  blocker.
 
 ### 8.4 Residual risk
+
+| Risk | Severity | Status |
+|---|---|---|
+| **Precomputed HDF5 atlas not audited.** If `src/isalsr/precomputed/` atlases were built over a population containing non-x₁ CONST provenance, their entries encode the old merge and are now inconsistent with the online path | **Medium** — would affect any run using `--atlas-dir` | **OPEN.** Settle before writing "no reported number is affected" in the response letter |
+| UDFS half of AC-4 unmeasured | Low — the adapter argument predicts zero, as it did for Bingo | **OPEN.** Picasso array submitted |
+| `methodology.tex:830` describes the old policy | Low — editorial | **OPEN**, Ezequiel |
+| CONST-provenance variants no longer deduplicate together | Low — they are genuinely different labeled DAGs; zero effect on any measured population, where provenance is always x₁ | **ACCEPTED**, by decision 2026-07-27 |
+| Timeouts at k ≥ 24 under a 10 s budget | Low — production uses 60 s and saw none | **ACCEPTED**; tracked as AC-3′ |
 

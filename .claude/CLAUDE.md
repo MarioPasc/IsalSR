@@ -214,9 +214,18 @@ model-agnostic — it consumes unified RunLog/TrajectoryRow schemas.
    sets the first operand. V/v creates the first edge; C/c creates the second.
    Evaluator uses `ordered_inputs()`, NOT `sorted(in_neighbors())`.
    D2S/canonical only create binary ops via V/v from the FIRST operand.
-9. **CONST creation edge normalization.** CONST nodes ignore in-edges (evaluation-neutral)
-   but need a "creation edge" for D2S reachability. `normalize_const_creation()` moves
-   all CONST creation edges to x_1 (node 0). Applied in canonical, is_isomorphic, from_sympy.
+9. **CONST creation edge repair (revised 2026-07-27, T15).** CONST nodes ignore in-edges
+   (evaluation-neutral) but need a "creation edge" for D2S reachability.
+   `normalize_const_creation()` adds `x_i -> c` **only for CONST nodes with in-degree 0**,
+   taking the lowest-indexed variable that does not close a cycle. It never removes an
+   edge. Applied in canonical, is_isomorphic, from_sympy.
+   **It is the identity on any DAG satisfying the Round-Trip Fidelity reachability
+   hypothesis** — that is what makes the canonical string a *complete* labeled-DAG
+   invariant. CONST provenance is ordinary structure: two DAGs whose CONST nodes hang
+   off different parents are different labeled DAGs and get different canonical strings.
+   The former behaviour (relocate *all* CONST in-edges onto node 0) dropped edges when
+   `add_edge` refused them as cycle-closing, merged non-isomorphic DAGs, and was not
+   evaluation-preserving. See `docs/md_files/changes/d2s_canonicalisation_failures.md`.
 10. **Label-aware pruning (B13).** The 6-tuple pruning must partition candidates BY LABEL
     before taking max-τ. Cross-label pruning is invalid (automorphisms preserve labels).
     Implemented in canonical.py for both V (primary) and v (secondary) sections.
