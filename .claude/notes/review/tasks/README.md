@@ -63,6 +63,13 @@ the frozen MANIFEST schema, and checks P1–P3** — see `EXECUTION-PLAN.md` §2
 | # | Title | Owner | Reviewer |
 |---|---|---|---|
 | [T07](T07-theorem-foundation.md) | Complete the formal foundation of Theorem 3.15 | Ezequiel + Mario | **R2.1**, **R1.3** |
+| [T15](T15-d2s-failure-modes.md) | D2S failure modes: the 6 counterexamples + failure rate on real data | Mario + Ezequiel | feeds R1.2, R2.1 |
+
+> **T15 opened 2026-07-27** from a T01 finding. `fast_canonical_string` raises on
+> 0.15 % of random DAGs; the exhaustive canonicaliser fails identically, so it is
+> **not** a pruning artefact, and all failing cases **satisfy** the reachability
+> condition stated in `methodology.tex:976` — so that hypothesis is not sufficient.
+> Blocks T07 (theorem hypotheses) and T06 (definition of a precondition violation).
 
 ### Track D — Numerical integrity
 

@@ -788,22 +788,38 @@ engine that raised a different exception type would abort campaign runs
 differently, and 3,000 runs would diverge in a way no equivalence test on
 successful cases would catch.
 
-#### A distinction T06 needs, discovered here
+#### A distinction T06 needs — and a correction to my own earlier number
 
-Two very different rates got conflated during this work and must not be conflated
-in the response letter:
+**Correction.** An earlier version of this entry reported a "~76–82 % reachability
+violation rate". That was wrong. The figure came from my own filter, which
+required every node to be reachable from **x₁ alone**. The condition the paper
+actually states (`methodology.tex:976`, Theorem Round-Trip Fidelity) is that every
+**non-variable** node be reachable from **some variable** — and D2S starts with all
+*m* variables already in the CDLL, so reachability from x₁ specifically was never
+the requirement.
 
-| Quantity | Measured | Meaning |
-|---|---|---|
-| Reachability **precondition violated** | ~76–82 % of random DAGs | some node not reachable from node 0 |
-| Canonicalisation **actually fails** | **6 / 4,000 ≈ 0.15 %** | `RuntimeError: no valid operation found` |
+Re-measured over the same 4,000 DAGs:
 
-The canonicaliser tolerates most precondition violations; only degenerate
-configurations fail outright. So "the reachability condition is violated" and "the
-canonicaliser breaks" differ by nearly three orders of magnitude. R1.2 asks for a
-failure rate, and quoting an ~80 % violation rate as though it were a failure rate
-would badly misrepresent the method. Both numbers are needed, on the *evolved*
-distribution rather than this synthetic one. Handed to **T06**.
+| Predicate | Violated |
+|---|---|
+| reachable from x₁ only (my incorrect filter) | 3,295 / 4,000 (82.4 %) |
+| **reachable from any variable — the real condition** | **0 / 4,000 (0.0 %)** |
+| canonicalisation actually raises | 6 / 4,000 (0.15 %) |
+
+So there is **no ~80 % violation rate**, and none should be reported. Quoting it
+against R1.2 would have invited the obvious question of how a method with an 80 %
+precondition failure rate works at all.
+
+**The real finding is sharper.** All 6 failing DAGs **satisfy** the theorem's
+stated precondition and still fail, so the hypothesis as written is not
+sufficient. And the failure is not a pruning artefact: the exhaustive
+`canonical_string`, which does no pruning and computes true lexmin, fails on
+exactly the same 6.
+
+Opened as **T15** (`T15-d2s-failure-modes.md`) on Mario's instruction, covering
+both the characterisation of the 6 and the failure rate on *real* Bingo/UDFS DAGs
+rather than uniformly random ones. Hands over to T07 (theorem hypotheses) and T06
+(the definition of a violation, which is not the same event as a failure).
 
 ### 2026-07-27 — AC-5 benchmark driver delivered; corpus representativeness queried
 
