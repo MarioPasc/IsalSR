@@ -6,7 +6,7 @@ Where the implementation and the result artefacts live, for anyone who has to re
 **Conda env**: `isalsr` — run everything as `conda run -n isalsr python …`
 **Results root**: `/media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/results/`
 (Note: `article/CLAUDE.md` records this as `/media/mpascual/Sandisk2TB/research/isalsr/results/`, which does not exist. The path above is the live one.)
-
+**Paper**: `/media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/article/journal/69c1637a28a81fea2badda9a` ; The reviewer's comments answer is located in `/media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/article/journal/69c1637a28a81fea2badda9a/reviews`, while the main article is in `/media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/article/journal/69c1637a28a81fea2badda9a/article/{paper,supplementary}`
 ---
 
 ## Core implementation — `src/isalsr/`
