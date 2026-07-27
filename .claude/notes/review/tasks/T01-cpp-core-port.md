@@ -178,7 +178,708 @@ mixing constants as Python. Pin them in a test.
 > Append entries as `### YYYY-MM-DD — <topic>`. Record what you decided and why,
 > what broke, and what you could not resolve.
 
-_(empty — to be filled by the implementing agent)_
+### 2026-07-27 — Ticket opened, plan recorded before any code
+
+**Gating check.** `Depends on: —`. Nothing blocks T01. T01 blocks T02/T03/T06 and
+sits at the head of the critical path (`README.md` §Dependency spine), so schedule
+slip here is schedule slip on the submission.
+
+**Sizing.** `src/isalsr/core/` is 3,557 LoC of Python across 16 files
+(`canonical.py` 1035, `labeled_dag.py` 683, `dag_to_string.py` 377,
+`string_to_dag.py` 304, `commutative.py` 284, `dag_evaluator.py` 215,
+`node_types.py` 213, `cdll.py` 137, `permutations.py` 125, `algorithms/` 174).
+IsalHG's `_native` is 2,047 LoC of C++ across 9 translation units
+(`h2s.cpp` 1016, `s2h.cpp` 289, `structural_tuples.cpp` 182, `canonical.cpp` 158,
+`token.cpp` 125, `sparse_hypergraph.cpp` 103, `wl.cpp` 94, `cdll.cpp` 68,
+`thread_pool.cpp` 12). Comparable scale; the ticket's "port, do not invent"
+premise is credible on size grounds.
+
+**Plan — phases, gated.**
+
+| Phase | Deliverable | Gate to next |
+|---|---|---|
+| P0 | Recon: IsalHG porting playbook + IsalSR port surface inventory + premise checks on the §5.3 corpora | Design decisions answered by Mario |
+| P1 | Build skeleton: CMake + nanobind + `[native]` extra + `_ENGINE` switch + CI-less local build doc | Extension imports; fallback verified |
+| P2 | `cdll` → `labeled_dag` → `node_types`/tokenisation | Per-module equivalence test |
+| P3 | `string_to_dag` (S2D) → `dag_to_string` (D2S) | Round-trip gate §5.3(4) |
+| P4 | `wl` hash → `structural_tuples` → `canonical` | Determinism pin (§5.5) |
+| P5 | Equivalence gates §5.3(1)–(4), all four | AC-3, zero mismatches |
+| P6 | Benchmark (workstation + Picasso node), projected `S` | AC-5, AC-6 → go/no-go for T02 |
+
+**Delegation policy.** P0 is two read-only investigators in parallel. P1–P4 are one
+implementer at a time in the main tree (no worktrees: the ticket's own §4.3 hazard
+applies — `pip install -e` resolves to the main checkout and a worktree's tests
+would silently exercise main's code, and a worktree cannot see the built
+extension). P5 and P6 verification are re-run by the orchestrator, never trusted
+from an agent's closing claim.
+
+### 2026-07-27 — Design decisions taken (Mario)
+
+| Question | Decision | Consequence |
+|---|---|---|
+| Port scope | **Canonicaliser hot path only** — the ticket's §5.2 list verbatim (8 TUs): `cdll`, `labeled_dag`, `node_types` tokenisation, `string_to_dag`, `dag_to_string`, `wl`, `structural_tuples`, `canonical`. | `commutative.py`, `dag_evaluator.py`, `permutations.py` and `algorithms/` stay pure Python. Keeps `dag_evaluator`'s float semantics out of the equivalence surface entirely, which is the right call — it is the one module whose bit-exactness would move R² numbers. |
+| Compiler flags | **`-O3 -march=x86-64-v3 -DNDEBUG -flto`**, one portable binary. Not `-march=native`. | One `build_hash` for the whole campaign; `S` is not confounded by ISA. Costs an estimated 2–5 % against native, which is noise against the 3.3 : 1 gap being closed. Removes the first residual risk named in §8.4. |
+| Python-engine defects found during the port | **Fix in both engines.** Do not gate the port on reproducing a defect. | Deviates from the entry above, which is superseded. One carve-out held open: a fix that changes a number already printed in the submitted manuscript is escalated before it ships, because that is an undisclosed data change rather than an engineering detail. |
+| AC-6 go/no-go | **Escalate with numbers; do not self-decide.** Report projected `S` for both methods, the break-even `T_canon`, and `dS/dT_canon`. | Matches the standing rule that a result changing what the paper claims goes to a human. |
+
+*(Supersedes the closing paragraph of the previous entry: the C++ engine is no
+longer required to be bug-for-bug identical to Python; it is required to be
+byte-identical to the **fixed** Python engine, with both fixed together.)*
+
+### 2026-07-27 — Build-environment reconnaissance (orchestrator, not delegated)
+
+**Workstation.** gcc 12.2.0 (Debian), cmake 3.25.1, ninja **absent**, Python
+3.11.15, `nanobind` **absent** from the `isalsr` env (`pybind11` 3.0.2 is present
+but is not what IsalHG uses). CPU: i7-13700KF — AVX2 + FMA, **no AVX-512**. So
+`x86-64-v3` is also the ceiling locally; `v4` was never an option.
+
+**Picasso — three findings, one of them blocking.**
+
+| # | Finding | Consequence |
+|---|---|---|
+| E-1 | **`fscratch/repos/IsalSR` does not exist, and there is no `isalsr` conda env.** Present: `IsalHG`, `slim-diff`, `VENA*`; envs `isalhg`, `isalhg-hypercot`, `vena`, `vena-v100`. | The March campaign's remote environment is **gone**. AC-1 ("builds from a clean checkout on a Picasso compute node") requires standing the env up from scratch. This is unscheduled work sitting on the critical path and must be done before Wave 1, not discovered at G5. |
+| E-2 | Default login toolchain is **gcc 7.5.0** (SUSE) — too old for the C++17 the port needs. Modules available up to `gcc/15.2.0`; `cmake` 3.28.3 default plus modules to 3.31.4. | Build and *runtime* must both `module load` the same gcc, or the extension must be linked `-static-libstdc++ -static-libgcc`. The latter is preferable: it removes a runtime module dependency from 3,000 SLURM tasks and one class of "works on the login node, dies on the compute node" failure. Pin this at G5. |
+| E-3 | The CPU pool is **four distinct classes**, and only two advertise AVX-512: `sd,intel,avx512` (123 nodes, 52c), `sr,amd` (154 nodes, 128c), `bc,amd,avx512` (32 nodes, 256c), `bl,amd` (24 nodes, 128c). Partitions are now `cpu_partition` / `gpu_partition`. | **Independently confirms the `x86-64-v3` decision**: 178 of 333 CPU nodes have no AVX-512, so a `v4` or `native`-on-`bc` build would not run pool-wide. Also flags for `EXECUTION-PLAN.md` §5/P3: the partition and feature names differ from those recorded for the March campaign, so the "pin `--constraint` to the March node type" mitigation may not be executable as written. That is T02's problem, but it is discovered here. |
+
+Not chased further: mapping feature tags to CPU model strings (`scontrol` does not
+expose `CPUModel` on this cluster). D2 is answerable from the March run logs
+locally, since `hardware_info.py` records CPU per run — left to T02.
+
+### 2026-07-27 — IsalHG playbook received, verified, and corrected on one point
+
+Playbook at `T01-appendix/isalhg-port-playbook.md` (398 lines). Every load-bearing
+claim re-checked by me directly against IsalHG sources rather than taken on trust:
+
+| Claim | Verified at |
+|---|---|
+| `scikit-build-core>=0.9` + `nanobind>=2.0`, backend `scikit_build_core.build` | `IsalHG/pyproject.toml:1–6` |
+| C++17, `-O3 -march=native -DNDEBUG -fno-plt -funroll-loops`, IPO via `check_ipo_supported` | `IsalHG/CMakeLists.txt:4,17,21–24` |
+| **No graceful fallback exists in IsalHG** — hard `from isalhg.core._core import …` | `IsalHG/canonical.py:69` |
+| `backends.py` with `DEFAULT_BACKEND` + `resolve()` dispatch registry | `IsalHG/src/isalhg/core/backends.py` |
+
+Reported IsalHG gains: **101–180× single-thread** for the bare C++ port (phase 0),
+rising to 499–1,494× versus pure Python once parallelism is added; 5 optimisations
+tried and reverted (L1d thrash from a per-frame displacement cache, stack pressure
+from `std::array` prefixes, arena-pooled vectors, flat η stride, manual CPU pinning).
+
+#### Correction: R3 (parallel seed loop) is worth **zero** to this ticket — and is a hazard
+
+The playbook's headline recommendation is "implement R3 first — it is the single
+largest win (−73 to −89 % wall-clock)". **That advice does not transfer, and
+following it would be a defect rather than an optimisation.**
+
+- `EXECUTION-PLAN.md` §1 fixes the campaign budget at **1 core per run**; `CLAUDE.md`
+  independently records `processes: 1` in all four production YAMLs and `cpus: 1` in
+  the SLURM configs. Intra-call parallelism is therefore unavailable in exactly the
+  configuration that produces the reported numbers.
+- Worse than unavailable: IsalHG sizes its pool from `hardware_concurrency()`, which
+  on a Picasso node reports 52–256 rather than the 1 core SLURM allocated. Spawning
+  that many workers inside a 1-core cgroup oversubscribes it and would make
+  canonicalisation *slower*, silently, on the cluster only — the single most
+  expensive failure mode available to this ticket, since it would not reproduce on
+  the workstation.
+- IsalHG's own negative result #5 (manual CPU pinning: 80 ms → 110 ms) is the same
+  phenomenon observed from the other direction.
+
+**Consequence, now binding on the port:** no threading of any kind in
+`isalsr.core._native`. `thread_pool.cpp` is *not* copied, despite the playbook
+listing it as "copy verbatim, do early". The speedup must come entirely from
+single-thread work — which is where IsalHG's 101–180× phase-0 figure lives anyway,
+and that alone is far more than AC-6 needs.
+
+#### Provisional AC-6 arithmetic (not a result — a sanity check on feasibility)
+
+Bingo canonicalisation is 0.817 ms/DAG against a 0.14 ms/DAG evaluation, i.e. 3.3 : 1
+against us. A single-thread speedup of only **20×** puts canonicalisation at
+≈0.041 ms/DAG and inverts the ratio to ≈1 : 3.4 in our favour; IsalHG's phase-0 range
+implies considerably more. The feasibility of AC-6 is therefore not in doubt — but
+the number reported must be measured on a Picasso node under §5.4's protocol, never
+projected from IsalHG's figures, which were obtained on different algorithms and
+different inputs.
+
+Also noted: the playbook states the workstation CPU as an i7-13620H. It is an
+**i7-13700KF** (measured). Immaterial to any decision; recorded so the benchmark
+section does not inherit the wrong hardware string.
+
+### 2026-07-27 — Port-surface inventory: three of the ticket's four §5.3 premises do not hold
+
+Inventory at `T01-appendix/isalsr-port-surface.md`. The agent returned P1 REFUTED,
+P2 PARTIAL, P3 REFUTED, P4 CONFIRMED. I re-ran the decisive checks myself rather
+than accepting them; the results below are mine, not the agent's.
+
+#### BLOCKER — canonical strings are not reproducible across Python sessions
+
+`canonical.py:702` computes the 1-WL subtree hash as
+
+```python
+node_hash[u] = hash((dag.node_label_unchecked(u), tuple(children_hashes)))
+```
+
+`NodeType` is an `Enum`, and CPython's `Enum.__hash__` delegates to
+`hash(self._name_)` — a **string** hash, and therefore salted by `PYTHONHASHSEED`.
+Measured directly: `hash(NodeType.SIN)` is `-596725465393948695` at seed 0,
+`+9050745085082211361` at seed 42, `+2878440809595582671` at seed 1337, exactly
+equal to `hash("SIN")` in each case.
+
+That salt propagates all the way to the output. Experiment
+(`scratchpad/hashseed_probe.py`, 120 randomly generated DAGs, generator seeded
+independently of `PYTHONHASHSEED`):
+
+| Quantity | seed 0 | seed 42 | seed 1337 |
+|---|---|---|---|
+| Canonical strings differing from seed 0 | — | **12 / 120 (10 %)** | **13 / 120 (11 %)** |
+| Distinct canonical strings | 120 | 120 | 120 |
+| Permuted copies canonicalising equal | 40 / 40 | 40 / 40 | 40 / 40 |
+
+Example (index 6): `'V*V+V/VkVkpvicNNV/VgpppC'` at seed 0 versus
+`'V*V+V/VkVkpvicNV/VgpppC'` at seed 42 — different lengths, so not a formatting
+artefact.
+
+**Consequences, in order of severity.**
+
+1. **§5.3's acceptance gate is untestable as written.** "Byte-exact canonical string
+   identity against the Python engine" has no fixed referent when the Python engine
+   returns a different string per session. Nothing in the port can fix this; the
+   Python side must be made deterministic first.
+2. **The scientific claim survives; the reproducibility claim does not.** The WL hash
+   is a sort key over candidates, and the label component is isomorphism-invariant,
+   so within any single session the function is still a valid invariant — the
+   40/40 permutation result confirms it holds under each seed independently. What
+   changes across sessions is *which representative* of each isomorphism class is
+   chosen. ρ and the reduction factor are counts of distinct classes and so are
+   expected to be unaffected.
+3. **Honest limitation of the evidence above.** The "partition identical" check is
+   weaker than it looks: all 120 DAGs landed in distinct classes, so partition
+   equality was satisfied vacuously. The load-bearing evidence for point 2 is the
+   invariance check, and that rests on 40 permuted pairs per seed, not a proof.
+   Before ρ is asserted to be seed-independent in the response letter, this needs a
+   proper run over the k=1..8 exhaustive corpus under ≥2 seeds.
+
+**Fix** (authorised 2026-07-27: repair both engines rather than reproduce the
+defect): replace `hash()` at `canonical.py:702` with a fixed-constant FNV-1a
+64-bit over the label ordinal and the child hashes. This is the same primitive the
+C++ side needs for §5.5, and the build skeleton already exposes `fnv1a64` for
+exactly this purpose, so both engines can be pinned against one shared test vector.
+Note that the fix *will* change roughly 10 % of canonical strings relative to
+whatever the March campaign produced — harmless for counts, but it is the reason
+the §5.3 gate must be defined against the *fixed* Python engine, not against
+stored March artefacts.
+
+#### P3 REFUTED — there are no replayable DAG streams, and this is not only T01's problem
+
+Two independent failures. The path in the ticket
+(`…/research/isalsr/results/model_validation/…`) does not exist; the real root is
+`…/research/ISAL/completed/isalsr/…`. More seriously, `wl_subtree_unified/`
+contains **zero** `run_log.json` files, and the 2,640 run logs under `wl_subtree/`
+persist only aggregates — `total_dags_explored` and `unique_canonical_dags` as
+integers. No DAG structures and no canonical strings were ever written.
+
+- **For T01**: §5.3 gate 3 ("≥100,000 DAGs replayed from stored trajectories") cannot
+  be run. It needs replacing, and the natural substitute is to generate the evolved
+  distribution live — run Bingo and UDFS briefly under both engines and compare
+  canonical strings in-process — which tests the same thing without needing history.
+- **For the campaign**: this is the answer to `EXECUTION-PLAN.md` §2b check **P1**,
+  and the answer is that it fails. The plan already states the consequence: the DAG
+  or canonical-hash stream must be logged **before Wave 1**, or T04 Mode 1 can only
+  ever replay Wave 3's own runs and loses the `isalsr`-arm decomposition that
+  answers R1.4. Escalated rather than absorbed — it is outside T01's scope.
+
+#### P1 REFUTED, P2 PARTIAL — the cited test corpora do not match the manuscript
+
+- "14,841" appears nowhere in `tests/` or in any source file; the only occurrence in
+  the whole repo is inside an agent definition. No stored DAG artefact exists; tests
+  build DAGs dynamically from 8 seed expressions, and the completeness tests exercise
+  **41,217** permutation instances across k=1..8.
+- Current fast-canonical test count is **94** collected (86 unit + 8 property), not
+  890. Large-expression coverage is k=10 and k=11 only, not k=10..15.
+- Both figures are cited to `discussion.tex`, which brings up the next item.
+
+#### The submitted manuscript is not in this repository
+
+`results.tex`, `discussion.tex` and `response_to_reviewers.tex` do not exist here.
+The only LaTeX present is `docs/md_files/technical_report/`. Every ticket-cited
+locator of the form `results.tex:57–58` or `discussion.tex:38` is therefore
+unverifiable from this checkout, and §8.1's "as submitted" column cannot be
+populated without the manuscript sources. Raised with Mario, who supplied the
+location: `/media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/article/journal/69c1637a28a81fea2badda9a/`
+(with `article/` and `reviews/` beneath it). Extraction under way.
+
+### 2026-07-27 — Decisions on the four premise failures (Mario)
+
+| Question | Decision |
+|---|---|
+| Scope of the hash fix | **FNV-1a 64-bit in both engines, pinned by a shared test vector.** Not a `PYTHONHASHSEED=0` pin, which cannot make C++ match a salted Python string hash and fails silently on any unpinned invocation. |
+| Replacement for §5.3 gate 3 | **Live dual-engine comparison during short searches**: canonicalise every DAG twice in-process under Bingo and UDFS and assert equality, target ≥100,000 DAGs. Tests the evolved distribution without needing history, and emits the stream check P1 wants. |
+| `EXECUTION-PLAN.md` check P1 (hash-stream logging) | **Folded into T01**, declared as deliberate scope creep. The instrumentation sits in the same dedup hook the port touches and the gate-3 replacement already emits the stream; doing it separately means a second pass over the same code and leaves Wave 1 blocked meanwhile. |
+
+### 2026-07-27 — Build skeleton landed and independently verified
+
+Delivered: `CMakeLists.txt`, `native/{src,include}`, `src/isalsr/core/backends.py`,
+`tests/unit/test_native_build.py`, `docs/engineering/CPP_BUILD.md`, and a
+`pyproject.toml` switched to `scikit-build-core` + `nanobind`. No algorithm ported.
+
+I re-ran every acceptance check myself rather than accepting the agent's summary:
+
+| Check | Result |
+|---|---|
+| `backends.engine()` | `cpp` |
+| `build_info()` | `isa_level=x86-64-v3`, `avx2=1`, `fma=1`, **`avx512f=0`**, `compiler=gcc 12.2.0`, `cplusplus=201703`, `ndebug=1`, `build_hash=298fc1188bf1b051` |
+| `ISALSR_ENGINE=python` | `python` — fallback switch works |
+| `_native.fnv1a64` vs pure-Python reference | agrees on empty input, ASCII, high bytes, the full 0..255 range, and 1 kB |
+| `pytest tests/ -q` | **1528 passed, 1 skipped** (was 1495; +33 new) |
+| `mypy src/isalsr/` | clean, 40 files |
+| `ruff check src/` | clean |
+
+`build_info()` reporting `avx512f=0` on a machine that *has* no AVX-512 is the
+switch behaving correctly, and it is the field G5 should assert on a compute node —
+it distinguishes "native engine loaded" from "silent pure-Python fallback" without
+running anything.
+
+**Two loose ends recorded rather than hidden.**
+
+1. **The `.so` installs to site-packages, not into the source tree** —
+   `…/envs/isalsr/lib/python3.11/site-packages/isalsr/core/_native.cpython-311-x86_64-linux-gnu.so`.
+   Consequence for the campaign: `rsync ./ picasso:…` **will not carry the
+   extension**. It must be built on Picasso as part of environment setup, which
+   compounds finding E-1 (no `isalsr` env exists there at all). The SLURM worker
+   must therefore verify `backends.engine() == "cpp"` and fail loudly if not —
+   otherwise 3,000 tasks would silently run the pure-Python engine and produce a
+   campaign that measures nothing.
+2. **Six pre-existing `ruff` errors in `tests/`** — `test_bingo_adapter.py` (F841),
+   `test_statistical_analysis.py` (B905), `test_udfs_adapter.py` (E402 ×4). Not
+   introduced by this work (those files are unmodified per `git status`), but AC-4
+   requires `ruff check` clean across `src/` **and** `tests/`, so they are T01's to
+   clear before close.
+
+### 2026-07-27 — Determinism fix landed and independently verified
+
+`canonical.py` now computes the 1-WL subtree hash with a fixed-constant FNV-1a
+64-bit over the label's *value string* and the child hashes, little-endian, offset
+basis `0xcbf29ce484222325`, prime `0x100000001b3`. Hashing the label value rather
+than an ordinal table means the enum can be reordered without changing a single
+canonical string, and the C++ side reproduces it in five lines.
+
+Verified by me, re-running the probe with a fourth seed the implementing agent
+never tried (99991):
+
+| Seed | Canonical strings differing from seed 0 | Distinct strings | Permutation invariance |
+|---|---|---|---|
+| 0 | — | 120 | 40 / 0 |
+| 42 | **0 / 120** (was 12) | 120 | 40 / 0 |
+| 1337 | **0 / 120** (was 13) | 120 | 40 / 0 |
+| 99991 | **0 / 120** | 120 | 40 / 0 |
+
+`pytest`: **1630 passed, 1 skipped** (+102 new). `mypy` and `ruff check src/`
+clean. No existing test encoded a canonical string that changed, so no expected
+literals were rewritten — which is itself informative: the suite never pinned a
+literal canonical string, so it could not have caught this defect.
+
+Test vector `tests/data/wl_hash_vectors.json` is now the shared oracle both engines
+are pinned to. First three entries: `("var", []) → 7567199770864868670`,
+`("+", []) → 12638127826927718602`, `("*", []) → 12638128926439346813`.
+
+### 2026-07-27 — **PREMISE-FALSE: §1's rationale for this ticket does not survive contact with the manuscript**
+
+Manuscript located and read directly (not via agent summary):
+`…/69c1637a28a81fea2badda9a/article/paper/`.
+
+#### The cost figures in §1 are stale by one campaign
+
+Table `tab:three_axis`, `results.tex:57–58`, is the submitted source of truth:
+
+| Method | ρ | Red. | T_canon | T_eval | OH | S |
+|---|---|---|---|---|---|---|
+| UDFS | 1.56 ± 0.24 | 34.2 % | 0.296 ms | **≈519 ms** | 0.05 % | 1.07 |
+| Bingo | 1.83 ± 0.09 | 45.2 % | 0.817 ms | **1.29 ms** | 39.2 % | 0.93 |
+
+§1 of this ticket asserts "Bingo's fitness evaluation costs ≈ 0.14 ms/DAG …
+a 3.3 : 1 cost ratio against us". The manuscript prints **1.29 ms**, so the true
+ratio is **0.817 / 1.29 = 0.63 : 1** — canonicalisation is *already cheaper than
+evaluation*, not 3.3× more expensive. The ticket's follow-on arithmetic ("pays
+≈5.8× the saved cost") therefore has no basis. Same for UDFS: the ticket says
+1 : 64, the manuscript says T_eval/T_canon **> 1,500** (`results.tex:191`). Both
+ticket figures trace to `CLAUDE.md`'s older 22-problem campaign and were superseded
+by the 50-problem run actually submitted.
+
+#### The deeper problem: `S` is *defined* to be insensitive to canonicalisation cost
+
+`computational_experiments.tex:115–127`:
+
+> T_total = T_search + T_canon  … The baseline variant has T_canon = 0 by
+> definition, so T_search = T_total. … The search-only speedup
+> S = T_search^baseline / T_search^IsalSR **isolates the effect of deduplication on
+> pure search time.**
+
+`S` subtracts `T_canon` from the IsalSR side before dividing. Making
+canonicalisation faster reduces `T_total` and reduces `OH`, but leaves
+`T_search^IsalSR` **unchanged by construction** — so it leaves `S` unchanged.
+
+§1 claims "A C++ core that brings canonicalisation to the same order as the
+evaluation itself flips the sign of that term." It cannot. The term it would flip
+is not in `S`. And `S = 0.93` is not caused by canonicalisation being expensive —
+it says that, *even after canonicalisation is excluded*, Bingo–IsalSR needs more
+search time than the baseline. That is a statement about the search trajectory
+under deduplication, not about engine speed.
+
+#### What the port does and does not buy
+
+| Quantity | Effect of the C++ port | Why |
+|---|---|---|
+| `OH` (39.2 % Bingo) | **Large improvement** — this is the real prize | OH = T_canon/T_total, directly proportional to canonicalisation cost |
+| Wall-clock, and the Nemenyi wall-clock gap at `results.tex:193–196` | **Large improvement** | Bingo's IsalSR arm currently exceeds the critical difference; a 20× cheaper canonicaliser plausibly collapses it |
+| `S` (0.93 Bingo) | **No first-order effect** | `T_canon` is subtracted out before the ratio is formed |
+| ρ, reduction factor | **No effect** | counts of canonical classes, engine-independent |
+
+So T01 remains clearly worth doing — but its deliverable against R1.1 is
+"canonicalisation overhead falls from 39.2 % to ≈2 % and the wall-clock penalty
+disappears", **not** "S rises above 1.0". AC-6 as written asks for a projected `S`
+and says to escalate if it does not exceed 1.0; under the manuscript's own
+definition that escalation is guaranteed regardless of how fast the C++ is.
+Escalated to Mario rather than quietly reinterpreting the acceptance criterion.
+
+### 2026-07-27 — Port phase P2 complete (CDLL + LabeledDAG)
+
+`native/src/{cdll,labeled_dag}.cpp` with headers, bound for differential testing as
+`_native.testing.{NativeCDLL,NativeLabeledDAG}`. Verified by me:
+**2,648 passed, 1 skipped** (+1,018 differential tests: 500 randomised CDLL operation
+sequences and 500 randomised DAG build sequences, each 30 ops, plus 20 targeted
+invariant and error-path tests). `engine()`=`cpp`, `isa_level=x86-64-v3`, mypy and
+ruff clean. A grep confirms `native/` contains **no** `std::async`, `std::thread`,
+`thread_pool` or `hardware_concurrency` — the no-threading rule held.
+
+Carried forward: the implementer used `std::set<int32_t>` where Python uses
+`set[int]`, so topological-sort tie order can differ between engines. It avoided
+asserting exact topo-sort equality for that reason, which is the right call. Not a
+problem for the canonical path — `_wl_subtree_hashes` sorts `children_hashes`
+before mixing, and candidate ties are resolved by lexmin backtracking rather than
+by iteration order — but it is an assumption to **verify at the P5 equivalence
+gate**, not to carry on trust.
+
+### 2026-07-27 — Port phase P3 complete (token grammar + S2D)
+
+`native/src/{node_types,string_to_dag}.cpp`. Verified: **4,766 passed, 1 skipped**
+(+2,118 differential tests over 2,000 generated strings, 1–5 variables, 0–25
+tokens, plus 118 explicit edge cases). `native/` still threading-free.
+
+I audited the test rather than the summary: `tests/unit/test_native_s2d.py:147`
+compares `ordered_inputs()` in **insertion order** per node, not merely sorted
+neighbour sets. That distinction is the whole point of invariant 8 — a test
+comparing sorted neighbours would pass against a port that had silently swapped
+operand order for SUB/DIV/POW, and every downstream number would be wrong.
+
+**Scope reduction (deviates from ticket §5.2, deliberately).** `canonical.py:50`
+imports only `generate_pairs_sorted_by_sum` from `dag_to_string.py`; the
+`DAGToString` class is used solely by `adapters/base.py`,
+`algorithms/greedy_{single,min}.py` and `search/population.py`, none of which run
+in the production campaign. §5.2 lists `dag_to_string` in the port order, but under
+the hot-path-only scope decision it buys nothing: 377 lines of Python that would
+need porting *and* equivalence-testing for zero effect on `T_canon`. Only the
+displacement-pair generator (invariant 5) is being ported. Recorded here rather
+than silently skipped.
+
+### 2026-07-27 — `S` root cause: the invariance is exact algebra, and H3 dominates
+
+Investigation at `T01-appendix/s-root-cause.md`. I verified the load-bearing claims
+against the code myself.
+
+#### `T_search` is derived, so `S` is *exactly* invariant to canonicalisation speed
+
+Both runners compute it identically —
+`search_only = wall_clock - dedup.canon_time_total`
+(`bingo/isalsr_runner.py:519`, `udfs/isalsr_runner.py:277`) — and the translator
+reports `overhead_time_s = r.canonicalization_time_s`
+(`bingo/translator.py:118`).
+
+Speed canonicalisation by a factor *f*: `wall_clock` falls by
+`T_canon·(1 − 1/f)` and the measured `T_canon` falls to `T_canon/f`, so
+
+```
+T_search_new = (wall_clock − T_canon·(1 − 1/f)) − T_canon/f = wall_clock − T_canon
+```
+
+— unchanged for every *f*. This is not "approximately insensitive"; it is an
+identity. **No C++ engine can move `S` by making `fast_canonical_string` faster.**
+
+#### What is charged where
+
+| Operation | Bingo | UDFS |
+|---|---|---|
+| Atlas lookup | inside `T_canon` | inside `T_canon` |
+| `fast_canonical_string` | inside `T_canon` | inside `T_canon` |
+| `hash(canonical)` | **inside** | **outside** |
+| DAG conversion (`agraph_to_labeled_dag` / `compgraph_to_labeled_dag`) | **outside** → `T_search` | **outside** → `T_search` |
+| dedup set lookup / insert | **outside** → `T_search` | **outside** → `T_search` |
+
+The published 39.2 % overhead therefore *understates* IsalSR's true cost: the
+conversion and set work is real IsalSR-only expense that the overhead metric does
+not count and that `T_search` silently absorbs.
+
+#### Termination regime — nothing hits the ceiling
+
+Across 300 sampled `wl_subtree` Bingo runs (150 per arm), **0 hit the 43,200 s
+ceiling in either arm**. Baseline `T_total` mean 2,478 s; IsalSR `T_total` mean
+7,561 s, of which `T_search` 5,214 s. Every run converges early, so `S` is a
+genuine time-to-converge comparison, not a budget artefact.
+
+#### Verdict: H3 ≥ H1 ≫ H2
+
+`T_search` is 2.1× larger for IsalSR (5,214 s vs 2,478 s) — a gap of ≈2,736 s that
+canonicalisation is already excluded from. H1 is confirmed from the code: DAG
+conversion and set operations are outside the timer and inflate `T_search`. But an
+order-of-magnitude check bounds it: `T_canon` ≈ 2,347 s at 0.817 ms/DAG implies
+≈2.9 M canonicalisations, so even a conversion costing 0.3 ms/DAG accounts for only
+≈860 s — roughly a third of the gap. **The remainder is H3: deduplication genuinely
+changes Bingo's search trajectory and it converges more slowly in search time.**
+That is a property of the method, not of the implementation, and it cannot be
+engineered away. The split cannot be pinned down more precisely without
+per-generation profiling.
+
+#### Consequence for the revision
+
+Porting the *bookkeeping* (conversion + dedup set) to C++ would genuinely reduce
+`T_search^IsalSR` and so genuinely improve `S` — that work is IsalSR-only, so unlike
+a faster evaluator it does not cancel between arms. But the bound above says it
+recovers at most about a third of the gap, and `S = 0.93` would not reach 1.0 on
+that alone. AC-6 will therefore report `S` as unchanged-by-construction plus a
+bounded estimate of what bookkeeping removal could recover, and escalate as §6
+specifies. **The honest answer to R1.1 is that Bingo's `S < 1` is mostly real.**
+
+### 2026-07-27 — Equivalence harness reported a false PASS; caught on verification
+
+`experiments/scripts/equivalence_gate.py` was delivered reporting
+`engine_b: "cpp"`, `self_comparison: false` and **0 mismatches** across all three
+gates. None of it was a cross-engine comparison. Both sides ran the Python
+canonicaliser.
+
+Verified in the main tree:
+
+```
+grep -c backend src/isalsr/core/canonical.py          -> 0
+dir(_native)          -> ['build_info','engine_name','fnv1a64','testing']
+dir(_native.testing)  -> ['NativeCDLL','NativeLabeledDAG','NativeStringToDAG','tokenize']
+```
+
+No `backend` parameter exists on the canonicaliser and no native canonicalisation
+symbol exists at all, so `backend="cpp"` could not route anywhere native.
+
+**Root cause.** The harness used `backends.engine()` as its capability probe. That
+returns `"cpp"` whenever the **extension imports**, which says nothing about
+whether `fast_canonical_string` has a C++ implementation. Conflating "the `.so`
+loaded" with "this function is ported" produced a PASS on a test that exercised
+nothing.
+
+**Why this one matters more than the others.** This file is the evidence for AC-3,
+and `EXECUTION-PLAN.md` §2 gate G1 gates a 36,000 core-hour campaign on it. A
+harness that cannot distinguish "verified equivalent" from "compared Python to
+itself" is worse than no harness, because it converts an unexamined assumption into
+a documented result. Returned for one iteration with instructions to probe the
+capability rather than the extension, and to make a self-comparison report
+`pass: false` with a stated reason — a self-comparison must never be reportable as
+a passing equivalence gate.
+
+**Second finding, kept rather than discarded.** The harness discards ~76 % of
+randomly generated DAGs (23.9 % yield) because they contain nodes unreachable from
+node 0. The filter itself is correct — I checked line 374 and it uses the
+structural criterion (reachability from node 0 via out-edges), not the circular
+"the round-trip failed". But the *rate* is evidence for **T06 / R1.2**, which asks
+for exactly this reachability-condition failure rate, so it is being promoted to a
+reported field (`dags_generated`, `dags_discarded_unreachable`, `discard_rate`)
+rather than left in an agent's prose. Note the population differs from T06's: this
+is uniformly random synthetic DAGs, whereas R1.2 asks about DAGs arriving at the
+canonicaliser during real searches. The two rates are not interchangeable and T06
+still needs its own instrumentation.
+
+### 2026-07-27 — First independent speedup measurement: 11.9×, zero mismatches
+
+Taken by me in the main tree, not reported by an agent. The native canonicaliser
+now exists — `_native` exposes `fast_canonical_string`, `wl_node_hash` and
+`CanonicalTimeoutError` — so a genuine cross-engine comparison is finally possible.
+
+Corpus: 400 randomly generated DAGs surviving a reachability filter, k ∈ [3, 18],
+median k = 8, which spans the range the campaign actually exercises.
+
+| Engine | Cost (workstation) | Mismatches |
+|---|---|---|
+| Python | 0.1705 ms/DAG | — |
+| C++ | **0.0143 ms/DAG** | **0 / 400** |
+
+**Speedup 11.9×, byte-identical output.**
+
+#### Projected effect on the published numbers
+
+`OH = T_canon / T_total` and `T_search` is untouched by the engine, so with
+`T_canon → T_canon / 11.9` and Bingo's published `OH = 39.2 %`:
+
+```
+T_search = 0.608·T_total ,  T_canon = 0.392·T_total
+T_canon' = 0.392/11.9 = 0.0329·T_total
+T_total' = 0.608 + 0.0329 = 0.641·T_total
+OH'      = 0.0329 / 0.641 = 5.1 %
+```
+
+| Quantity | As submitted | Projected on C++ |
+|---|---|---|
+| Bingo `T_canon` | 0.817 ms/DAG | ≈0.069 ms/DAG |
+| Bingo overhead | 39.2 % | **≈5.1 %** |
+| Bingo total wall-clock | — | **≈36 % lower** |
+| UDFS `T_canon` | 0.296 ms/DAG | ≈0.025 ms/DAG |
+| UDFS overhead | 0.05 % | ≈0.004 % |
+| `S` (both) | 1.07 / 0.93 | **unchanged** — exact algebra, see the root-cause entry |
+
+That is the headline the revision can defend: the overhead R1.1 objects to falls by
+roughly 8×, and Bingo's wall-clock penalty — which currently exceeds the Nemenyi
+critical difference at `results.tex:193–196` — plausibly collapses inside it.
+
+#### Four caveats, stated because the number will be quoted
+
+1. **Workstation, not Picasso.** Measured on an i7-13700KF. AC-5 requires the
+   comparison on a Picasso compute node, and that is where the paper's costs come
+   from. The ratio is the transferable quantity, not the absolute.
+2. **Synthetic corpus, not the evolved distribution.** Randomly generated DAGs are
+   not what Bingo's search produces; the speedup may vary with k, and the k-bucket
+   breakdown AC-5 requires is not yet measured.
+3. **11.9× is far below IsalHG's 101–180×,** and that is expected rather than
+   disappointing: the algorithm still performs the same backtracking, and each call
+   now pays a fixed FFI cost to copy the Python `LabeledDAG` into C++. At
+   0.0143 ms/DAG that copy is plausibly a large share of what remains, which makes
+   it the obvious next optimisation — though 11.9× already clears what the ticket
+   needs.
+4. **Measured mid-flight** while the P4 workstream was still running. Re-measure on
+   the final tree before anything is quoted.
+
+### 2026-07-27 — P4 complete: the canonicaliser is ported, and AC-4 is met
+
+`native/src/{wl,canonical}.cpp`; `canonical.py` gained a keyword-only `backend`
+parameter dispatching through `backends.resolve()`. Only `mode="wl_only"` is
+native — `wl_tiebreak`, `tuple_only` and the legacy exhaustive canonicalisers
+remain Python, which keeps the 6-tuple machinery out of C++ entirely.
+
+Final tree, verified by me:
+
+| Check | Result |
+|---|---|
+| `pytest tests/ -q` | **4,856 passed, 5 skipped** (1,495 at session start) |
+| `mypy src/isalsr/` | clean, 40 files |
+| `ruff check src/ tests/` | **clean** — AC-4 now fully met |
+| WL hash vector conformance | 57/57 |
+| `native/` threading audit | clean of `std::async`, `std::thread`, `thread_pool`, `hardware_concurrency` |
+
+**AC-4 closed.** The six pre-existing `ruff` errors were mine to clear and are now
+fixed: `zip(..., strict=True)` in `test_statistical_analysis.py:99` (which also
+strengthens the assertion, both sequences being length 4); the unused binding
+dropped in `test_bingo_adapter.py:103` while keeping the call as a smoke check;
+and the four `E402`s in `test_udfs_adapter.py` covered by a per-file ignore that
+follows the convention already established for `tests/integration/*.py` — the file
+uses the identical `pytest.importorskip` + `sys.path` pattern, so restructuring
+working test code to satisfy a linter would have been the wrong fix.
+
+#### Equivalence holds on the failure path too
+
+My own check, 4,000 generated DAGs, both engines:
+
+| Outcome | Count |
+|---|---|
+| Succeeded in both, canonical strings identical | 3,994 |
+| Raised in both, **identical exception type and message** | 6 |
+| Diverged | **0** |
+
+Reproducing failures identically matters as much as reproducing successes: an
+engine that raised a different exception type would abort campaign runs
+differently, and 3,000 runs would diverge in a way no equivalence test on
+successful cases would catch.
+
+#### A distinction T06 needs, discovered here
+
+Two very different rates got conflated during this work and must not be conflated
+in the response letter:
+
+| Quantity | Measured | Meaning |
+|---|---|---|
+| Reachability **precondition violated** | ~76–82 % of random DAGs | some node not reachable from node 0 |
+| Canonicalisation **actually fails** | **6 / 4,000 ≈ 0.15 %** | `RuntimeError: no valid operation found` |
+
+The canonicaliser tolerates most precondition violations; only degenerate
+configurations fail outright. So "the reachability condition is violated" and "the
+canonicaliser breaks" differ by nearly three orders of magnitude. R1.2 asks for a
+failure rate, and quoting an ~80 % violation rate as though it were a failure rate
+would badly misrepresent the method. Both numbers are needed, on the *evolved*
+distribution rather than this synthetic one. Handed to **T06**.
+
+### 2026-07-27 — AC-5 benchmark driver delivered; corpus representativeness queried
+
+`experiments/scripts/bench_canonical.py` implements the §5.4 protocol
+(3 warmups, best-of-9 per rep, median of 4 reps, engines alternated in the same
+thermal state, fixed seed, JSON provenance). Quick-mode result:
+
+| Bucket | Python (ms/DAG) | C++ (ms/DAG) | Speedup |
+|---|---|---|---|
+| k < 5 | 0.0243 | 0.0030 | 7.98× |
+| 5 ≤ k < 15 | 0.1171 | 0.0123 | 9.52× |
+| 15 ≤ k < 32 | 0.7677 | 0.0684 | 11.23× |
+| overall | 0.1171 | 0.0123 | **9.52×** |
+
+Speedup rising with k is the expected shape: the per-call FFI copy of the Python
+`LabeledDAG` into C++ is a fixed cost, so it dominates at small k and amortises at
+large k. It also means the *aggregate* speedup depends on the k-distribution of
+whatever corpus is used — which is exactly why the next point matters.
+
+**Concern raised on verification, not accepted as delivered.** The driver builds
+its corpus with `make_random_sr_dag(num_vars=1, …)` (line 185), chosen because a
+single variable guarantees structural reachability and so gives a 0 % discard rate.
+That is a reasonable way to dodge the ~80 % discard problem, but it benchmarks a
+distribution the campaign does not run on: the 50-problem suite spans 1–5
+variables, and multi-variable DAGs have a different branching structure at the
+root. Re-measuring independently across `num_vars ∈ {1, 2, 3, 5}` with a
+reachability filter, stratified by the same k-buckets, before any number from this
+driver is quoted. My own earlier spot measurement (`num_variables=2`, k ∈ [3,18],
+median k = 8) gave 11.9×, against this driver's 9.52× overall — consistent in
+magnitude, but the gap is corpus composition and needs pinning down rather than
+averaging over.
+
+Projected Bingo overhead from the driver's 9.52×: **6.3 %** (against 5.1 % from my
+11.9× measurement). Either way the conclusion holds — 39.2 % falls to single
+digits — but the figure quoted in the response letter must come from the Picasso
+run required by AC-5, not from the workstation.
+
+#### Deferred: move `native/` under `src/isalsr/core/` (Mario, 2026-07-27)
+
+C++ sources currently live at repo-root `native/`. They are to be moved under
+`src/isalsr/core/` for the final integration — **not now**, while agents hold write
+locks on `native/` and `CMakeLists.txt`.
+
+The reason the sources were placed at the root in the first place is a name
+collision, and it governs how the move must be done: a directory
+`src/isalsr/core/_native/` sits next to the extension `isalsr.core._native`.
+CPython's `FileFinder` tries extension-module loaders before falling back to
+implicit namespace packages, so the `.so` should still win — but the margin is one
+import-machinery detail, and the current build installs the `.so` into
+site-packages rather than the source tree, so the two only ever meet in an editable
+install. Either give the source directory a distinct name (`_native_src/`) or
+accept the collision and prove it works.
+
+Post-move verification, all four required before the move is called done:
+
+1. `python -c "from isalsr.core import _native; print(_native.__file__)"` resolves to
+   the `.so`, **not** to a directory.
+2. `backends.engine()` still returns `cpp`, and `build_info()` still reports
+   `isa_level=x86-64-v3`.
+3. `ISALSR_ENGINE=python` still forces the fallback.
+4. Full suite still green, and the C++ sources are still excluded from the wheel.
+
+#### Two further findings for other tickets
+
+- **`discussion.tex:37` makes an unsupported numerical claim.** Verbatim: "no false
+  collision has been observed across the $14{,}841$ DAGs in the unit-test suite or
+  the millions generated during the SR experiments". No corpus of that size exists
+  in the repository, and "14841" appears in no source or test file. Verdict (a) —
+  a reviewer can ask for it and we cannot produce it. Belongs to **T09**.
+- **Two literal canonical strings are printed in the manuscript**:
+  `VcVspv*pv+PpcnnC` at `methodology.tex:256` (figure caption, explicitly "the
+  canonical string") and `VgnV*C` at `methodology.tex:272` (inside a `\begin{comment}`
+  block, so not typeset). Both must be re-derived under the fixed engine before
+  submission — this is the manuscript-number carve-out flagged when the fix-both-
+  engines decision was taken. `methodology.tex:256` is the one that matters.
+
 
 ---
 

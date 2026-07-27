@@ -100,7 +100,7 @@ class TestAGraphToLabeledDAG:
                 [6, 0, 0],
             ]
         )
-        utilized = ag.get_utilized_commands()
+        ag.get_utilized_commands()
         dag = agraph_to_labeled_dag(ag)
         cs = pruned_canonical_string(dag)
         assert cs == "Vs"  # sin(x_0)

@@ -96,7 +96,7 @@ class TestHolmBonferroni:
         p_values = [0.01, 0.04, 0.03, 0.005]
         adjusted = holm_bonferroni(p_values)
         assert len(adjusted) == 4
-        assert all(a >= r for a, r in zip(adjusted, p_values))
+        assert all(a >= r for a, r in zip(adjusted, p_values, strict=True))
         # The smallest p-value (0.005) should still be significant
         idx_smallest = p_values.index(0.005)
         assert adjusted[idx_smallest] < 0.05

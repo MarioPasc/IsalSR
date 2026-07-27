@@ -55,9 +55,106 @@ log = logging.getLogger(__name__)
 
 CanonicalMode = Literal["wl_only", "wl_tiebreak", "tuple_only"]
 
+# ---------------------------------------------------------------------------
+# C++ backend — fast_canonical_string (wl_only mode only)
+# ---------------------------------------------------------------------------
+
+try:
+    from isalsr.core import _native as _cpp_ext  # type: ignore[attr-defined]
+
+    _CPP_AVAILABLE: bool = True
+except ImportError:
+    _cpp_ext = None
+    _CPP_AVAILABLE = False
+
+# NodeType → integer code matching labeled_dag.hpp enum class NodeType.
+# Defined unconditionally so mypy can type-check the helper regardless of
+# whether the C++ extension is present.
+_NODE_TYPE_INT: dict[NodeType, int] = {
+    NodeType.VAR: 0,
+    NodeType.ADD: 1,
+    NodeType.MUL: 2,
+    NodeType.SUB: 3,
+    NodeType.DIV: 4,
+    NodeType.SIN: 5,
+    NodeType.COS: 6,
+    NodeType.EXP: 7,
+    NodeType.LOG: 8,
+    NodeType.SQRT: 9,
+    NodeType.POW: 10,
+    NodeType.ABS: 11,
+    NodeType.NEG: 12,
+    NodeType.INV: 13,
+    NodeType.CONST: 14,
+}
+
+
+def _py_dag_to_native(dag: LabeledDAG) -> object:
+    """Convert a Python LabeledDAG to a NativeLabeledDAG for C++ dispatch.
+
+    Replays nodes and edges (in insertion order via ``ordered_inputs``)
+    so that ``input_order_`` in the C++ DAG matches exactly, preserving
+    Invariant 8 (binary operand order).
+
+    Args:
+        dag: The Python labeled DAG to convert.
+
+    Returns:
+        A ``_native.testing.NativeLabeledDAG`` populated from *dag*.
+    """
+    import math
+
+    nt = _cpp_ext.testing
+    n = dag.node_count
+    native = nt.NativeLabeledDAG(n)
+    for i in range(n):
+        label = dag.node_label_unchecked(i)
+        data = dag.node_data_unchecked(i)
+        vidx = int(data["var_index"]) if "var_index" in data else -1
+        cval = float(data["const_value"]) if "const_value" in data else math.nan
+        native.add_node(_NODE_TYPE_INT[label], vidx, cval)
+    # Replay in-edges in insertion order (preserves input_order_ / Invariant 8)
+    for tgt in range(n):
+        for src in dag.ordered_inputs(tgt):
+            native.add_edge_unchecked(src, tgt)
+    return native
+
 
 class CanonicalTimeoutError(Exception):
     """Raised when canonical string computation exceeds the time budget."""
+
+
+# ======================================================================
+# FNV-1a 64-bit: session-stable subtree hash (replaces PYTHONHASHSEED-salted hash)
+# ======================================================================
+
+_FNV_OFFSET: int = 0xCBF29CE484222325
+_FNV_PRIME: int = 0x100000001B3
+_MASK64: int = 0xFFFFFFFFFFFFFFFF
+
+
+def _wl_node_hash(label_value: str, children_hashes: tuple[int, ...]) -> int:
+    """FNV-1a 64-bit hash for a WL subtree node.
+
+    Hashes the label's value string (the character the canonical string format
+    commits to) then each child hash in little-endian byte order. All arithmetic
+    is modulo 2^64, making this reproducible across Python sessions and in C++.
+    ``children_hashes`` must already be sorted by the caller.
+
+    Args:
+        label_value: The ``NodeType.value`` string (e.g. ``"s"`` for SIN).
+        children_hashes: Sorted WL hashes of the node's children.
+
+    Returns:
+        A 64-bit unsigned integer hash.
+    """
+    h = _FNV_OFFSET
+    for byte in label_value.encode("utf-8"):
+        h = ((h ^ byte) * _FNV_PRIME) & _MASK64
+    for ch in children_hashes:
+        for shift in range(0, 64, 8):
+            h = ((h ^ ((ch >> shift) & 0xFF)) * _FNV_PRIME) & _MASK64
+    return h
 
 
 # ======================================================================
@@ -174,6 +271,7 @@ def fast_canonical_string(
     timeout: float | None = None,
     mode: CanonicalMode = "wl_only",
     use_wl_hash: bool | None = None,
+    backend: str | None = None,
 ) -> str:
     """Greedy-invariant canonical string from x_0.
 
@@ -223,6 +321,38 @@ def fast_canonical_string(
             stacklevel=2,
         )
         mode = "wl_tiebreak" if use_wl_hash else "tuple_only"
+
+    # Resolve backend: None → DEFAULT_BACKEND (cpp if available, python otherwise).
+    # The C++ path only supports wl_only mode; all other modes fall back to Python.
+    from isalsr.core import backends as _backends  # lazy to avoid circular import
+
+    resolved_backend: str
+    if backend is None:
+        resolved_backend = _backends.DEFAULT_BACKEND
+    elif backend == "cpp":
+        if not _CPP_AVAILABLE:
+            raise RuntimeError("backend='cpp' requested but isalsr.core._native is not available.")
+        resolved_backend = "cpp"
+    elif backend == "python":
+        resolved_backend = "python"
+    else:
+        raise ValueError(f"Unknown backend {backend!r}; valid options: 'cpp', 'python'")
+
+    if resolved_backend == "cpp" and _CPP_AVAILABLE and mode == "wl_only":
+        if dag.node_count == 0:
+            return ""
+        num_vars = len(dag.var_nodes())
+        if dag.node_count == num_vars and dag.edge_count == 0:
+            return ""
+        native_dag = _py_dag_to_native(dag)
+        t_sec = timeout if timeout is not None else -1.0
+        try:
+            return _cpp_ext.fast_canonical_string(native_dag, t_sec)  # type: ignore[no-any-return]
+        except _cpp_ext.CanonicalTimeoutError:
+            raise CanonicalTimeoutError(
+                "Fast canonical string computation exceeded time budget"
+            ) from None
+
     if dag.node_count == 0:
         return ""
     num_vars = len(dag.var_nodes())
@@ -699,7 +829,7 @@ def _compute_subtree_hashes(dag: LabeledDAG) -> list[int]:
             continue
         processed[u] = True
         children_hashes = sorted(node_hash[v] for v in dag.out_neighbors_raw(u))
-        node_hash[u] = hash((dag.node_label_unchecked(u), tuple(children_hashes)))
+        node_hash[u] = _wl_node_hash(dag.node_label_unchecked(u).value, tuple(children_hashes))
         for v in dag.in_neighbors_raw(u):
             out_deg[v] -= 1
             if out_deg[v] == 0 and not processed[v]:

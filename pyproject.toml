@@ -1,6 +1,25 @@
 [build-system]
-requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
-build-backend = "setuptools.build_meta"
+requires = [
+    "scikit-build-core>=0.9",
+    "nanobind>=2.0",
+]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.18"
+ninja.version = ">=1.10"
+build-dir = "build/{wheel_tag}"
+# wheel.packages must list the Python source tree; the .so is installed
+# into isalsr/core/ by CMake's install() rule, not by this list.
+wheel.packages = ["src/isalsr", "experiments", "benchmarks"]
+# The C++ sources live inside the package tree (src/isalsr/core/native/) so
+# that the whole extension travels with the checkout, but only the compiled
+# .so belongs in a wheel — ship no .cpp/.hpp.
+wheel.exclude = ["isalsr/core/native/**"]
+
+[tool.scikit-build.cmake.define]
+CMAKE_BUILD_TYPE = "Release"
 
 [project]
 name = "isalsr"
@@ -34,6 +53,10 @@ bench = [
     "pyyaml>=6.0",
     "scikit-learn>=1.3",
 ]
+native = [
+    "nanobind>=2.0",
+    "ninja>=1.10",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -58,6 +81,12 @@ all = ["isalsr[networkx,sympy,eval,search,viz,bench,dev,experiments]"]
 [tool.setuptools.packages.find]
 where = ["src", "."]
 include = ["isalsr*", "experiments*"]
+
+# ------------------------------------------------------------------
+# C++ extension optional extra.
+# The .so is built by CMake; this extra only pulls in the build deps
+# needed to *rebuild* from source (not to use a pre-built wheel).
+# ------------------------------------------------------------------
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -117,6 +146,8 @@ select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 # E402: imports after pytest.importorskip() -- standard pattern for optional deps
 "tests/integration/*.py" = ["E402"]
+# Same pattern: the UDFS vendor dir must be on sys.path and torch checked before import
+"tests/unit/test_udfs_adapter.py" = ["E402"]
 # N802: test names may use uppercase instruction names (V, C, N, P, W)
 # ANN: test functions/fixtures don't require type annotations
 "tests/**/*.py" = ["N802", "ANN"]
