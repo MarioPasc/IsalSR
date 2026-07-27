@@ -195,7 +195,9 @@ def node_display_label(dag: LabeledDAG, node_id: int) -> str:
     if label == NodeType.LOG:
         return "log"
     if label == NodeType.SQRT:
-        return r"$\sqrt{}$"
+        # An empty group is a mathtext parse error ("Expected \sqrt{value}"), so
+        # the radical needs a thin space rather than nothing between the braces.
+        return r"$\sqrt{\ }$"
     if label == NodeType.POW:
         return r"$\wedge$"
     if label == NodeType.ABS:
@@ -384,7 +386,7 @@ def draw_cdll_ring(
         arrow_radius,
         node_radius,
         PRIMARY_COLOR,
-        r"$p$", # was r"$\pi$" in IsalGraph, but "p" is more intuitive for S2D
+        r"$p$",  # was r"$\pi$" in IsalGraph, but "p" is more intuitive for S2D
     )
 
     if sec_pos != pri_pos:
@@ -395,7 +397,7 @@ def draw_cdll_ring(
             arrow_radius,
             node_radius,
             SECONDARY_COLOR,
-            r"$q$", # was r"$\sigma$" in IsalGraph, but "q" is more intuitive for D2S
+            r"$q$",  # was r"$\sigma$" in IsalGraph, but "q" is more intuitive for D2S
         )
     else:
         # Overlap: offset secondary arrow slightly

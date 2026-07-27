@@ -90,17 +90,38 @@ from `random.Random(31)`, `num_variables=2`.
   (`bingo/config.py:32`, `udfs/config.py:29`), so this failure mode is distinct
   from a timeout.
 
-### Leading hypothesis (unverified — do not treat as a result)
+### Root cause — CONFIRMED 2026-07-27, not a hypothesis
 
-Failure #0 has **edges into a VAR node**: both `(1,0)` and `(8,0)` point at x₁, so
-x₁ has in-degree 2. Semantically a variable is a source, but `C`/`c` can create
-such an edge and S2D permits it (Critical Invariant 6 only forbids cycles).
+`normalize_const_creation` (Critical Invariant 9) relocates every CONST creation
+edge onto node 0. That closes a cycle exactly when node 0 is already reachable
+from the CONST by directed edges, and a cyclic graph leaves D2S with no legal
+instruction.
 
-Invariant 9 moves every CONST creation edge onto node 0. Node 7 is CONST and
-`7 → 8 → 0`, so relocating 7's creation edge to `0 → 7` would close the cycle
-`0 → 7 → 8 → 0`. A traversal that cannot place a node without creating a cycle has
-no legal move — which matches the observed symptom. **Test this before believing
-it**; it is one plausible mechanism among several.
+Decisive evidence — the only difference between these two rows is the
+normalisation step:
+
+| Entry point | Failed |
+|---|---|
+| `fast_canonical_string(mode="wl_only")` (applies normalisation) | **6 / 6** |
+| `_fast_canonical_d2s` (normalisation bypassed) | **0 / 6** |
+
+Discriminating statistics over the same 4,000 DAGs:
+
+| Property | Failures | Successes |
+|---|---|---|
+| A VAR node carries in-edges | **6 / 6 (100 %)** | 1,240 / 3,994 (31.0 %) |
+| VAR in-edges **and** ≥ 1 CONST | **6 / 6 (100 %)** | 498 / 3,994 (12.5 %) |
+
+Neither structural property is sufficient alone — a third of *successful* DAGs
+have VAR in-edges. The sufficient condition is the cycle test; stating it
+precisely remains AC-3.
+
+The enabling precondition is that a **VAR node has in-edges**. A variable is
+semantically a source, but `C`/`c` may direct an edge into one and S2D permits it:
+Critical Invariant 6 forbids cycles, not in-edges on leaves.
+
+**Full write-up, figure and per-algorithm table**:
+`docs/md_files/changes/d2s_canonicalisation_failures.md`.
 
 ---
 
