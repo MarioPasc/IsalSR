@@ -3,12 +3,38 @@
 | Field | Value |
 |---|---|
 | Reviewer comments closed | none (internal decision 2026-07-27) |
-| Type | Theory + implementation + experiment |
+| Type | Theory + implementation + experiment — **SECONDARY. Reserves no queue capacity.** |
 | Owner | **Ezequiel** (design authority, theory) + **Mario** (implementation, experiments) |
-| Depends on | T01 |
-| Blocks | T13 (page budget), T10 if it changes `S` |
+| Depends on | T01 · must not delay or compete with T02 |
+| Blocks | T13 (page budget) · T10 only if the ablation runs *and* changes `S` |
 | Status | NOT STARTED |
-| Target | design analysis 2026-08-10 · implementation 2026-08-24 · ablation results 2026-09-08 |
+| Target | design analysis 2026-08-10 · implementation 2026-08-24 · **ablation go/no-go 2026-08-31** |
+
+---
+
+## 0. Scope — re-scoped 2026-07-27
+
+The priority of this revision is the **C++ re-execution (T02)**, which is the
+headline result. This ticket is explicitly secondary and is subordinate to it in
+three ways:
+
+1. **It reserves no queue capacity.** The Gray ablation is Wave 4 in
+   `EXECUTION-PLAN.md` — pure spillover, launching only if Waves 1–3 are complete
+   and the queue is free.
+2. **Go/no-go date: 2026-08-31.** A 12 h campaign launched after that cannot finish,
+   be analysed, and reach the 2026-09-10 number freeze. If the date passes without a
+   launch, this ticket closes as *design + implementation + theory*, with the
+   ablation reported as characterised future work.
+3. **Promotion to headline is a late, evidence-gated option, not the plan.** Gray
+   replaces the C++ results as the headline **only if** the ablation completes before
+   the freeze *and* clears the §5 Phase 5 promotion rule. Otherwise the C++ numbers
+   stand and Gray is reported as an ablation.
+
+What is **not** descoped: the design analysis (§2), the implementation, and — if the
+chosen insertion point demands it — the proofs. Those cost no queue time, are on
+Ezequiel's and the implementation track rather than the campaign track, and are
+worth completing regardless of whether the ablation runs. Closing this ticket with a
+correct, proved, tested Gray encoding and no ablation is a **successful** outcome.
 
 ---
 
@@ -109,6 +135,7 @@ not theoretical.
 - `docs/article/DEVELOPMENT/SESSIONS.md` — S6 execution plan
 
 **IsalSR specification**
+- `.claude/notes/review/tasks/EXECUTION-PLAN.md` — Wave 4 and the go/no-go rule
 - `CLAUDE.md` (repo root) — Critical Invariants 4, 5, 8; the instruction-set table
 - `src/isalsr/core/README.md`
 - `.claude/notes/review/tasks/T01-cpp-core-port.md` — the engine this lands on
@@ -146,17 +173,25 @@ first, C++ second, byte-equivalence between them (same gate discipline as T01 §
 re-proving 3.13/3.14/3.15, those proofs are Ezequiel's and must be written against
 the *revised* Lemma 3.14 that T07 produces, not the submitted one.
 
-**Phase 4 — ablation.** Paired campaign, Gray vs non-Gray, same protocol as T02,
-full 12 h budget (decision 2026-07-27), on the same 50 problems. Report per axis:
-ρ, R² train/test, `|w*|` distribution, canonicalisation time, `S`, and the
-Appendix F metric quantities. Statistical treatment identical to the main campaign
-(CPDT primary).
+**Phase 4 — ablation. Conditional; go/no-go 2026-08-31.** Wave 4 in
+`EXECUTION-PLAN.md`: paired campaign, Gray vs non-Gray, same protocol as T02, full
+12 h budget on all ≈70 problems (4,200 runs). **Launches only if Waves 1–3 are
+complete and the queue is free.** Report per axis: ρ, R² train/test, `|w*|`
+distribution, canonicalisation time, `S`, and the Appendix F metric quantities.
+Statistical treatment identical to the main campaign (CPDT primary).
 
-**Phase 5 — promotion decision.** Gray becomes the main algorithm **only if** it
-wins or ties on every reported axis and strictly wins on at least one, with the
-comparison stated as a paired test. A win on `|w*|` alone with a loss on `S` is not
-a promotion; it is an ablation reported in the supplementary. Record the decision
-and its evidence in §7.
+If the go/no-go date passes without a launch, skip to Phase 5 and record the
+outcome as *not measured* — do not launch a truncated campaign to have something to
+report. A partial ablation is worse than none: it invites the reviewer to ask what
+the missing problems would have shown.
+
+**Phase 5 — promotion decision.** Gray replaces the C++ results as the headline
+**only if** the ablation completed before the freeze **and** Gray wins or ties on
+every reported axis and strictly wins on at least one, with the comparison stated as
+a paired test. A win on `|w*|` alone with a loss on `S` is not a promotion; it is an
+ablation reported in the supplementary. If the ablation did not run, the C++ results
+stand as the headline and Gray ships as design + implementation + theory. Record the
+decision and its evidence in §7.
 
 ---
 
@@ -170,10 +205,12 @@ and its evidence in §7.
   on k = 1..8 exhaustively.
 - **AC-3.** If the chosen insertion point changes `w*_D`, Theorems 3.13/3.15 and
   Lemma 3.14 are re-proved and the proofs are consistent with T07's rewrite.
-- **AC-4.** Ablation campaign complete; per-axis paired comparison reported with
-  CPDT, effect sizes and CIs.
+- **AC-4.** Either the ablation campaign is complete with a per-axis paired
+  comparison (CPDT, effect sizes, CIs), **or** the 2026-08-31 go/no-go passed and
+  that is recorded in §7 with the queue state that caused it. Both satisfy AC-4.
 - **AC-5.** Promotion decision taken against the §5 Phase 5 rule, with evidence,
-  recorded in §7. A negative result is an acceptable and reportable outcome.
+  recorded in §7. "Not promoted; C++ results remain the headline" is the expected
+  outcome and a fully acceptable one. A negative result is equally reportable.
 - **AC-6.** T13 informed of the page budget the chosen option needs.
 - **AC-7.** §8 filled.
 

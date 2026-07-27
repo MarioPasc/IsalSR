@@ -79,6 +79,8 @@ quantitative core of the answer to R3.1 and it does not currently exist anywhere
 
 ## 4. Mandatory reading
 
+- `.claude/notes/review/tasks/EXECUTION-PLAN.md` — Wave 2; the certification gate
+  applies here too
 - `.claude/notes/review/source/reviewer-3.md` — the whole file, including the note
   that R3's B2 credits the paper with the *preprint's* intrinsic-property experiments
 - `.claude/notes/review/source/reviewer-1.md` — the opening assessment (protocol endorsement)
@@ -136,8 +138,18 @@ Requirements:
    and a unit-test file mirroring `tests/unit/test_roundoff_benchmarks.py`.
 5. **Configs and launcher** following the `roundoff_launch.sh` pattern. Use the
    `picasso-sbatch` skill. Do **not** reuse `srbench.yaml`.
-6. **Run** at the same protocol as T02 (12 h budget, 30 seeds, both methods, all
-   variants active at that point — including the T04 `hash` arm if it exists).
+6. **Run** as **Wave 2** in `EXECUTION-PLAN.md`: same protocol as T02 (12 h budget,
+   30 seeds, both methods, both arms), launched **into the same campaign root and
+   MANIFEST as Wave 1** so provenance stays single-rooted. Both `baseline` and
+   `isalsr` run here regardless of how the open baseline question in
+   `EXECUTION-PLAN.md` §5 resolves — these problems have no prior data at all.
+
+   **Wave 2 must not delay Wave 1.** If the problem definitions are not ready when
+   the C++ gate passes, Wave 1 launches on S50 alone and Wave 2 follows. Splitting
+   the launch does not split the provenance provided the root, the engine build and
+   the configs are identical; record the split in the MANIFEST.
+
+   The `hash` arm covers these problems in Wave 3 (T04), not here.
 7. **Analyse**: full pipeline, CPDT at both N values, and a per-tier breakdown so a
    reader can see the extension did not simply dilute the suite.
 

@@ -3,9 +3,9 @@
 | Field | Value |
 |---|---|
 | Reviewer comments closed | none directly (produces the evidence for **R1.1**, **R2.6**, **R2.7**) |
-| Type | Computational experiment |
+| Type | Computational experiment — **PRIORITY. Wave 1. Launches before everything else.** |
 | Owner | **Mario** (+ Claude Code) |
-| Depends on | T01 (equivalence gate must pass first) |
+| Depends on | T01 (equivalence gate must pass first) · `EXECUTION-PLAN.md` §2 certification gate |
 | Blocks | T04, T08, T09, T10 |
 | Status | NOT STARTED |
 | Target | launch 2026-08-11 · results 2026-09-01 · **hard freeze 2026-09-10** |
@@ -29,6 +29,8 @@ what stops that from reading as instability.
 
 ## 2. Mandatory reading
 
+- `.claude/notes/review/tasks/EXECUTION-PLAN.md` — **read first**; it is
+  authoritative on waves, the certification gate, and the no-early-stopping decision
 - `.claude/notes/review/source/README.md`
 - `.claude/notes/review/source/reviewer-1.md` — R1.1
 - `.claude/notes/review/source/reviewer-2.md` — R2.6, R2.7
@@ -90,11 +92,42 @@ results directory produced Table 2, Table 3, Table 6 and Table 7 of the submissi
 and whether the Bingo+IsalSR arm predates the B12 fix. This audit is a prerequisite
 for T08 and T09 as well; do it once, here, properly.
 
-### 5.2 Campaign definition
-Identical to the submitted protocol except for the engine:
-50 problems × 30 seeds × {UDFS, Bingo} × {baseline, IsalSR}, `max_time = 43,200 s`,
-1 core per run, 8–16 GB (Bingo+IsalSR historically needed 128 GB — re-check under
-the native engine; the C++ dedup set should reduce it substantially).
+### 5.2 Campaign definition — **see `EXECUTION-PLAN.md`, which is authoritative**
+
+This is **Wave 1**, the priority campaign and the headline result of the revision.
+It launches first; every other wave is scheduled around it.
+
+Identical to the submitted protocol except for the engine: S50 × 30 seeds ×
+{UDFS, Bingo} × {baseline, IsalSR}, `max_time = 43,200 s`, 1 core per run, 8–16 GB
+(Bingo+IsalSR historically needed 128 GB — re-check under the native engine; the
+C++ dedup set should reduce it substantially).
+
+Three things are settled elsewhere and must not be re-litigated here:
+- **The `baseline` arm is NOT re-run on S50** (`EXECUTION-PLAN.md` §5). Its March
+  numbers stand and are paired against the new IsalSR arm. Wave 1 is therefore
+  `isalsr` only: 2 arrays, 3,000 runs. The residual wall-clock confound is
+  characterised via D1–D3 and mitigated by pinning `--constraint` to the March
+  baseline's predominant node type; both are mandatory, not optional.
+- **Wave 2** (the T05 extension) launches later into **the same campaign root and
+  MANIFEST**, and is where `baseline` does run. Splitting the launch does not split
+  the provenance provided the root, the engine build and the configs are identical.
+  Record the split.
+- **Blocking prerequisites** are enumerated in `EXECUTION-PLAN.md` §2b: T01, T06's
+  instrumentation half, T08's root-cause half, a frozen MANIFEST schema, and checks
+  P1–P3. Anything measured *during* a run must exist in the code before launch.
+
+### 5.2b Certification gate — nothing launches before it passes
+
+**Do not submit an array unless you are 100% sure the code is correct.** The eight
+conditions G1–G8 in `EXECUTION-PLAN.md` §2 are the gate: equivalence, clean suite,
+a *parsed* smoke log, non-zero dedup on the IsalSR arm, confirmation that the
+**native** engine loaded on a compute node (not a silent Python fallback),
+`sbatch --test-only`, one real single task completed and validated, and a correct
+`MANIFEST.json`.
+
+G7 — the single real task — is not optional and not parallelisable with the full
+launch. A subtly wrong array is worse than a failing one: a failing array is caught
+in minutes, a wrong one is caught during analysis in September.
 
 ### 5.3 Provenance discipline
 One campaign root, `…/results/model_validation/real_benchmarks/cpp_v1/`, with a
@@ -103,43 +136,17 @@ compiler and flags, node CPU model per run, engine (`native`/`python`), config Y
 hash, and the seed. **Every table in the revised manuscript must be traceable to
 exactly one campaign root.** This closes the root cause behind D1/D4/E1/E4.
 
-### 5.4 Early-stopping safety contract — READ BEFORE IMPLEMENTING
+### 5.4 No early stopping — settled 2026-07-27
 
-An internal saturation-based early stop was requested to save queue hours. It is
-permitted **only** under the contract below, because it interacts directly with the
-one axis Reviewer 1 disputes.
+A saturation-based early stop was considered and **rejected**. Every arm runs the
+full 43,200 s budget. Reasoning is recorded in `EXECUTION-PLAN.md` §4 so it is not
+re-proposed; in one line: wall-clock `T` is a *reported* quantity that produces
+`S`, and a stop rule firing asymmetrically across the two arms of a pair would make
+`S` a measurement of the stop rule rather than of the method — silently
+manufacturing the R1.1 result we are trying to earn.
 
-> **The hazard.** Wall-clock `T` is a *reported* quantity: it produces the
-> search-only speedup `S`, the overhead percentage, and the cost column of Table 2.
-> R1.1's entire complaint is about `S`. If a stop rule fires at different times on
-> the baseline and IsalSR arms of the same (problem, seed) pair — and IsalSR
-> saturating earlier is precisely our hypothesis — then `S` measures the stop rule,
-> not the method. The paired design is broken and the result is unpublishable.
-> ρ is equally exposed: ρ = evaluations / unique canonical strings, and truncating
-> a run truncates both terms non-proportionally.
-
-**Tier 1 — always safe, use freely.** Stop when the run has already met the
-protocol's own convergence criterion (exact solution recovery / fitness threshold
-reached, as `evolve_until_convergence` already implements). Such a run would have
-terminated anyway; no reported quantity changes. Record the stop reason.
-
-**Tier 2 — permitted with bookkeeping.** A saturation rule (no improvement in best
-fitness for N generations) may fire **only if the identical rule, with identical
-parameters, is evaluated on both arms of the pair**, and the realised stop time is
-carried through as the reported `T` for both arms. Under that condition the stop
-rule is part of the protocol, is symmetric, and — this matters — is then something
-that *must* be described in the paper, not hidden. If it is not described, it must
-not be used.
-
-**Tier 3 — forbidden.** Any rule that fires on one arm and not the other, or that
-truncates a run whose `T`, ρ, or evaluation count is reported, while the paper
-describes a 12 h budget. This is the configuration that was implicitly requested;
-it silently manufactures the R1.1 result we are trying to earn honestly.
-
-**Recommended posture**: Tier 1 only for the headline campaign. If queue pressure
-forces more, apply Tier 2 to the T03 Gray ablation and T04 hash-baseline arms, and
-state the reduced criterion in the supplementary for those arms alone. Record the
-decision and the reasoning in §7.
+The protocol's own convergence criterion (`evolve_until_convergence`) continues to
+terminate runs exactly as before. That is the protocol, not early stopping.
 
 ### 5.5 Analysis regeneration
 Re-run the full pipeline on the new campaign root and regenerate every artefact:
@@ -161,12 +168,15 @@ R² *did* move materially, that is a finding: investigate it before writing it u
 - **AC-0.** §7 Work log filled in as the work proceeds (see README standing rules).
 - **AC-1.** Pre-launch audit (§5.1) recorded in §7, including a definitive answer on
   the B12 fix and the submitted Bingo+IsalSR arm.
-- **AC-2.** 6,000 runs complete, or every missing run individually accounted for with
-  a cause. **The 1,465-cell shortfall must not recur unexplained.**
-- **AC-3.** `MANIFEST.json` present and complete; one campaign root; every revised
-  table traceable to it.
-- **AC-4.** Early-stopping decision recorded in §7 against the §5.4 tiers, naming
-  the tier used and, if Tier 2, where it is described in the manuscript.
+- **AC-1b.** Certification gate G1–G8 (`EXECUTION-PLAN.md` §2) passed with evidence
+  recorded in §7, **before** any array was submitted. G7's single-task log is quoted.
+- **AC-2.** Wave 1 complete, or every missing run individually accounted for with a
+  cause. **The 1,465-cell shortfall must not recur unexplained.**
+- **AC-3.** `MANIFEST.json` present and complete; one campaign root shared with
+  Wave 2; every revised table traceable to it.
+- **AC-4.** D1–D3 (`EXECUTION-PLAN.md` §5) run and reported; node-type pinning
+  applied at launch; the residual confound stated as a bounded limitation in the
+  paper and in §8.4, not omitted.
 - **AC-5.** Full analysis pipeline regenerated; all artefacts present.
 - **AC-6.** Continuity table (§5.6) produced as a standalone artefact ready for the
   response-letter appendix.

@@ -62,10 +62,15 @@ prose. Whoever answers R2.2 needs both facts — the answer is not "we will fix 
 journal paper", it is "the journal paper is already correct; the preprint carries a
 typo in one line, which we are correcting there."
 
-**Decision required from Ezequiel** (record it in §6): correct the arXiv preprint
-with a v3 update before or alongside the revision, or note the discrepancy in the
-previously-published statement, or both. A v3 is cleaner — the preprint is cited in
-the package and will outlive the review.
+**Decision taken 2026-07-27 (Mario): no arXiv update.** We do not issue a v3. The
+journal version supersedes the preprint, and R2.2 is answered as a **comment in the
+response letter**: the journal manuscript is self-consistent, the divergence is a
+single-line typo in the preprint that contradicts the preprint's own Table 1 and its
+own prose, and the published journal version replaces it.
+
+This is the whole remedy. Do not open a preprint work item, do not edit anything
+under `article/arxiv/`, and do not make the response conditional on an arXiv update
+landing before submission.
 
 **Knock-on to check**: journal Def 3.2 (`methodology.tex:116–117`) states "7
 single-character tokens and 24 compound tokens (2×|ℒ|), totaling 31 tokens",
@@ -125,9 +130,11 @@ Check the mirror is live and that the two versions have not drifted apart.
 
 ## 5. Work specification
 
-1. **R2.2.** Ezequiel decides the preprint remedy and records it in §6. Verify the
-   journal manuscript is self-consistent end to end (it is believed to be — confirm).
-   Disambiguate ℒ vs 𝒜 if the notation collision is judged confusing.
+1. **R2.2.** Remedy already settled: no arXiv update, answered as a comment (§3.1).
+   The only work here is to **verify the journal manuscript is self-consistent end to
+   end** on ℒ and the token count — that verification is what the response asserts,
+   so it must be true. Disambiguate ℒ vs 𝒜 if the notation collision is judged
+   confusing. No preprint edits.
 2. **R2.4.** Fix `supplementary.tex:120` and `supplementary.tex:453`.
 3. **Verify the full inventory.** Walk all 21 hardcoded references in
    `manuscript-map.md`, confirm each resolves, and record the result as a checklist
@@ -150,7 +157,9 @@ Check the mirror is live and that the two versions have not drifted apart.
 ## 6. Acceptance criteria
 
 - **AC-0.** §7 Work log filled in as the work proceeds.
-- **AC-1.** R2.2 remedy decided by Ezequiel and recorded, with the reasoning.
+- **AC-1.** R2.2 answered as a response-letter comment; **no** arXiv v3, **no** edits
+  under `article/arxiv/`. The self-consistency claim the response makes is verified
+  before it is written.
 - **AC-2.** Journal manuscript confirmed self-consistent on ℒ and on the token count.
 - **AC-3.** `supplementary.tex:120` and `:453` fixed.
 - **AC-4.** All 21 hardcoded cross-document references verified; checklist recorded
@@ -180,8 +189,8 @@ _(empty — to be filled by the implementing agent)_
 | Preprint Def 2.2, ℒ | {+,*,−,/,s,…} ✗ | | AC-1 |
 | Preprint Table 1 | g → Neg, i → Inv ✓ | unchanged | |
 | Preprint prose | g / i ✓ | unchanged | |
-| Preprint internally consistent | **no** | | AC-1 |
-| Preprint remedy | — | v3 / note / both | AC-1 |
+| Preprint internally consistent | **no** | unchanged — superseded, not corrected | AC-1 |
+| Preprint remedy | — | comment in the response letter; no arXiv v3 | AC-1 |
 | Token count (31, \|ℒ\|=12) | ✓ | unchanged | AC-2 |
 | `supplementary.tex:120` | "Table 4 of the main document" (does not exist) | | AC-3 |
 | `supplementary.tex:453` | "Section 5.1 of the main paper" (wrong section) | | AC-3 |
@@ -208,7 +217,9 @@ _(empty — to be filled by the implementing agent)_
 %%     and the prose all use g and i. The divergence is a typo in one line of the
 %%     preprint's Definition 2.2, which contradicts the preprint's own Table 1 and
 %%     its own prose.
-%%  2. State the remedy taken on the preprint side.
+%%  2. State plainly that the published journal version supersedes the preprint,
+%%     so the discrepancy resolves on publication and no preprint revision is
+%%     issued. Keep this to one sentence -- it is a comment, not a commitment.
 %%  3. Note the ell / A notation point if it was judged confusing, since the
 %%     reviewer will meet |A| = 17 in the supplementary and may connect it to the
 %%     alphabet-size discussion.
@@ -233,5 +244,6 @@ _(empty — to be filled by the implementing agent)_
 
 > Candidates: renumbering caused by T07 (new definition), T09 (rebuilt appendix) or
 > T13 (reorganisation) silently breaking a reference that passed this ticket's
-> check — hence the requirement to re-run the walk in T14; the arXiv v3 not being
-> live at submission time; `double_blind/` drifting during the revision.
+> check — hence the requirement to re-run the walk in T14; R2 asking why the
+> preprint was not corrected (the answer is that publication supersedes it, and it
+> should be stated once rather than defended); `double_blind/` drifting.

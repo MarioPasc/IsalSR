@@ -120,7 +120,7 @@ A mechanical checklist, run against the **final compiled PDFs**, not the sources
 | 9 | `double_blind/` recompiled, content-identical, and anonymous — no author names, no real website URL, no acknowledgements that deanonymise |
 | 10 | `article/` carries the **real** website URL; `double_blind/` the anonymised one (E7) |
 | 11 | Both websites reachable and current |
-| 12 | Previously-published statement updated (E5, and the arXiv v3 if T11 produced one) |
+| 12 | Previously-published statement updated (E5). **No arXiv v3** — decided 2026-07-27; R2.2 is answered as a comment and the journal version supersedes the preprint |
 | 13 | Bibliography compiles with no missing or duplicated entries |
 | 14 | Every `\todoblock` removed from the response letter |
 | 15 | Summary-of-changes table complete, with specific locations |

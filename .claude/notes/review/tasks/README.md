@@ -20,6 +20,26 @@ proposes a fix; the tickets do.
 
 ---
 
+## Campaign schedule
+
+**[EXECUTION-PLAN.md](EXECUTION-PLAN.md)** is authoritative on what gets launched,
+in what order, and under what gate. Read it before touching T02, T03, T04 or T05.
+If a ticket and the execution plan disagree about a launch, the plan wins.
+
+| Wave | Content | Arms | Runs | When |
+|---|---|---|---|---|
+| 0 | Certification gate G1–G8 — **no array launches before this passes** | — | 1 | before Wave 1 |
+| 1 | **C++ headline** (T02), S50 | isalsr | 3,000 | first, ~2026-08-10 |
+| 2 | Extension (T05), EXT, same campaign root | baseline + isalsr | 2,400 | when T05 lands |
+| 3 | Hash comparator (T04), full suite | hash | 4,200 | after Wave 1 |
+| 4 | Gray ablation (T03) — spillover only | gray | 4,200 | **go/no-go 2026-08-31** |
+
+The `baseline` arm is re-run **only on the extension**; its S50 numbers stand.
+**Blocking before Wave 1: T01, T06 (instrumentation half), T08 (root-cause half),
+the frozen MANIFEST schema, and checks P1–P3** — see `EXECUTION-PLAN.md` §2b.
+
+---
+
 ## Tickets
 
 ### Track A — Engine and representation (not reviewer-driven; internal decision 2026-07-27)
@@ -27,8 +47,8 @@ proposes a fix; the tickets do.
 | # | Title | Owner | Depends on | Blocks |
 |---|---|---|---|---|
 | [T01](T01-cpp-core-port.md) | C++ core port + numerical-equivalence gate | Mario | — | T02, T03, T06 |
-| [T02](T02-cpp-reexecution-campaign.md) | Full re-execution on the C++ engine + continuity table | Mario | T01 | T04, T08, T09, T10 |
-| [T03](T03-gray-code-integration.md) | Gray-code integration: design-space analysis, implementation, ablation | Ezequiel + Mario | T01 | T13 |
+| [T02](T02-cpp-reexecution-campaign.md) | **Priority.** Re-execution on the C++ engine + continuity table | Mario | T01 | T04, T08, T09, T10 |
+| [T03](T03-gray-code-integration.md) | *Secondary.* Gray-code: design analysis, implementation, conditional ablation | Ezequiel + Mario | T01 | T13 |
 
 ### Track B — New experiments demanded by reviewers
 
@@ -136,9 +156,15 @@ T02 is a multi-week Picasso campaign. Anything that delays T01 delays submission
 
 | Question | Decision |
 |---|---|
-| Do the Gray code and the C++ port belong to this revision? | Yes, both. C++ first, Gray on top of it. |
+| Do the Gray code and the C++ port belong to this revision? | Yes, both — but **not equally**. The C++ re-execution is the priority and the headline; Gray is secondary (see below). |
+| **Priority order** | **C++ first and alone.** T02 Wave 1 launches before anything else and nothing competes with it for queue time. See `EXECUTION-PLAN.md`. |
 | C++ re-run: replace or supplement the reported results? | **Replace.** The article reports only the C++ numbers and treats the engine as an implementation detail. A Python↔C++ continuity table is produced **for the response letter only**, so reviewers can see what moved. |
-| Gray-code insertion point | **Deliberately left open.** T03 must find the best location by analysis; re-execution cost and re-proof cost are explicitly not constraints. |
-| R3.1 posture | Justify the exclusions **and** run a bounded extension: AI Feynman remainder passing criterion (ii) + the 14 ODE-Strogatz problems (SRBench's ground-truth track). |
-| Compute budget for ablation arms | Full 12 h budget everywhere. An internal saturation-based early-stopping mechanism may be used to save queue hours — **subject to the safety contract in T02 §5.4**, and not reported in the article. |
+| Gray-code insertion point | **Deliberately left open.** T03 must find the best location by analysis; re-execution and re-proof cost are explicitly not constraints on the *design*. |
+| Gray scheduling | **Secondary; reserves no queue capacity.** Wave 4, pure spillover, **go/no-go 2026-08-31**. Design, implementation and proofs proceed regardless (they cost no compute). Promotion to headline only if the ablation completes before the freeze *and* clears T03 §5 Phase 5. |
+| R3.1 posture | Justify the exclusions **and** run a bounded extension: AI Feynman remainder passing criterion (ii) + the 14 ODE-Strogatz problems (SRBench's ground-truth track). Runs as Wave 2 into the Wave 1 campaign root. |
+| R1.4 hash comparator | **Full live arm on the complete suite** (Wave 3, ≈4,200 runs), plus the near-free offline replay run *first*. |
+| Early stopping | **Abandoned** (2026-07-27). Full 12 h budget on every run, every arm. Reasoning in `EXECUTION-PLAN.md` §4 so it is not re-proposed. |
+| Launching to Picasso | **Nothing launches as an array until the certification gate passes** (`EXECUTION-PLAN.md` §2, G1–G8, including one real single task). A subtly wrong array costs the deadline. |
+| arXiv preprint (R2.2) | **No update, no v3.** The journal version supersedes it; R2.2 is answered as a comment in the response letter. No work item, no edits under `article/arxiv/`. |
 | Supplementary material (C7) | **Keep separate** as digital-library material, against R2's request. Argue from the 12-page limit and from R1/R3 agreeing. |
+| Baseline arm re-run on the original 50 problems | **No.** Those numbers do not change. Only **IsalSR** (full re-run) and the **naive hash** arm (fresh full run) get fresh compute; baseline runs on the extension only. The residual wall-clock confound is *characterised and disclosed* via D1–D3 and mitigated by node-type pinning — see `EXECUTION-PLAN.md` §5. |

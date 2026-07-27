@@ -80,6 +80,8 @@ answered are **by how much** and **at what cost**.
 
 ## 3. Mandatory reading
 
+- `.claude/notes/review/tasks/EXECUTION-PLAN.md` — Wave 3; the certification gate
+  applies to this wave too
 - `.claude/notes/review/source/reviewer-1.md` — §R1.4 and the full B2 statement
 - `.claude/notes/review/source/verified-discrepancies.md` — context on ρ (E8)
 - `.claude/notes/review/source/codebase-pointers.md` — `sympy_adapter` is flagged as
@@ -126,10 +128,20 @@ confound.
 
 ### 5.2 Mode 2 — live third arm (end-to-end comparison)
 A third variant, `hash`, run as a full solver campaign alongside `baseline` and
-`isalsr`: 2 methods × 50 problems × 30 seeds = 3,000 runs, same protocol as T02,
-full 12 h budget. This is what makes it "a full comparison" in the article: it
-reports R², NRMSE, solution recovery, wall-clock and `S` for the hash variant on the
-same footing as the other two arms.
+`isalsr`. **Decided 2026-07-27: full live arm on the complete suite** —
+2 methods × ≈70 problems × 30 seeds = **4,200 runs**, same protocol as T02, full
+12 h budget. This is Wave 3 in `EXECUTION-PLAN.md`; it launches after the C++ wave,
+never in competition with it.
+
+This is what makes it "a full comparison" in the article: R², NRMSE, solution
+recovery, wall-clock and `S` for the hash variant on the same footing as the other
+two arms, across every problem the other arms cover.
+
+**Run Mode 1 before Wave 3 launches.** The replay costs no queue time and yields the
+ρ_exact / ρ_iso decomposition — the number R1.4 actually asked for. If the replay
+shows the hash catches almost nothing, that is worth knowing before committing
+50,400 core-hours, and it changes how the live arm is framed rather than whether it
+runs.
 
 ### 5.3 Statistical treatment
 Three arms means the paired-test structure changes. Use CPDT pairwise
@@ -153,7 +165,8 @@ concrete for a reader.
   be sound (never merges non-isomorphic DAGs) on the 14,841-DAG corpus.
 - **AC-2.** Mode 1 replay complete; `ρ_exact`, `ρ_iso`, `ρ_total` reported per
   method, per problem, with dispersion, and stratified by k.
-- **AC-3.** Mode 2 campaign complete (3,000 runs) or every missing run accounted for.
+- **AC-3.** Mode 2 campaign complete (Wave 3, ≈4,200 runs across the full suite) or
+  every missing run accounted for. Mode 1 was run and read **before** Wave 3 launched.
 - **AC-4.** Per-DAG cost of hash vs canonicalisation measured on Picasso hardware
   under the C++ engine, with the resulting `S` for all three arms.
 - **AC-5.** Three-arm statistical comparison done correctly (§5.3), including the
