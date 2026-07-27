@@ -72,19 +72,22 @@ def main() -> None:
         f"{'exhaustive':>26} {'pruned':>26}"
     )
     print("-" * 92)
-    for i, (s, d, e) in enumerate(failures):
+    for i, (_s, d, _e) in enumerate(failures):
         r0 = reachable_from_node0(d)
         rv = reachable_from_any_var(d, NV)
 
-        def probe(fn):
+        # dag passed explicitly rather than closed over: a closure would bind the
+        # loop variable late, which is harmless here but is exactly the shape that
+        # breaks the moment the probe is deferred.
+        def probe(fn, dag):
             try:
-                fn(d)
+                fn(dag)
                 return "SUCCEEDS"
             except Exception as ex:
                 return type(ex).__name__
 
-        exh = probe(lambda x: canonical_string(x))
-        prn = probe(lambda x: pruned_canonical_string(x))
+        exh = probe(canonical_string, d)
+        prn = probe(pruned_canonical_string, d)
         print(
             f"{i:>2} {d.node_count - NV:>3} {d.edge_count:>5} {str(r0):>9} {str(rv):>11} "
             f"{exh:>26} {prn:>26}"
