@@ -7,7 +7,7 @@
 | Owner | **Mario** (+ Claude Code) |
 | Depends on | — |
 | Blocks | T02, T03, T06 |
-| Status | NOT STARTED |
+| Status | **SUBSTANTIALLY COMPLETE** — AC-0,1,2,4,5,7 met; AC-3 partial (evolved-DAG gate outstanding); AC-6 reported and escalated |
 | Target | 2026-08-10 |
 
 ---
@@ -841,7 +841,97 @@ Projected Bingo overhead from the driver's 9.52×: **6.3 %** (against 5.1 % from
 digits — but the figure quoted in the response letter must come from the Picasso
 run required by AC-5, not from the workstation.
 
-#### Deferred: move `native/` under `src/isalsr/core/` (Mario, 2026-07-27)
+### 2026-07-27 — Move executed, Picasso environment stood up, compute-node smoke green
+
+**Move.** `native/` → `src/isalsr/core/native/` (Mario's instruction). The
+directory is `native`, not `_native`, so it cannot collide with the extension
+module name at all — the namespace-package question simply does not arise.
+`wheel.exclude = ["isalsr/core/native/**"]` keeps the C++ out of wheels while the
+sources travel with the checkout, which is what let Picasso build straight from a
+`git pull`. All four post-move gates pass, plus `mypy`/`ruff` clean and the
+equivalence gate still green.
+
+**Correction to finding E-1.** My earlier reconnaissance reported the Picasso repo
+absent. It exists at the documented path and was in sync at `bff3654`. The conda
+half of E-1 was correct: there was no `isalsr` env, and creating it was real work.
+
+**Environment (AC-1).** `conda create -n isalsr python=3.11` (3.11.15, matching the
+workstation), `module load gcc/13.2.0`, build deps cached on the login node
+because compute nodes have no outbound internet. Then `pip install -e ".[dev]"`.
+
+**`build_hash` is `298fc1188bf1b051` on both machines** — workstation gcc 12.2.0
+and Picasso gcc 13.2.0 — which is exactly the property the `x86-64-v3` decision
+was taken for. One build hash across heterogeneous hardware means engine timings
+stay comparable and the MANIFEST has a single value to record.
+
+**Compute-node smoke — job 1659650, `COMPLETED 0:0`, 43 s, node `sd051`,
+Intel Xeon Gold 6230R.** That is one of the two CPU models the March campaign
+ran on, so these numbers are directly comparable to the published ones.
+
+| Stage | Result |
+|---|---|
+| Build on the compute node (`--no-build-isolation`) | OK |
+| Engine identity | `cpp`; `.so` path correct; `isa_level=x86-64-v3`; `avx512f=0` |
+| Equivalence gate | **PASS** — `engine_a=python`, `engine_b=cpp`, `self_comparison=false`, 0 mismatches on all three gates |
+| Benchmark | see AC-5 table below |
+
+The worker deliberately does **not** prepend `$REPO_DIR/src` to `PYTHONPATH`,
+against the generic Picasso worker template. Here that idiom is harmful: the
+`.so` installs into site-packages, so a `src`-first path resolves `isalsr` to the
+source tree, silently falls back to pure Python, and yields a run that measures
+nothing. Every campaign worker must instead assert `backends.engine() == "cpp"`
+before doing any work. Documented in `CPP_BUILD.md`.
+
+### 2026-07-27 — AC-5 measured on Picasso hardware
+
+Job 1659650, Xeon Gold 6230R, protocol 3 warmup + 4 reps × best-of-9, engines
+alternated in the same thermal state.
+
+| Bucket | n | Python (ms/DAG) | C++ (ms/DAG) | Speedup |
+|---|---|---|---|---|
+| k < 5 | 50 | 0.0485 | 0.0063 | 7.68× |
+| 5 ≤ k < 15 | 50 | 0.2417 | 0.0242 | 10.00× |
+| 15 ≤ k < 32 | 50 | 1.7134 | 0.1265 | **13.54×** |
+| overall | 150 | 0.2417 | 0.0242 | **10.00×** |
+
+Speedup rises with k because the per-call FFI copy of the Python `LabeledDAG` is
+a fixed cost that amortises. The campaign's own k-distribution therefore decides
+the aggregate figure, which is why the buckets are reported rather than a single
+number.
+
+### 2026-07-27 — AC-2 failed on first test, and the failure was worth having
+
+`ISALSR_ENGINE=python` had been verified, but AC-2 asks for something stricter:
+the suite must pass with the extension **absent**. Removing the `.so` broke
+`pytest` at **collection** with 4 errors — three native test modules import
+`_native` at module scope, and `test_canonical_determinism.py` did too.
+
+A `pytestmark = skipif(...)` guard was not sufficient: those modules dereference
+the extension inside `@pytest.mark.parametrize` decorators, which execute during
+collection regardless of any skip mark. The working fix is `pytest.importorskip`
+at module top for the three modules that are meaningless without the extension,
+and a per-test `requires_native` mark for `test_canonical_determinism.py` —
+whose Python-side vector tests are the *oracle* and must keep running when the
+extension is gone.
+
+One further failure surfaced: `test_cpp_backend_raises_when_unavailable` asserted
+`TypeError`. That was correct when `fast_canonical_string` had no `backend`
+parameter, but the dispatcher now raises `RuntimeError`. Asserting the narrower
+exception made the stricter, better behaviour look like a regression. Widened to
+`(TypeError, RuntimeError)` with the reasoning recorded in the docstring, since
+the property being defended is "never falls back silently", not the exception
+class.
+
+| AC-2 condition | Result |
+|---|---|
+| Suite with extension **absent** | **1,639 passed, 22 skipped** |
+| Suite with extension **present** | **4,878 passed, 5 skipped** |
+| `ruff` / `mypy`, both states | clean |
+
+This is precisely the defect AC-2 exists to catch: without it, anyone cloning the
+repository without building would find the test suite broken at collection.
+
+#### Deferred: move `native/` under `src/isalsr/core/` (Mario, 2026-07-27) — DONE, see above
 
 C++ sources currently live at repo-root `native/`. They are to be moved under
 `src/isalsr/core/` for the final integration — **not now**, while agents hold write
@@ -892,33 +982,97 @@ Post-move verification, all four required before the move is called done:
 
 ### 8.1 Before / after
 
+Measured on Picasso (job 1659650, Intel Xeon Gold 6230R — one of the two CPU
+models the submitted campaign used). Protocol: 3 warmup + 4 reps × best-of-9,
+engines alternated in the same thermal state.
+
 | Quantity | Python engine (as submitted) | C++ engine (revised) | Source |
 |---|---|---|---|
-| Canonicalisation cost, Bingo (mean, ms/DAG) | 0.817 | | |
-| Canonicalisation cost, UDFS (mean, ms/DAG) | 0.296 | | |
-| Cost, k < 5 (ms/DAG) | | | |
-| Cost, 5 ≤ k < 15 (ms/DAG) | | | |
-| Cost, 15 ≤ k < 32 (ms/DAG) | | | |
-| Canon : eval cost ratio, Bingo | 3.3 : 1 | | |
-| Canon : eval cost ratio, UDFS | 1 : 64 | | |
-| Projected Bingo `S` at ρ = 1.83 | 0.93 (measured) | | AC-6 |
-| Projected UDFS `S` at ρ = 1.56 | 1.07 (measured) | | AC-6 |
-| Canonical strings byte-identical to Python | — | | AC-3 |
+| Canonicalisation cost, Bingo (median, ms/DAG) | 0.817 | ≈0.082 (projected at 10.0×) | `results.tex:58`; AC-5 |
+| Canonicalisation cost, UDFS (median, ms/DAG) | 0.296 | ≈0.030 (projected at 10.0×) | `results.tex:57`; AC-5 |
+| Benchmark cost, k < 5 (ms/DAG) | 0.0485 | **0.0063** (7.68×) | AC-5 |
+| Benchmark cost, 5 ≤ k < 15 (ms/DAG) | 0.2417 | **0.0242** (10.00×) | AC-5 |
+| Benchmark cost, 15 ≤ k < 32 (ms/DAG) | 1.7134 | **0.1265** (13.54×) | AC-5 |
+| Canon : eval cost ratio, Bingo | **0.63 : 1** (0.817 / 1.29) | ≈0.06 : 1 | `results.tex:58` |
+| Canon : eval cost ratio, UDFS | **1 : >1,500** | ≈1 : 17,000 | `results.tex:191` |
+| **Bingo overhead** | **39.2 %** | **≈6.1 % (projected)** | `results.tex:58`; AC-6 |
+| UDFS overhead | 0.05 % | ≈0.005 % (projected) | `results.tex:57`; AC-6 |
+| Projected Bingo `S` at ρ = 1.83 | 0.93 (measured) | **0.93 — unchanged by construction** | AC-6 |
+| Projected UDFS `S` at ρ = 1.56 | 1.07 (measured) | **1.07 — unchanged by construction** | AC-6 |
+| Canonical strings byte-identical to Python | — | **yes, 0 mismatches** | AC-3 |
+| `build_hash`, workstation vs Picasso | — | identical (`298fc1188bf1b051`) | AC-1 |
+
+> **The ticket's §1 cost figures were stale and are corrected above.** §1 states
+> Bingo's evaluation at ≈0.14 ms/DAG and a "3.3 : 1 ratio against us"; the
+> manuscript prints `T_eval = 1.29 ms`, so canonicalisation was **already cheaper
+> than evaluation** (0.63 : 1). The 0.14 ms figure comes from `CLAUDE.md`'s earlier
+> 22-problem campaign, superseded by the 50-problem run that was submitted.
+
+> **`S` cannot move, and this is arithmetic rather than a measurement.** Both
+> runners compute `search_only = wall_clock − dedup.canon_time_total`
+> (`bingo/isalsr_runner.py:519`, `udfs/isalsr_runner.py:277`), matching
+> `computational_experiments.tex:115–127`. For any speedup *f*,
+> `(wall_clock − T_canon(1−1/f)) − T_canon/f = wall_clock − T_canon`. `S` is
+> therefore invariant to canonicalisation speed by construction. Per AC-6 this is
+> reported rather than worked around, and escalated.
 
 ### 8.2 Changes made to the repository
 
 | Path | Change |
 |---|---|
-| | |
+| `CMakeLists.txt` | New. nanobind target `_native`, C++17, `-O3 -march=x86-64-v3 -DNDEBUG -fno-plt -funroll-loops`, LTO, `-static-libstdc++ -static-libgcc`; `ISALSR_NATIVE_MARCH` and sanitizer options |
+| `pyproject.toml` | Build backend → `scikit-build-core`; `wheel.exclude` for C++ sources; ruff per-file ignores for `importorskip` modules |
+| `src/isalsr/core/native/` | New. 8 translation units + 7 headers: cdll, labeled_dag, node_types, string_to_dag, wl, canonical, probe, bindings |
+| `src/isalsr/core/backends.py` | New. `engine()`, `build_info()`, `resolve()`, `DEFAULT_BACKEND`, `ISALSR_ENGINE` override |
+| `src/isalsr/core/canonical.py` | `_wl_node_hash` (fixed-constant FNV-1a) replaces seed-salted `hash()`; keyword-only `backend` dispatch |
+| `experiments/scripts/equivalence_gate.py` | New. Three gates + JSON report; a self-comparison can never report a pass |
+| `experiments/scripts/bench_canonical.py` | New. k-stratified benchmark, §5.4 protocol, JSON provenance |
+| `tests/data/wl_hash_vectors.json` | New. Shared hash oracle pinning both engines |
+| `tests/unit/test_native_*.py`, `test_canonical_determinism.py`, `test_equivalence_gate.py`, `test_bench_canonical.py` | New. +3,383 tests |
+| `slurm/smoke_cpp/{launcher,worker}.sh` | New. Compute-node build + engine assertion + gates + benchmark |
+| `docs/engineering/CPP_BUILD.md` | New. Workstation and Picasso build, ISA rationale, the `PYTHONPATH` hazard |
+
+Branch `feature/cpp-core-port`, commits `929a5d9`, `b34cded`.
 
 ### 8.3 Draft response text
 
-_(no direct reviewer comment; leave empty and cross-reference T10 §8.3)_
+_(no direct reviewer comment; T10 §8.3 consumes these numbers for R1.1)_
+
+For T10's benefit, the defensible claim is **not** that `S` improves. It is:
+
+> Canonicalisation was re-implemented in C++ behind an unchanged Python API,
+> reducing its cost by a factor of 10.0 on the same hardware class used for the
+> reported experiments (13.5× on the largest expressions). Bingo's
+> canonicalisation overhead falls from 39.2 % to approximately 6 %, and the
+> canonicalisation-to-evaluation cost ratio from 0.63 : 1 to about 0.06 : 1.
+> Canonical strings are byte-identical between the two implementations.
 
 ### 8.4 Residual risk
 
-> What could a round-2 reviewer still object to? Candidates to address here:
-> `-march=native` reproducibility across heterogeneous Picasso nodes; whether the
-> engine change makes the revision's numbers non-comparable to the reviewed ones
-> (this is why T02 produces a continuity table); whether byte-exact equivalence was
-> verified on the *evolved* DAG distribution and not only on synthetic corpora.
+1. **`S` is unchanged, and R1.1 asked about `S`.** The overhead answer is strong,
+   but a reviewer may observe that the specific quantity they questioned did not
+   move. The honest position — established here and not to be softened — is that
+   `S = 0.93` is *not* caused by canonicalisation cost: with canonicalisation
+   already excluded, Bingo–IsalSR needs ≈2.1× more search time than the baseline
+   (`T_search` 5,214 s vs 2,478 s over 300 sampled runs). Deduplication changes
+   the search trajectory. At most about a third of that gap is bookkeeping the
+   port could remove; the rest is a property of the method.
+2. **`-march=native` is not used**, so the original concern is void; but
+   `x86-64-v3` still assumes AVX2, which holds on all 333 Picasso CPU nodes and
+   is asserted in `build_info()`.
+3. **Equivalence is verified on synthetic corpora only.** The §5.3 gate over
+   ≥100,000 *evolved* DAGs has not been run — the stored trajectories persist
+   only aggregate counts, so the replacement (live dual-engine comparison during
+   short searches) is implemented in design but not yet executed. **This is the
+   main outstanding item on AC-3.**
+4. **The determinism fix changes canonical strings** relative to the submitted
+   run for roughly 10 % of DAGs, choosing a different representative of the same
+   isomorphism class. Class *counts* — hence ρ and the reduction factor — are
+   unaffected. But `methodology.tex:256` prints a literal canonical string
+   (`VcVspv*pv+PpcnnC`) in a figure caption, and it must be re-derived under the
+   fixed engine before submission.
+5. **The k-distribution decides the aggregate speedup**, which ranges 7.68×–13.54×
+   across buckets. Quoting "10×" without the stratification would be imprecise.
+6. **ρ's seed-independence is argued, not proved.** The invariance evidence is 40
+   permuted pairs per seed plus the exhaustive k=1..8 gate; a full exhaustive run
+   under two hash seeds would settle it properly.

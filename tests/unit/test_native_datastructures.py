@@ -23,6 +23,13 @@ import random
 from typing import Any
 
 import pytest
+
+# Module-level: this file is meaningless without the extension, and it uses _nt
+# inside parametrize decorators, which run at collection time. importorskip is
+# the pattern that skips the whole module cleanly; a pytestmark would still let
+# the decorators execute and blow up during collection.
+pytest.importorskip("isalsr.core._native", reason="C++ extension not built")
+
 from isalsr.core._native import testing as _nt  # type: ignore[import-untyped]
 
 from isalsr.core.cdll import CircularDoublyLinkedList

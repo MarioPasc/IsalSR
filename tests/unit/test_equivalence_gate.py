@@ -120,13 +120,27 @@ class TestCanonicalizeWrapper:
         assert r1 == r2
 
     def test_cpp_backend_raises_when_unavailable(self) -> None:
-        """With no backend= param in fast_canonical_string, _canonicalize("cpp")
-        must raise TypeError — NOT silently return a Python result."""
+        """``_canonicalize("cpp")`` must raise when the C++ engine is absent —
+        never silently return a Python result.
+
+        Two distinct exceptions are legitimate, and which one appears depends on
+        how far the tree has been built:
+
+        * ``TypeError`` — ``fast_canonical_string`` has no ``backend`` parameter
+          at all (the dispatcher has not landed yet);
+        * ``RuntimeError`` — the dispatcher exists and rejects ``backend="cpp"``
+          because the extension is not installed.
+
+        Asserting only ``TypeError`` made this test fail once the dispatcher
+        landed, which inverted its meaning: the stricter behaviour looked like a
+        regression. What is actually being defended is that neither case falls
+        back silently.
+        """
         dag = self._make_simple_dag()
         available, _ = _probe_cpp_canonical()
         if available:
             pytest.skip("C++ canonicaliser is available; skip absence test")
-        with pytest.raises(TypeError):
+        with pytest.raises((TypeError, RuntimeError)):
             _canonicalize(dag, "cpp")
 
 

@@ -24,6 +24,10 @@ from typing import Any
 
 import pytest
 
+# See the note in test_native_datastructures.py: importorskip, not pytestmark,
+# because module-level code below dereferences the extension at collection time.
+pytest.importorskip("isalsr.core._native", reason="C++ extension not built")
+
 from isalsr.core import _native as _cpp_ext  # type: ignore[attr-defined]
 from isalsr.core.canonical import CanonicalTimeoutError, fast_canonical_string
 from isalsr.core.string_to_dag import StringToDAG

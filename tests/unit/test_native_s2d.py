@@ -33,6 +33,11 @@ import random
 from typing import Any
 
 import pytest
+
+# See the note in test_native_datastructures.py: importorskip, not pytestmark,
+# because module-level code below dereferences the extension at collection time.
+pytest.importorskip("isalsr.core._native", reason="C++ extension not built")
+
 from isalsr.core._native import testing as _nt  # type: ignore[import-untyped]
 
 from isalsr.core.labeled_dag import LabeledDAG

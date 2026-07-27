@@ -63,39 +63,72 @@ The **build** requires loading a C++17-capable toolchain, but the **installed
 `.so` is statically linked** against libstdc++ and libgcc, so no `module load`
 is needed at run time inside SLURM tasks.
 
-### One-time build on Picasso login node
+### One-time environment setup on the Picasso login node
+
+Verified end to end on 2026-07-27.  `envs_dirs[0]` is already
+`fscratch/conda_envs`, so a plain `-n isalsr` lands in the right place.
 
 ```bash
-module load gcc/13.2.0
-module load cmake/3.31.4
-
+source "$(conda info --base)/etc/profile.d/conda.sh"
+conda create -n isalsr python=3.11 -y          # match the workstation (3.11.15)
 conda activate isalsr
-pip install nanobind ninja    # if not already present
 
-pip install -e ".[dev,native]" -v
+module load gcc/13.2.0                          # login default is 7.5.0 — too old for C++17
+
+cd /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+pip install nanobind ninja scikit-build-core    # cache the build deps while there is internet
+pip install -e ".[dev]"
 ```
+
+The build deps must be installed **on the login node**: compute nodes have no
+outbound internet, so a compute-node build only works with
+`--no-build-isolation` against an already-populated environment.
 
 Verify immediately after:
 
 ```bash
-python -c "from isalsr.core import backends; print(backends.engine()); print(backends.build_info())"
+python -c "from isalsr.core import backends; import json; \
+           print(backends.engine()); print(json.dumps(backends.build_info(), sort_keys=True))"
 ```
 
-`isa_level` should be `x86-64-v3`.  The build targets the portable v3 ISA
-level (AVX2 + FMA) because 178 of 333 Picasso nodes lack AVX-512; one binary
-covers all node classes and produces a single deterministic build hash across
-the entire 3,000-run campaign.
+Expect `cpp` and `isa_level: x86-64-v3`.  The build targets the portable v3 ISA
+level (AVX2 + FMA) because 178 of 333 Picasso CPU nodes lack AVX-512; one binary
+covers all node classes and yields a single deterministic build hash across the
+whole campaign.  **Measured 2026-07-27: `build_hash` is `298fc1188bf1b051` on
+both the workstation (gcc 12.2.0) and Picasso (gcc 13.2.0)** — identical, which
+is the property that keeps engine timings comparable across machines.
+
+### Compute-node smoke
+
+```bash
+bash slurm/smoke_cpp/launcher.sh --test-only   # validate the request, no queue
+bash slurm/smoke_cpp/launcher.sh               # one real task
+```
+
+Builds on the compute node with `--no-build-isolation`, asserts the native
+engine loaded, then runs the equivalence gate and the benchmark there.
 
 ### SLURM tasks
 
-No module-load lines are required in worker scripts.  The statically-linked
-`.so` runs on any node regardless of which system gcc is loaded:
+No module-load lines are required in worker scripts at run time — the `.so` is
+statically linked against libstdc++/libgcc and runs on any node.
 
 ```bash
-# Worker preamble — no gcc module needed at runtime
 conda activate isalsr
 python -m experiments.models.orchestrator ...
 ```
+
+> **Do not prepend `$REPO_DIR/src` to `PYTHONPATH`.**  The generic Picasso
+> worker template does this, and here it is actively harmful: the `.so` is
+> installed into `site-packages/isalsr/core/`, not into the source tree, so a
+> `src`-first path makes `import isalsr` resolve to the sources, silently fall
+> back to pure Python, and produce a run that measures nothing.  Every campaign
+> worker must instead assert the engine before doing any work:
+>
+> ```python
+> from isalsr.core import backends
+> assert backends.engine() == "cpp", "native engine not loaded"
+> ```
 
 ---
 

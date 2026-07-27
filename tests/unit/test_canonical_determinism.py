@@ -22,8 +22,18 @@ from pathlib import Path
 
 import pytest
 
-from isalsr.core import _native
 from isalsr.core.canonical import _wl_node_hash
+
+# Unlike the other native test modules, most of this file tests the *Python*
+# implementation against the committed vectors -- that is the oracle and it must
+# still run when the extension is absent. Only the C++ conformance checks are
+# skipped, per-test, via requires_native below.
+try:
+    from isalsr.core import _native
+except ImportError:  # pragma: no cover - only when the extension is not built
+    _native = None  # type: ignore[assignment]
+
+requires_native = pytest.mark.skipif(_native is None, reason="C++ extension not built")
 
 # ---------------------------------------------------------------------------
 # Load shared test vectors
@@ -78,6 +88,7 @@ def test_wl_node_hash_matches_vector(
 # ---------------------------------------------------------------------------
 
 
+@requires_native
 @pytest.mark.parametrize(
     "case_id,label_value,children_hashes,expected",
     [row for row in _load_cases() if not row[2]],  # only empty-children cases

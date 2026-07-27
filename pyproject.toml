@@ -148,6 +148,11 @@ select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM"]
 "tests/integration/*.py" = ["E402"]
 # Same pattern: the UDFS vendor dir must be on sys.path and torch checked before import
 "tests/unit/test_udfs_adapter.py" = ["E402"]
+# Same pattern again: pytest.importorskip guards the optional C++ extension, so
+# the imports that depend on it must follow the guard.
+"tests/unit/test_native_datastructures.py" = ["E402"]
+"tests/unit/test_native_s2d.py" = ["E402"]
+"tests/unit/test_native_canonical.py" = ["E402"]
 # N802: test names may use uppercase instruction names (V, C, N, P, W)
 # ANN: test functions/fixtures don't require type annotations
 "tests/**/*.py" = ["N802", "ANN"]
