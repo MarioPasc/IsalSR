@@ -46,6 +46,34 @@ for symbolic regression with isomorphism-invariant string representations.
 | `python -m pip install -e ".[experiments]"` | Install with experiment deps (bingo, statsmodels, etc.) |
 | `python -m experiments.models.orchestrator --config <yaml> --seeds 1 --problems Nguyen-1` | Run experiment |
 
+### Setting up the environment and checking the C++ engine
+
+`pip install -e .` compiles the C++ extension via scikit-build-core; the Python
+engine is a complete fallback, so a failed compile degrades silently rather than
+erroring. **Always check which engine is live before trusting a benchmark or a
+test count** — `pytest tests/unit/` collects **4,436 passed, 5 skipped** with the
+extension and only **1,188 passed, 30 skipped** without it, every cross-engine
+test skipping with "C++ extension not built".
+
+```bash
+conda activate isalsr
+pip install -e ".[dev]"          # add ".[experiments]" to run the SR campaigns
+python -c "from isalsr.core.backends import build_info; print(build_info())"
+```
+
+`build_info()["engine"]` is `"cpp"` when the extension is active and `"python"`
+otherwise; it also reports `isa_level`, `compiler` and `build_hash`. Two failure
+modes worth knowing: `--no-build-isolation` needs `scikit-build-core` and
+`nanobind` already present, and `CMakeLists.txt:85` pins `-march=x86-64-v3`, which
+requires **GCC ≥ 11** (the value did not exist before it).
+
+On **Picasso** the same install needs `module load gcc/13.2.0` first, because the
+default `/usr/bin/g++` is 7.5.0 — and `module` is only defined in a *login* shell,
+so `ssh picasso '…'` silently no-ops it. Use `ssh picasso 'bash -lc "…"'`. Install
+runtime deps **by name**, not via `-e ".[bench]"`: the extras form rebuilds the
+extension and rolls the whole transaction back if the compiler is wrong. Full
+runbook, including the SLURM smoke sequence: `docs/md_files/changes/picasso_env_rebuild.md`.
+
 ---
 
 ## Architecture Overview

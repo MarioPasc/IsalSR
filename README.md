@@ -17,8 +17,29 @@ search space for symbolic regression by factorial factors.
 
 ```bash
 conda activate isalsr
-pip install -e ".[dev]"
+pip install -e ".[dev]"          # add ".[experiments]" to run the SR campaigns
 ```
+
+### The C++ engine
+
+The core is implemented twice: a pure-Python reference and a C++ extension built
+by scikit-build-core during `pip install`. The two are kept numerically equivalent,
+and the Python engine is a complete fallback — so **a failed compile degrades
+silently instead of raising**. Check which one is live before trusting a benchmark:
+
+```bash
+python -c "from isalsr.core.backends import build_info; print(build_info())"
+# {'engine': 'cpp', 'isa_level': 'x86-64-v3', 'compiler': 'gcc 12.2.0', ...}
+```
+
+`engine` is `"cpp"` when the extension is active and `"python"` otherwise. The
+test suite is the other tell: **4,436 passed / 5 skipped** with the extension,
+**1,188 passed / 30 skipped** without it, the difference being the cross-engine
+tests that skip with "C++ extension not built".
+
+Building requires **GCC ≥ 11** — `CMakeLists.txt` targets `-march=x86-64-v3`, an
+architecture value that did not exist before GCC 11. Set `ISALSR_NATIVE_MARCH=ON`
+to use `-march=native` instead when the binary does not need to be portable.
 
 ## Quick Start
 
