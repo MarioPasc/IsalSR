@@ -7,10 +7,10 @@
 | Owner | **Mario** (+ Claude Code); theory half needs **Ezequiel** |
 | Depends on | T01 (C++ engine, for the real-data half) |
 | Blocks | T06 (its violation-rate definition), T07 (the theorem's hypotheses) |
-| Status | **IN PROGRESS** — AC-1, AC-2, AC-3, AC-5, AC-6 met; **fix applied** (minimal CONST repair, both engines). **Open: AC-4 (UDFS half, on Picasso), AC-7.** |
+| Status | **IN PROGRESS** — AC-0…AC-3, AC-5, AC-6, AC-7 met; **fix applied** (minimal CONST repair, both engines). **Open: AC-4 (UDFS half, running on Picasso).** |
 | Target | 2026-08-17 (before Wave 1, because the real-data half needs campaign instrumentation) |
 | Opened | 2026-07-27, by Mario, from a T01 finding |
-| Last worked | 2026-07-27 — mechanism corrected, fix applied to both engines, Bingo half of AC-4 measured |
+| Last worked | 2026-07-28 — record corrected (the UDFS array had never been submitted), atlas risk closed, UDFS half actually launched |
 
 > **Start here if you are picking this up fresh.** §3 has the confirmed root
 > cause, §2 lists every file you need with line numbers, and §7 records what was
@@ -257,11 +257,19 @@ the direction is why §5.3 must measure the real rate rather than assume it.
 Figure, JSON and per-algorithm table produced; root cause confirmed. See §3 and
 `docs/md_files/changes/d2s_canonicalisation_failures.md`.
 
-One sub-item was **not** done and is still worth having: the *pointer state and the
-set of unplaced nodes* at the moment of failure. The error message reports only a
-count ("Remaining: 4 nodes, 4 edges"). Instrumenting `_fast_step` to name the
-unplaced nodes would make the mechanism visible directly rather than inferred from
-the cycle test.
+One sub-item was **not** done: the *pointer state and the set of unplaced nodes* at
+the moment of failure. The error message reports only a count ("Remaining: 4 nodes,
+4 edges").
+
+**Declined, 2026-07-28, with a reason rather than an omission.** T01's equivalence
+gate asserts that the two engines raise the same exception *type and message*;
+enriching the message in `canonical.py` alone would break it, and changing both
+engines in lockstep is a C++ edit landing days before Wave 1 for a diagnostic whose
+question is already answered. The mechanism was established by a decisive
+experiment (bypassing normalisation takes 6/6 → 0/6), not by inference from the
+cycle test, so the extra instrumentation would confirm something already confirmed.
+`experiments/scripts/diagnose_d2s_failures.py` reproduces the six deterministically
+if the node-level detail is ever wanted, without touching production code.
 
 ### 5.2 Find the true precondition — **OPEN, AC-3**
 State the weakest condition that is actually sufficient for D2S to terminate with
@@ -312,6 +320,15 @@ Decide, and record the decision: should a canonicalisation failure be excluded
 from `n_total` as well, so ρ is computed only over candidates it could actually
 classify? That removes the upward bias but changes ρ's definition, so it needs to
 be agreed rather than applied.
+
+**Decided 2026-07-28: keep ρ's definition unchanged, and disclose.** The bias is
+real in direction but its magnitude on every measured real population is exactly
+zero — 0 failures in 12,176,790 Bingo DAGs, and the trigger is impossible by
+construction on adapter output. Redefining ρ would therefore move no reported
+number while breaking comparability with the submitted tables, which is a strictly
+worse trade. The response letter states the direction of the bias and the measured
+rate rather than silently changing the estimator. Revisit only if some future
+population produces a non-zero rate.
 
 ---
 
@@ -542,6 +559,74 @@ fix**. Results: `…/results/t15_norm_arms/{synthetic_100k.json,bingo_local/}`.
   (`// redirect all Const creation edges to x_1`). Ezequiel's call; the theorem
   itself now holds as stated, which is the cheaper outcome.
 
+### 2026-07-28 — record corrected, atlas risk closed, UDFS half actually launched
+
+**The 2026-07-27 log overstated one thing and it mattered.** It recorded the UDFS
+half of AC-4 as "submitted as a 15-task array". It was not. `sacct` shows no
+`t15_arms_*` job at any point, and the Picasso checkout was still at `b34cded`
+without `slurm/t15_norm_arms_launch.sh` present at all — so neither the sync nor
+the submission ever happened. AC-4's UDFS half was **not started**, not pending.
+Recorded here because "submitted, awaiting results" and "never ran" are
+indistinguishable from the ticket text alone, and the second would have reached
+the response letter as a measured zero.
+
+**Three environment defects surfaced while re-verifying, none of which changes a
+scientific claim, all of which block reproduction.**
+
+1. *The local C++ extension was not built.* `pytest tests/unit/` collected
+   **1,188 passed / 30 skipped**, not the recorded 4,436 / 5 — every cross-engine
+   test skipping with "C++ extension not built". The recorded figure was not
+   wrong; it was simply unreproducible until the extension was rebuilt. After
+   `pip install -e .` the suite returns **4,436 passed, 5 skipped**, matching the
+   record exactly. `--no-build-isolation` fails here: the env has no
+   `scikit_build_core`, so the backend must be fetched by pip's isolated build.
+2. *Picasso's default compiler cannot build this project.* `CMakeLists.txt:85`
+   pins `-march=x86-64-v3` (T01's portability baseline); Picasso's
+   `/usr/bin/g++` is **GCC 7.5.0**, which rejects that arch value outright
+   (`cc1plus: error: bad value ('x86-64-v3') for '-march=' switch`; the value
+   landed in GCC 11). Fix: `module load gcc/13.2.0` — its libstdc++ is
+   GLIBCXX_3.4.32, below the 3.4.34 the conda env and the system both provide, so
+   the built `.so` loads without the module at runtime.
+   **`module` is only defined in a login shell** — `ssh picasso '…'` silently
+   no-ops it and leaves GCC 7 in `PATH`, which is what made this look like a
+   CMake bug for two attempts. Use `ssh picasso 'bash -lc "…"'`.
+3. *The Picasso `isalsr` env cannot run any experiment.* It holds **25 packages**
+   — pytest, mypy, ruff, hypothesis, nanobind, ninja, scikit-build-core — i.e. a
+   `[dev,native]` env built for the T01 port. No numpy, scipy, sympy, pandas,
+   scikit-learn or bingo-nasa. The one-task cluster smoke died on
+   `ModuleNotFoundError: No module named 'numpy'`. Note `dependencies = []` in
+   `pyproject.toml` by design (core is stdlib-only), so `pip install -e .` does
+   **not** repair this; the extras must be installed explicitly.
+   **This is a T02 blocker, not just a T15 one** — Wave 1 is 3,000 runs against
+   this same env. It belongs in the `EXECUTION-PLAN.md` §2 certification gate.
+
+**Residual risk closed: the precomputed atlas.** Four independent checks, and the
+answer is that the question was moot:
+`…/execs/isalsr/atlas/` **does not exist on Picasso** — no atlas has ever been
+built; `--atlas-dir` defaults to `None` (`orchestrator.py:531`, returning early at
+`:246`); all four `*_atlas` SLURM variants are `enabled: false`
+(`slurm/models_config.yaml:137,150,163,176`); and no `experiments/configs/*.yaml`
+mentions an atlas. **No submitted number consulted an atlas.** Forward-looking:
+construction runs through `canonical_string`/`pruned_canonical_string`
+(`cache_manager.py:143,154`), both of which call `normalize_const_creation`, so any
+atlas built from now on carries the repaired policy. Had one existed, it *would*
+have been affected — S2D gives every CONST in-degree ≥ 1 but its parent may be any
+node, exactly the population where the two policies diverge.
+
+**Recorded numbers re-verified against the artefacts**, not taken on trust:
+`synthetic_100k.json` gives `n_generated` 100,000, `n_satisfying_precondition`
+100,000, `repair_dropped_an_edge` 0, `repair_vs_none_disagree` 0, and arms
+submitted 94 failures / 95,899 distinct / ρ 1.0418 vs repair 46 / 96,068 / ρ
+1.0405 — including the 169-class completeness gap (96,068 − 95,899). Bingo's
+`summary.json` gives 12,176,790 calls, 0 failures, Wilson upper 3.155×10⁻⁷,
+ρ 1.7931, all arms identical on 12,176,790, over 15 runs. Every figure in §6 and
+§7 reproduces.
+
+Local gate re-run in the main tree: **4,436 unit + 474 property/integration
+passed**, `ruff check src/ tests/` clean, `mypy --strict` clean over 40 files.
+Local probe smoke (Bingo, Nguyen-5, 60 s): 762,020 DAGs, 0 failures in all three
+arms, ρ 1.795, exit 0.
+
 ---
 
 ## 8. Proposed answer
@@ -593,6 +678,7 @@ Commits on `feature/cpp-core-port`: `145d496`, `2d3231f`, `11a45e0`.
 | `experiments/scripts/validate_const_repair_synthetic.py` | **New.** 3-arm validation on 10⁵ synthetic DAGs (AC-3) |
 | `experiments/scripts/measure_const_normalization_arms.py` | **New.** 3-arm probe on real search output, paired on one DAG stream (AC-4) |
 | `experiments/scripts/aggregate_norm_arms.py` | **New.** Pools the Picasso array's per-task outputs |
+| `experiments/scripts/measure_const_normalization_arms.py`, `aggregate_norm_arms.py` | **Fix (2026-07-28): a fully-failed run reported a clean zero.** Both exited 0 after printing per-run errors, and `summarise()` pools only records carrying an `arms` key — so a task whose search never started wrote `n_calls: 0, n_failures: 0`, SLURM marked it `COMPLETED`, and the aggregate read as "0 failures on real UDFS data": exactly the result the probe exists to confirm. Both now `SystemExit` non-zero when pooled `n_calls == 0` or any run errored. Caught by the one-task cluster smoke, which died on `pkg_resources` and still exited 0 |
 | `slurm/t15_norm_arms_launch.sh`, `slurm/workers/t15_norm_arms_slurm.sh` | **New.** Picasso array for the UDFS half of AC-4 |
 | `.claude/CLAUDE.md` | Critical Invariant 9 rewritten |
 
@@ -639,8 +725,8 @@ src/ tests/` and `mypy --strict src/isalsr/` clean.
 
 | Risk | Severity | Status |
 |---|---|---|
-| **Precomputed HDF5 atlas not audited.** If `src/isalsr/precomputed/` atlases were built over a population containing non-x₁ CONST provenance, their entries encode the old merge and are now inconsistent with the online path | **Medium** — would affect any run using `--atlas-dir` | **OPEN.** Settle before writing "no reported number is affected" in the response letter |
-| UDFS half of AC-4 unmeasured | Low — the adapter argument predicts zero, as it did for Bingo | **OPEN.** Picasso array submitted |
+| **Precomputed HDF5 atlas not audited.** If `src/isalsr/precomputed/` atlases were built over a population containing non-x₁ CONST provenance, their entries encode the old merge and are now inconsistent with the online path | ~~Medium~~ → **none** | **CLOSED 2026-07-28.** No atlas has ever been built (`…/execs/isalsr/atlas/` does not exist on Picasso), the atlas is opt-in (`--atlas-dir` defaults to `None`, `orchestrator.py:531`), all four `*_atlas` SLURM variants are `enabled: false` (`slurm/models_config.yaml:137,150,163,176`), and no `experiments/configs/*.yaml` mentions it. **No submitted number consulted an atlas.** Any atlas built from now on uses the repaired policy, since construction goes through `canonical_string`/`pruned_canonical_string` (`cache_manager.py:143,154`) |
+| UDFS half of AC-4 unmeasured | Low — the adapter argument predicts zero, as it did for Bingo | **OPEN.** Array genuinely submitted 2026-07-28 (it had only been *recorded* as submitted before) |
 | `methodology.tex:830` describes the old policy | Low — editorial | **OPEN**, Ezequiel |
 | CONST-provenance variants no longer deduplicate together | Low — they are genuinely different labeled DAGs; zero effect on any measured population, where provenance is always x₁ | **ACCEPTED**, by decision 2026-07-27 |
 | Timeouts at k ≥ 24 under a 10 s budget | Low — production uses 60 s and saw none | **ACCEPTED**; tracked as AC-3′ |

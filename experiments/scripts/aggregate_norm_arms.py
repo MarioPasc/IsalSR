@@ -58,6 +58,21 @@ def main() -> None:
         print(f"  {r.get('method')}/{r.get('problem')}/seed{r.get('seed')}: {r['error']}")
     print(f"\nwrote {out_dir}/summary.json")
 
+    # Guard the same way the per-task probe does: an empty or partially errored
+    # campaign pools into "0 failures", which reads exactly like the clean result
+    # and would be reported as one. Refuse to exit 0 on either.
+    n_calls = summary["global"]["submitted"]["n_calls"]
+    if n_calls == 0:
+        raise SystemExit(
+            f"FATAL: no DAG reached the canonicaliser across {len(records)} run(s). "
+            "This is not a zero failure rate — it is no data."
+        )
+    if errored:
+        raise SystemExit(
+            f"FATAL: {len(errored)}/{len(records)} run(s) errored; the pooled counters "
+            "cover only the runs that survived and must not be reported as a rate."
+        )
+
 
 if __name__ == "__main__":
     main()
