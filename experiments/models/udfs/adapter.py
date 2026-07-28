@@ -76,6 +76,7 @@ ISALSR_TO_UDFS_OP: dict[NodeType, str] = {
 def compgraph_to_labeled_dag(
     cg: CompGraph,
     const_values: Any = None,
+    ledger: Any | None = None,
 ) -> LabeledDAG:
     """Convert a UDFS CompGraph to an IsalSR LabeledDAG.
 
@@ -89,6 +90,9 @@ def compgraph_to_labeled_dag(
     Args:
         cg: UDFS CompGraph.
         const_values: Optional array of constant values.
+        ledger: Optional FallbackLedger for instrumentation.  When provided,
+            ``record_pre`` is called immediately before ``_normalize_const_edges``
+            to measure Round-Trip Fidelity precondition violations.
 
     Returns:
         IsalSR LabeledDAG.
@@ -145,6 +149,10 @@ def compgraph_to_labeled_dag(
         for child_udfs in ordered_children:
             child_isalsr = _resolve(node_map, child_udfs)
             dag.add_edge(child_isalsr, isalsr_id)
+
+    # Measure RTF precondition BEFORE repair (violated_pre counts orphan CONSTs).
+    if ledger is not None:
+        ledger.record_pre(dag)
 
     # Normalize CONST creation edges (invariant #9)
     _normalize_const_edges(dag)

@@ -56,6 +56,7 @@ BINGO_TERMINALS: frozenset[int] = frozenset({0, 1, -1})
 def agraph_to_labeled_dag(
     agraph: Any,
     const_values: tuple[float, ...] | None = None,
+    ledger: Any | None = None,
 ) -> LabeledDAG:
     """Convert a Bingo AGraph to an IsalSR LabeledDAG.
 
@@ -70,6 +71,9 @@ def agraph_to_labeled_dag(
     Args:
         agraph: Bingo AGraph instance.
         const_values: Optional constant values. If None, uses agraph.constants.
+        ledger: Optional FallbackLedger for instrumentation.  When provided,
+            ``record_pre`` is called immediately before ``_normalize_const_edges``
+            to measure Round-Trip Fidelity precondition violations.
 
     Returns:
         IsalSR LabeledDAG.
@@ -162,6 +166,10 @@ def agraph_to_labeled_dag(
                 # For ADD/MUL this is fine (single edge means one input).
                 # For SUB/DIV/POW: x-x=0, x/x=1 are constant expressions.
                 pass
+
+    # Measure RTF precondition BEFORE repair (violated_pre counts orphan CONSTs).
+    if ledger is not None:
+        ledger.record_pre(dag)
 
     # Normalize CONST creation edges (invariant #9)
     _normalize_const_edges(dag)

@@ -41,6 +41,7 @@ from experiments.models.bingo.runner import (
     build_bingo_pipeline,
     extract_sympy,
 )
+from experiments.models.fallback_ledger import FallbackLedger
 
 log = logging.getLogger(__name__)
 
@@ -97,10 +98,12 @@ class _CanonicalDeduplicator:
         use_fast_canonical: bool = True,
         timeout: float = 60.0,
         atlas: Any = None,
+        ledger: FallbackLedger | None = None,
     ):
         self.use_fast_canonical = use_fast_canonical
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
+        self.ledger: FallbackLedger | None = ledger
         # Historical hash set — used for fitness caching & legacy dedup
         self.canonical_seen: set[int] = set()
         # Fitness cache: canon_hash → fitness (for re-entry after eviction)
@@ -287,15 +290,25 @@ class IsalSREvaluation(Evaluation):
                 _release_heap()
 
             # Convert AGraph → LabeledDAG
+            # record_pre is called inside agraph_to_labeled_dag, before
+            # _normalize_const_edges, to measure RTF precondition violations.
             try:
-                dag = agraph_to_labeled_dag(indv)
+                dag = agraph_to_labeled_dag(indv, ledger=self.dedup.ledger)
             except Exception:  # noqa: BLE001
-                # Conversion failed: evaluate normally (only if unevaluated)
+                # Conversion failed: count in ledger (full-rate, O(1))
+                if self.dedup.ledger is not None:
+                    self.dedup.ledger.record_conversion_failure()
+                # Evaluate normally (only if unevaluated)
                 if not indv.fit_set:
                     indv.fitness = self.fitness_function(indv)
                     if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                         self._best_fitness = indv.fitness
                 continue
+
+            # Record post-normalisation state (before canonicalisation).
+            # violated_post should be 0 if _normalize_const_edges worked correctly.
+            if self.dedup.ledger is not None:
+                self.dedup.ledger.record_post(dag)
 
             # Resolve canonical hash: atlas fast-path or online fallback
             t0 = time.perf_counter()
@@ -308,6 +321,8 @@ class IsalSREvaluation(Evaluation):
                 self.dedup.atlas_lookup_time += dt
                 if was_hit:
                     self.dedup.atlas_hits += 1
+                    if self.dedup.ledger is not None:
+                        self.dedup.ledger.record_atlas_hit(dag)
                 else:
                     self.dedup.atlas_misses += 1
 
@@ -331,7 +346,14 @@ class IsalSREvaluation(Evaluation):
                             dag,
                             timeout=self.dedup.timeout,
                         )
-                except Exception:  # noqa: BLE001
+                except Exception as _exc:  # noqa: BLE001
+                    if self.dedup.ledger is not None:
+                        from isalsr.core.canonical import CanonicalTimeoutError
+
+                        if isinstance(_exc, CanonicalTimeoutError):
+                            self.dedup.ledger.record_timeout(dag)
+                        else:
+                            self.dedup.ledger.record_canon_raised(dag)
                     self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
                     self.dedup.canon_time_total += time.perf_counter() - t0
                     if not indv.fit_set:
@@ -452,10 +474,13 @@ class IsalSRBingoRunner(ModelRunner):
 
         np.random.seed(seed)
 
+        ledger = FallbackLedger()
+
         dedup = _CanonicalDeduplicator(
             use_fast_canonical=cfg.use_fast_canonical,
             timeout=cfg.canonicalization_timeout,
             atlas=self._atlas,
+            ledger=ledger,
         )
 
         t0 = time.perf_counter()
@@ -532,6 +557,9 @@ class IsalSRBingoRunner(ModelRunner):
             dedup.atlas_misses,
             n_gens,
         )
+        if ledger.enabled:
+            log.info("FallbackLedger: %s", ledger.to_dict())
+        self.last_ledger: FallbackLedger = ledger
 
         return BingoRawResult(
             wall_clock_s=wall_clock,

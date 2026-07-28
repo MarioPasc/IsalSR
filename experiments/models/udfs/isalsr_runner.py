@@ -30,6 +30,7 @@ import DAG_search.dag_search as dag_search_module  # noqa: E402
 from DAG_search.dag_search import DAGRegressor  # noqa: E402
 
 from experiments.models.base_runner import ModelRunner
+from experiments.models.fallback_ledger import FallbackLedger
 from experiments.models.udfs.adapter import compgraph_to_labeled_dag
 from experiments.models.udfs.config import UDFSConfig
 from experiments.models.udfs.runner import TrajectorySnapshot, UDFSRawResult
@@ -55,10 +56,12 @@ class _CanonicalDeduplicator:
         snapshot_freq: int = 1000,
         t0: float = 0.0,
         atlas: Any = None,
+        ledger: FallbackLedger | None = None,
     ):
         self.use_fast_canonical = use_fast_canonical
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
+        self.ledger: FallbackLedger | None = ledger
         self.canonical_seen: set[int] = set()
         self.n_total = 0
         self.n_unique = 0
@@ -103,6 +106,8 @@ class _CanonicalDeduplicator:
             if was_hit:
                 self.atlas_hits += 1
                 self.canon_time_total += dt
+                if self.ledger is not None:
+                    self.ledger.record_atlas_hit(labeled_dag)
                 return canon_hash
             self.atlas_misses += 1
 
@@ -117,7 +122,14 @@ class _CanonicalDeduplicator:
                 from isalsr.core.canonical import canonical_string
 
                 canonical = canonical_string(labeled_dag, timeout=self.timeout)
-        except Exception:  # noqa: BLE001
+        except Exception as _exc:  # noqa: BLE001
+            if self.ledger is not None:
+                from isalsr.core.canonical import CanonicalTimeoutError
+
+                if isinstance(_exc, CanonicalTimeoutError):
+                    self.ledger.record_timeout(labeled_dag)
+                else:
+                    self.ledger.record_canon_raised(labeled_dag)
             self.canon_fallback_time += time.perf_counter() - t0_canon
             self.canon_time_total += time.perf_counter() - t0
             return None
@@ -133,10 +145,15 @@ class _CanonicalDeduplicator:
         def wrapped(cgraph, X, loss_fkt, opt_mode="grid_zoom", loss_thresh=None):  # noqa: N803
             self.n_total += 1
 
+            # record_pre is called inside compgraph_to_labeled_dag, before
+            # _normalize_const_edges, to measure RTF precondition violations.
             try:
-                labeled_dag = compgraph_to_labeled_dag(cgraph)
+                labeled_dag = compgraph_to_labeled_dag(cgraph, ledger=self.ledger)
             except Exception:  # noqa: BLE001
-                # If conversion fails, evaluate normally
+                # Conversion failed: count in ledger (full-rate, O(1))
+                if self.ledger is not None:
+                    self.ledger.record_conversion_failure()
+                # Evaluate normally
                 result = self._original_evaluate(
                     cgraph,
                     X,
@@ -149,6 +166,10 @@ class _CanonicalDeduplicator:
                     self._best_loss = loss
                 self._maybe_snapshot()
                 return result
+
+            # Record post-normalisation state (before canonicalisation).
+            if self.ledger is not None:
+                self.ledger.record_post(labeled_dag)
 
             canon_hash = self._resolve_canonical_hash(labeled_dag)
 
@@ -235,12 +256,14 @@ class IsalSRUDFSRunner(ModelRunner):
         regressor.random_state = seed
 
         t0 = time.perf_counter()
+        ledger = FallbackLedger()
         dedup = _CanonicalDeduplicator(
             use_fast_canonical=cfg.use_fast_canonical,
             timeout=cfg.canonicalization_timeout,
             snapshot_freq=cfg.snapshot_frequency,
             t0=t0,
             atlas=self._atlas,
+            ledger=ledger,
         )
 
         with _patched_evaluate(dedup), warnings.catch_warnings():
@@ -285,6 +308,9 @@ class IsalSRUDFSRunner(ModelRunner):
             dedup.atlas_hits,
             dedup.atlas_misses,
         )
+        if ledger.enabled:
+            log.info("FallbackLedger: %s", ledger.to_dict())
+        self.last_ledger: FallbackLedger = ledger
 
         return UDFSRawResult(
             wall_clock_s=wall_clock,
