@@ -7,7 +7,7 @@
 | Owner | **Mario** (+ Claude Code); theory half needs **Ezequiel** |
 | Depends on | T01 (C++ engine, for the real-data half) |
 | Blocks | T06 (its violation-rate definition), T07 (the theorem's hypotheses) |
-| Status | **IN PROGRESS** — AC-1, AC-2, AC-3, AC-5, AC-6 met; **fix applied** (minimal CONST repair, both engines). **Open: AC-4 (UDFS half, on Picasso), AC-7.** |
+| Status | **IN PROGRESS** — AC-1…AC-7 all met; **fix applied** (minimal CONST repair, both engines). AC-4's UDFS half closed 2026-07-28 from T06 (array `1672959`, 234,865 DAGs, 0 failures). Remaining: **AC-3′** (Ezequiel) and the Status/close decision, which is Mario's. |
 | Target | 2026-08-17 (before Wave 1, because the real-data half needs campaign instrumentation) |
 | Opened | 2026-07-27, by Mario, from a T01 finding |
 | Last worked | 2026-07-27 — mechanism corrected, fix applied to both engines, Bingo half of AC-4 measured |
@@ -334,12 +334,17 @@ be agreed rather than applied.
   `experiments/scripts/validate_const_repair_synthetic.py`.
   **The stated hypothesis is therefore sufficient** — see AC-3′ below for the one
   clause that still needs Ezequiel.
-- **AC-4. 🟡 HALF MET — Bingo done, UDFS on Picasso.** Bingo: 5 problems × 3 seeds
-  × 120 s, **12,176,790 DAGs, 0 failures**, Wilson 95 % CI upper bound
-  3.1×10⁻⁷, and all three policies structurally identical on 12,176,790 /
-  12,176,790. UDFS submitted as a 15-task array
-  (`slurm/t15_norm_arms_launch.sh --method udfs`); not locally practical because
-  UDFS checks `max_time` only between order-enumeration stages.
+- **AC-4. ✅ MET — both methods.** Bingo: 5 problems × 3 seeds × 120 s,
+  **12,176,790 DAGs, 0 failures**, Wilson 95 % CI upper bound 3.1×10⁻⁷, all three
+  policies structurally identical on 12,176,790 / 12,176,790.
+  **UDFS (closed 2026-07-28 from T06):** array `1672959`, 15/15 tasks,
+  **234,865 DAGs, 0 failures in all three arms**, Wilson 95 % upper 1.64×10⁻⁵,
+  all three policies structurally identical on 234,865 / 234,865, `repair` vs
+  `none` disagreements **0**. Per-problem ρ 1.64 (Nguyen-5) – 2.27 (I.6.20a).
+  Outputs at `picasso:~/execs/isalsr/t15_norm_arms/udfs/` — **not** the repo
+  `results/` path this ticket predicted, which is why they read as missing. The
+  `FileNotFoundError` filling the `.err` files is a multiprocessing semaphore
+  cleanup at interpreter shutdown, not a job failure.
 - **AC-5. ✅ MET.** Exception path documented for both runners; ρ is inflated by
   each failure (candidate counted in `n_total`, never in `n_unique`). §3.
   Magnitude on real Bingo data: **exactly zero**, since there are no failures.
@@ -529,15 +534,18 @@ predicts, and **no submitted Bingo number is affected by the defect or by the
 fix**. Results: `…/results/t15_norm_arms/{synthetic_100k.json,bingo_local/}`.
 
 **Still open.**
-- **UDFS half of AC-4.** Submitted to Picasso as a 15-task array;
-  `bash slurm/t15_norm_arms_launch.sh --method udfs`. Not locally practical: UDFS
-  checks its `max_time` only between order-enumeration stages, so a 20 s budget
-  ran past 900 s on the workstation. The adapter argument
-  (`udfs/adapter.py:104-147` never targets a VAR) predicts zero, same as Bingo.
-- **The precomputed HDF5 atlas fast-path was not audited.** If the atlas was
-  built over a population containing non-x1 CONST provenance, its entries encode
-  the old merge and would need regeneration. Settle this before writing "no
-  reported number is affected" in the response letter.
+- ~~UDFS half of AC-4~~ — **CLOSED 2026-07-28 from T06.** Array `1672959`
+  completed; 234,865 DAGs, 0 failures, all three arms structurally identical on
+  100 %. The adapter argument predicted zero and zero is what it measured.
+- ~~The precomputed HDF5 atlas fast-path was not audited~~ — **CLOSED 2026-07-28
+  from T06, by measurement.** All **5,959** submitted `run_log.json` files were
+  scanned: `canonicalization_precomputed_s > 0` on **0 / 5,959**. No reported
+  number used the atlas, so no atlas entry can encode the old merge into a
+  published result. (The config-level argument — all four `*_atlas` experiments
+  are `enabled: false` in `slurm/models_config.yaml` — agrees, but the run-log
+  scan is the evidence that settles it.) The atlas remains a live *code* path and
+  is carried in T06's ledger as path 6; if it is ever enabled, its entries must be
+  regenerated under the repaired policy first.
 - **`methodology.tex` Table 3 line 830** still describes the old relocation
   (`// redirect all Const creation edges to x_1`). Ezequiel's call; the theorem
   itself now holds as stated, which is the cheaper outcome.
@@ -557,7 +565,7 @@ fix**. Results: `…/results/t15_norm_arms/{synthetic_100k.json,bingo_local/}`.
 | Failure rate, random DAGs, old policy | **0.15 %** (6 / 4,000); at 10⁵, 48 genuine failures | §3, AC-3 |
 | Failure rate, random DAGs, repaired policy | **0** genuine failures / 100,000 | AC-3 |
 | Failure rate, real Bingo DAGs | **0 / 12,176,790** (95 % CI upper 3.1×10⁻⁷) | AC-4 |
-| Failure rate, real UDFS DAGs | pending — Picasso array submitted | AC-4 |
+| Failure rate, real UDFS DAGs | **0 / 234,865** (95 % CI upper 1.64×10⁻⁵), all three policies identical on 100 % | AC-4 |
 | True sufficient precondition | The **stated** reachability hypothesis, once normalisation can no longer destroy it. No extra clause needed | AC-3 |
 | Was completeness actually true? | **No, under the old policy.** Two non-isomorphic DAGs differing only in CONST provenance both gave `VkVspv+NnC`, refuting Theorem (Complete Labeled-DAG Invariant), ⟹ direction. Fixed | §7 |
 | Was normalisation evaluation-preserving? | **No, under the old policy**, despite its docstring saying so. On `x→COS→CONST` it moved the output sink and turned 1.0 into cos(1.5) | §7 |
@@ -639,8 +647,8 @@ src/ tests/` and `mypy --strict src/isalsr/` clean.
 
 | Risk | Severity | Status |
 |---|---|---|
-| **Precomputed HDF5 atlas not audited.** If `src/isalsr/precomputed/` atlases were built over a population containing non-x₁ CONST provenance, their entries encode the old merge and are now inconsistent with the online path | **Medium** — would affect any run using `--atlas-dir` | **OPEN.** Settle before writing "no reported number is affected" in the response letter |
-| UDFS half of AC-4 unmeasured | Low — the adapter argument predicts zero, as it did for Bingo | **OPEN.** Picasso array submitted |
+| **Precomputed HDF5 atlas not audited.** If `src/isalsr/precomputed/` atlases were built over a population containing non-x₁ CONST provenance, their entries encode the old merge and are now inconsistent with the online path | Medium → **none for published numbers** | **CLOSED 2026-07-28** (T06). `canonicalization_precomputed_s > 0` on **0 / 5,959** submitted run logs: no reported number used the atlas. Still live as a code path — regenerate before ever enabling `--atlas-dir` |
+| UDFS half of AC-4 unmeasured | Low — the adapter argument predicts zero, as it did for Bingo | **CLOSED 2026-07-28** (T06). 0 / 234,865, all arms identical on 100 % |
 | `methodology.tex:830` describes the old policy | Low — editorial | **OPEN**, Ezequiel |
 | CONST-provenance variants no longer deduplicate together | Low — they are genuinely different labeled DAGs; zero effect on any measured population, where provenance is always x₁ | **ACCEPTED**, by decision 2026-07-27 |
 | Timeouts at k ≥ 24 under a 10 s budget | Low — production uses 60 s and saw none | **ACCEPTED**; tracked as AC-3′ |
