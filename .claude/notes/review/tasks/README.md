@@ -64,6 +64,19 @@ the frozen MANIFEST schema, and checks P1–P3** — see `EXECUTION-PLAN.md` §2
 |---|---|---|---|
 | [T07](T07-theorem-foundation.md) | Complete the formal foundation of Theorem 3.15 | Ezequiel + Mario | **R2.1**, **R1.3** |
 | [T15](T15-d2s-failure-modes.md) | D2S failure modes: the 6 counterexamples + failure rate on real data | Mario + Ezequiel | feeds R1.2, R2.1 |
+| [T16](T16-alphabet-mismatch.md) | Σ_SR as defined vs as implemented: `Sub`/`Div` | Mario + Ezequiel | **R2.3** (reframes it) |
+
+> **T16 opened 2026-07-29** from a T07 finding. The paper's Σ_SR (Def 3.2) has
+> **12 labels and no `-` or `/`** — subtraction and division are supposed to go
+> through the commutative encoding `Add`+`Neg` / `Mul`+`Inv`. The adapters emit
+> `NodeType.SUB`/`DIV` anyway, and **61.1 % of production Bingo candidates
+> contain them**. So the implemented alphabet is 14 labels / 35 tokens against
+> the stated 12 / 31, and Def 3.9(iv) — sound for the declared alphabet — is
+> unsound for the implemented one, falsifying Theorem 3.15's (⇐) direction on a
+> three-node example. **No reported number is wrong; the description is.**
+> Mario's chosen direction is to align the *code* to the paper, which implies a
+> **full re-execution** — so this must be settled **before T02 Wave 1 launches**.
+> Reframes **R2.3** from a presentational item into a specification gap.
 
 > **T15 opened 2026-07-27** from a T01 finding. `fast_canonical_string` raises on
 > 0.15 % of random DAGs; the exhaustive canonicaliser fails identically, so it is
@@ -108,7 +121,7 @@ Every one of the 15 numbered comments is covered exactly once.
 | R1.5 — writing pass | T12 |
 | R2.1 — Lemma A.2 proof terse | T07 |
 | R2.2 — `{g,i}` vs `{−,/}` across documents | T11 |
-| R2.3 — Σ_SR vs host operator set | T09 |
+| R2.3 — Σ_SR vs host operator set | **T16** (reframed 2026-07-29 from a presentational item; T09 defers to it) |
 | R2.4 — "Table 4 of the main document" does not exist | T11 |
 | R2.5 — Feynman counts 20 / 10 / 24 | T09 |
 | R2.6 — 2,640 vs 6,000 runs | T09 |

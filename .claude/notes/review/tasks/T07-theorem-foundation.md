@@ -7,9 +7,9 @@
 | Owner | **Ezequiel** (primary — proofs, `methodology.tex`) · **Mario** (empirical verification, tests) |
 | Depends on | — (can start immediately; independent of compute) |
 | Blocks | T03 phase 3, T06, T13 |
-| Status | **NOT STARTED** (proofs, Ezequiel) · **Inbound material ready**: T15 changed the normalisation scheme on 2026-07-27 and T06 measured its effect on 2026-07-28. **§3.2 and §5.4 below described the pre-fix semantics and have been corrected — read §3.3 before writing anything.** |
+| Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis for his path, which now also carries a sixth gap (Lemma 3.14 applies Thm 3.13 outside its stated domain), D-2, D-3 and the **T16** decision that gates T02 Wave 1. Remaining for Mario: AC-9 (page cost → T13) and AC-10 (§8). |
 | Target | 2026-08-24 |
-| Last updated | 2026-07-28 — §3.3 added, §5.2/§5.4 corrected, T06/T15 hand-over recorded in §7 |
+| Last updated | 2026-07-29 — norm-removal study landed; AC-6 answered; D-1/D-2/D-3 recorded; T16 opened; 0.6 % round-trip finding flagged |
 
 ---
 
@@ -321,12 +321,20 @@ Every claim the proof makes that is checkable in code must be checked:
 - **AC-4.** Termination is established, not assumed.
 - **AC-5.** `normalize_const_creation` is a numbered definition with justification,
   validity argument, and complexity.
-- **AC-6.** Theorem 3.15's statement accounts for the normalisation. *(Amended
-  2026-07-28: may be dischargeable **by argument** rather than by an amendment.
-  Since the repair is now the identity on the hypothesis class (§3.3b), the theorem
-  holds as written there; what still needs settling is the scope question in §7 —
-  the implementation canonicalises `normalize(D)`, and 85.9–100 % of real inputs
-  enter the hypothesis class only through that step.)*
+- **AC-6.** Theorem 3.15's statement accounts for the normalisation.
+  *(**Answered 2026-07-29, provisionally, by removing `𝒩` from the canonicaliser
+  rather than by amending anything.** The two-arm study agrees on 130,311,281 real
+  DAGs with per-DAG agreement 1.000000 and identical `n_unique`/ρ, and eliminates
+  D-1 by construction. With `𝒩` out of the canonicalisation path `fcs` is a pure
+  function of `D`, so Theorems 3.13/3.14/3.15 stand **exactly as submitted** — no
+  restatement, no extra lemma, no scoping remark. Two earlier routes are closed:
+  restating on `𝒩(D)` is **refuted** by the D-1 counterexample, and the
+  adapter-image lemma is unnecessary if `𝒩` is not in the pipeline at all.
+  **HOLD LIFTED 2026-07-29** — the v2 campaign closed every caveat: 30/30 tasks,
+  per-DAG agreement **1.000000** on **10,551,609** real DAGs, identical `n_unique`
+  and ρ in both arms, **0** equivariance failures in 1,681,544 samples, and
+  round-trip **100 % in both arms under one comparator**. ρ = **1.7931** against
+  the paper's independent **1.793**. The code change is cleared to proceed.)*
 - **AC-7.** All §5.4 tests written and passing, including the pre/post-normalisation
   counterexample.
 - **AC-8.** Consistent with T03's insertion point and with T06's statement of the
@@ -424,6 +432,487 @@ nodes on different parents are not isomorphic under the current scheme, so they
 *should* get different canonical strings, and constructing the requested pair is
 not possible. Nothing in §6's acceptance criteria was relaxed; AC-6 may simply turn
 out to be discharged by argument rather than by an amendment.
+
+### 2026-07-29 — Mario takes `normalize_const_creation`; a second non-equivariance defect found
+
+**Scope for this session, agreed by email.** Ezequiel (2026-07-28, 17:26 and
+later): *"haz tú lo de normalize_const_creation … Me voy a esperar a que Mario
+actualice normalize_const_creation en el manuscrito"*. So AC-5, AC-6, AC-7 and
+the R1.3 half of §8 are Mario's; AC-1…AC-4 (the Lemma 3.14/A.2 proof) stay
+Ezequiel's and **no proof work was done here**.
+
+**Plan.** (a) settle the AC-6 scope question; (b) numbered definition of
+`normalize_const_creation` in `methodology.tex`; (c) correct
+`methodology.tex:830` and the rendered twin in `supplementary.tex`; (d) close
+§5.4's still-open Rule 1 non-exclusion test; (e) a figure motivating the step;
+(f) fill §8.3's R1.3 response. Manuscript root confirmed as the live Overleaf
+checkout `…/journal/69c1637a28a81fea2badda9a/` (remote
+`git.overleaf.com/69c1637a28a81fea2badda9a`, pulled clean).
+**`double_blind/paper/methodology.tex` is a byte-identical copy, not a symlink —
+every manuscript edit must be mirrored.**
+
+**Decisions taken by Mario, 2026-07-29.** AC-6 → restate on `𝒩(D)`
+(subsequently refuted, see below). Numbering → insert the new definition before
+Def 3.8 **and** unnumber Remark 3.12 ("Tightened automorphism bound") so the
+count balances and **Theorem 3.15 keeps its number**, leaving Ezequiel's
+in-flight work on 3.15 undisturbed. Figure → response letter + supplementary,
+not the main paper (T13 page budget). Overleaf → pull, edit, commit, push.
+
+**Three manuscript defects found, all in R2.1's area.** Full write-up:
+`.claude/notes/review/tasks/T07-appendix/const_normalization_equivariance.md`.
+In all three the **code is correct and the paper is wrong**, so no reported
+number moves.
+
+| # | Defect | Owner |
+|---|---|---|
+| D-1 | `𝒩` is not isomorphism-equivariant | Mario |
+| D-2 | Def 3.9(iv) constrains operand order for `Pow` only, but `Sub`/`Div` are non-commutative and are in every production operator set — **(⇐) of Thm 3.15 false as stated** | **Ezequiel** |
+| D-3 | Rule 1 prose says "`Pow` node"; implementation applies it to all of `BINARY_OPS = {Sub, Div, Pow}` | **Ezequiel** |
+
+**D-2 is the most serious and needs no exotic input.** Three-node DAGs with
+identical edge sets: `Sub` with `σ=(x₁,x₂)` gives `V-PnC`, with `σ=(x₂,x₁)`
+gives `pv-nC`; likewise `Div` (`V/PnC` / `pv/nC`). For `Sub` and `Div` the
+identity bijection satisfies Definition 3.9 (i)–(iii) and (iv) is vacuous
+because the node is not `Pow` — so `D₁ ≅ D₂` per the definition while
+`fcs_{D₁} ≠ fcs_{D₂}`. The code is right (`x₁−x₂ ≠ x₂−x₁`); condition (iv) must
+range over `{Sub, Div, Pow}`. Note this would be correct under
+`OperationSet.commutative()`, which is **not** the alphabet the experiments ran
+(`experiments/configs/bingo_*.yaml` all list `-` and `/`).
+
+**D-1 — `𝒩` is not isomorphism-equivariant.**
+
+There exist `D₁ ≅ D₂` with `𝒩(D₁) ≇ 𝒩(D₂)`, hence `fcs_{D₁} ≠ fcs_{D₂}`.
+`D₂ = permute_internal_nodes(D₁, [1,0,2,3])`, so the two are isomorphic by
+construction. Both normalisations satisfy reachability. Strings:
+`VkpvknvsncNVsNpppC` vs `pvkpvknvsncPVsNppC`.
+
+Cause: `for c in sorted(const_nodes)` is a **node-index-ordered** iteration, and
+node indices are exactly what isomorphism permutes; anchoring one orphan `Const`
+creates paths that make another orphan's preferred anchor cycle-closing. Needs
+≥2 orphan `Const` nodes **and** a `Var` with in-edges **and** a `Const ⇝ Var`
+path.
+
+Confirmed on the **C++ production engine** in all three modes, on the Python
+engine, on `pruned_canonical_string`, and on `canonical_string` — the exhaustive
+lexmin reference that prunes nothing. So it is neither a pruning artefact nor a
+port artefact, and D2S is innocent: it is handed two structurally different
+graphs and correctly returns two different strings. This is a **distinct defect
+from the one T15 fixed**, and it is a property of the *repaired* policy.
+
+**Consequences, and they bound it tightly.**
+
+- **No submitted number is affected and no published claim is false.** Theorem
+  3.15 as submitted is stated on DAGs satisfying reachability; the
+  counterexample has orphan `Const` nodes and lies outside that hypothesis.
+- Condition "a `Var` with in-edges" is **impossible by construction** on
+  host-adapter output (`bingo/adapter.py:143-159`, `udfs/adapter.py:104-147`),
+  so no candidate in any reported experiment can trigger it.
+- **It does refute the AC-6 option chosen this morning.** Restating on `𝒩(D)`
+  extends the domain to exactly the DAGs with orphan `Const` nodes, and the
+  counterexample then sits *inside* the new hypothesis while violating the
+  conclusion. Recorded so it is not re-proposed.
+- `is_isomorphic` inherits the defect (it applies `𝒩` per Critical Invariant 9)
+  and returns `False` on a pair built by the repo's own `permute_internal_nodes`.
+  Latent; unreachable in production for the same adapter reason.
+
+**The safe class**, and it is where Ezequiel's instinct is provably right.
+`𝒩` is equivariant on `𝒞 = 𝒞₁ ∪ 𝒞₂` where `𝒞₁` = DAGs satisfying reachability
+(`𝒩 = id` there) and `𝒞₂` = DAGs in which no `Var` node is an edge target. On
+`𝒞₂` no orphan `Const` can reach a variable, so `x₁` never closes a cycle and
+every orphan anchors to `x₁`: *"lo mejor es que x₁ sea el padre de todos ellos"*
+is not a convention on that class, it is forced.
+
+**On abandoning `𝒩` altogether (asked, answered).** Dropping it from
+`canonical.py` is measurably a no-op on production: both adapters already repair
+orphan `Const` nodes upstream (T06 `violated_post = 0`), and T15's `none` arm was
+structurally identical to `repair` on 12,176,790 Bingo and 234,865 UDFS DAGs with
+0 disagreements. Without it the canonicaliser **raises** on an orphan `Const`
+rather than silently returning a wrong string — verified — which is the correct
+failure mode. What it gives up is the safety net for non-adapter producers
+(`from_sympy`, the precomputed atlas). **Reachability itself cannot be
+abandoned**: a `Const` with in-degree 0 has no in-neighbour for a pointer to sit
+on, so no `V`/`v` token can create it and D2S cannot emit that node at all.
+
+**Σ_SR extension raised and assessed (2026-07-29).** Proposal: add an
+instruction that creates a `Const` node *without* a creation edge, removing the
+need for `𝒩` entirely. **Assessment: right design, wrong revision.** It would
+make D-1 vanish by construction and weaken the reachability precondition to a
+condition expression DAGs satisfy automatically — but it changes Σ_SR
+(Definition 3.2, Table 1), forces re-proof of 3.13/3.14/3.15 against a changed
+alphabet on top of the Lemma A.2 rewrite, introduces a *new* canonicalisation
+sub-problem (the edgeless token's position in the string is unconstrained, which
+is fresh string multiplicity), requires re-verifying the O(k!) claim, and buys
+nothing measurable — on adapter output all constants already encode identically,
+so it is a bijective re-encoding and ρ is unchanged. **Recommendation: two
+sentences in Future Work**, draft in §6.4 of the appendix doc. This also
+pre-empts a reviewer proposing it.
+
+**Rule 1 non-exclusion (§5.4 bullet 1) — returned, partial, sent back.**
+13,394 `Pow` DAGs, **0** Rule-1-attributable failures, round-trip 13,391/13,391
+(100 %); 19 tests written and re-run green by me. **Not accepted**: only 24 of
+13,394 DAGs (0.18 %) actually exercised a Rule 1 exclusion, which cannot carry a
+universal non-exclusion claim. Redo requested with a generator targeting ≥ 2,000
+exercising DAGs, `backend="cpp"` explicit (the 3 observed timeouts were
+Python-backend backtracking cost), and `roundtrip_rate` replaced by two raw
+integers. Iteration 1 of the 2-round budget.
+
+**Open at the time of writing**: the measured equivariance-failure rate across
+four populations (delegated, running); the Rule 1 redo; the three-arm
+abandonment experiment (§7.3 of the appendix doc, designed, not launched); and
+the AC-6 decision itself, now that the `𝒩(D)` restatement is refuted.
+
+### 2026-07-29 — State of the algorithm: what IsalSR provably does and does not do
+
+Written because the ticket had accumulated defects faster than it had
+accumulated structure. **The distinction that organises all of them: only one
+of the three is the algorithm misbehaving; the other two are the paper
+mis-describing an algorithm that is doing the right thing.**
+
+The pipeline as it actually runs:
+
+```
+host DAG (Bingo / UDFS)
+   -> adapter          + _normalize_const_edges   <- the repair really happens HERE
+   -> normalize_const_creation                    <- redundant second application
+   -> D2S / FCS (greedy on the 1-WL sort key)
+   -> canonical string
+```
+
+| Property | Status | Evidence / caveat |
+|---|---|---|
+| **Dedup soundness** — two different expressions are never merged | ✅ holds | All 6 bypass paths audited in code (T06). A failed candidate is evaluated and never enters `canonical_seen`. Only theoretical hole: a 64-bit hash collision, < 3×10⁻⁶ |
+| **Round-trip fidelity** on DAGs satisfying reachability | ✅ holds | 0 failures on the 14,841 corpus, 10⁵ synthetic, 12,176,790 Bingo, 234,865 UDFS |
+| **Completeness (⇒)** — same string ⇒ isomorphic | ✅ holds now | Was **false as submitted**; the pre-T15 policy merged non-isomorphic DAGs |
+| **Completeness (⇐)** — isomorphic ⇒ same string | ⚠️ **two holes** | D-1 and D-2 below |
+| **Evaluation preservation** `eval(D) = eval(𝒩(D))` | ✅ holds now | Was **false as submitted** (`x→Cos→Const` turned 1.0 into 0.0707) |
+| **Reachability established before canonicalisation** | ✅ holds | 85.9 % (Bingo) / 100 % (UDFS) violated on arrival → **0 %** after. Established by the **adapter**, not by `𝒩` and not by the object the theorem quantifies over |
+| **Termination** | ⚠️ empirical only | 0 failures on 12.4 M DAGs at the 60 s budget, but not proven. 46/100,000 synthetic DAGs at k = 24–30 exceed 10 s. T15's AC-3′, Ezequiel's |
+| **Rule 1 excludes no valid ordering** | ✅ holds, now non-vacuously | Per op: POW 13,261 DAGs / 1,507 exercising; SUB 13,226 / 1,507; DIV 13,253 / 1,503. **0** failures, round-trip 100 % in all three. 39 tests |
+| **`𝒩` is isomorphism-equivariant** | ❌ **fails**, but only outside `𝒞` | See the measurement below |
+| **O(k!) reduction claim** | ✅ untouched | ρ identical across all three normalisation policies on 12.4 M real DAGs |
+
+**The two holes in (⇐), and they are different in kind.**
+
+- **D-1 is a genuine algorithm defect.** `𝒩` processes orphan `Const` nodes in
+  node-index order, which is exactly what isomorphism permutes. Needs ≥ 2 orphan
+  `Const` nodes **and** a `Var` with an in-edge **and** a `Const ⇝ Var` path —
+  and no adapter ever points an edge into a variable, so it cannot occur in any
+  reported experiment, and it lies outside Theorem 3.15's hypothesis anyway.
+- **D-2 is the paper describing the wrong object.** The algorithm satisfies the
+  property we meant; Definition 3.9(iv) states a weaker one. See T16 — the root
+  cause is that the implemented alphabet is larger than the declared one.
+
+**Equivariance measured, two independent seeds** (`experiments/scripts/
+validate_const_equivariance.py`, K = 8 permutations per DAG via
+`permute_internal_nodes`, C++ engine):
+
+| Population | N DAGs | perm. tests | failures | in safe class `𝒞` |
+|---|---|---|---|---|
+| Random S2D, m = 2 | 400–500 | 3,200–4,000 | **0** | 100 % |
+| Random S2D, m = 3 | 400–500 | 3,192–3,984 | **0** | 100 % |
+| Const-free synthetic | 20 | 160 | 0 — **vacuous**, generator emits no `Const` | 100 % |
+| **Bingo adapter output** | **15,530** | **123,240** | **0** | **100 % in `𝒞₂`** |
+| Adversarial (built to violate `𝒞`) | 400–2,000 | 2,352–11,408 | **18.1 – 20.1 %** | **0 %** |
+
+Cross-tabulation, both seeds: **failures inside `𝒞` = 0; every failure is
+outside `𝒞`.** Bingo's `frac_in_c2 = 1.0000` — every candidate has all variables
+as pure sources, which is the structural reason the defect is unreachable in
+production. UDFS is 100 % in `𝒞₂` by the same adapter argument
+(`udfs/adapter.py:108-151` adds edges only into operator nodes); stated as a code
+argument, not measured.
+
+**Honest limit, recorded rather than buried**: `𝒞` is **sufficient, not tight**.
+There are DAGs outside `𝒞` that do not fail — the interference only fires when
+the two `Const` chains target the two lowest-indexed variables. So `𝒞` is a
+usable theorem hypothesis but it does **not** characterise the failure set, and
+must not be presented as if it did.
+
+Full suite after both new test files: **4,541 passed, 5 skipped** (4,478 + 24
+equivariance + 39 Rule 1), `ruff` and `mypy --strict` clean. All re-run by me.
+
+**How (⇐) gets repaired without losing anything else.** Two independent moves,
+neither of which costs another property:
+
+1. **Remove `𝒩` from the canonicalisation path.** `fcs` becomes a pure function
+   of the DAG and (⇐) follows from the isomorphism-invariance of the sort key κ.
+   Round-trip is unaffected (stated on reachability-satisfying DAGs, where `𝒩`
+   was already the identity); reachability is still established by the adapters;
+   evaluation preservation becomes trivial; soundness and (⇒) are untouched; and
+   `is_isomorphic` becomes a true isomorphism test. Being validated by the
+   two-arm study (T07-appendix §7.3).
+2. **Resolve the alphabet mismatch** — T16.
+
+### 2026-07-29 — The norm-removal study: setup, numbers, and the AC-6 answer
+
+**Decision taken by Mario, 2026-07-29 (provisional, pending caveat 2 below):
+remove `𝒩` from the canonicalisation path.** This recovers D-1 by construction
+and discharges AC-6 **without amending any theorem** — Theorems 3.13/3.14/3.15
+stand exactly as submitted, because `fcs` becomes a pure function of `D` and the
+object the theorem describes finally coincides with the object the code
+canonicalises. Ezequiel's in-flight work on 3.15 is unaffected under this branch,
+which is what the R1.3 `\changeref` already promised him.
+
+#### Experimental setup, so it is reproducible
+
+| Item | Value |
+|---|---|
+| Arms | `keep` = production (`𝒩` applied inside canonicalisation) · `drop` = `_native.testing.fast_canonical_string_raw` (no `𝒩`) |
+| Engine | **C++** (`backend="cpp"`) throughout, on Picasso |
+| Adapters | repair `Const` upstream in **both** arms — this is production reality |
+| Equivariance oracle | `permute_internal_nodes`, K = 8 permutations per sampled DAG, 1-in-50 sampling |
+| Canonicalisation budget | 60 s (live populations), 10 s (synthetic) |
+| Jobs | `1679357` synthetic (20 tasks) · `1679404` bingo (15) · `1679413` udfs (15) · `1679358` adversarial (1) |
+| Outcome | **50/50 COMPLETED, 0 FAILED, 0 OOM, 51/51 result files** |
+| Scripts | `experiments/scripts/t07_norm_removal_{study,aggregate,figures}.py`; `slurm/t07_norm_removal_launch.sh` + `slurm/workers/t07_norm_removal_slurm.sh` |
+| Results | `picasso:~/execs/isalsr/t07_norm_removal/` (self-contained), `summary.json` |
+| Problems | 5 × 3 seeds: Nguyen-5, I.6.20a, Pagie-1, Keijzer-11, R1 |
+
+#### The numbers (re-read by Mario from `summary.json`, not taken from the agent)
+
+| Population | DAGs / arm | per-DAG agreement | `n_unique` keep = drop | ρ equal | equivariance fails keep / drop |
+|---|---|---|---|---|---|
+| **bingo** | **93,910,005** | **1.000000** | 325,486 = 325,486 | yes | **0 / 0** (14,809,528 samples) |
+| **udfs** | **36,401,276** | **1.000000** | 111,553 = 111,553 | yes | **0 / 0** (11,657,120 samples) |
+| synthetic | 500,000 | **1.000000** | 491,490 vs 491,491 | yes | 0 / 0 (79,864 samples) |
+| adversarial | 12 | n/a (`n_both_ok` = 0) | — | — | **53 / 0** (96 samples) |
+
+> 🔴 **RETRACTED 2026-07-29 (same day): the bingo and udfs rows above are
+> contaminated and must not be quoted.** The as-run code's `_round_trip_keep`
+> calls `_score_keep`, which re-imports `isalsr.core.canonical.
+> fast_canonical_string` *at call time*. During a live search that name is
+> monkey-patched to the `TwoArmRecorder`, and **no re-entrancy guard exists in
+> either version**. So every round-trip check on a bingo/udfs DAG re-entered the
+> recorder and scored the S2D-decoded string as though it were a fresh adapter
+> DAG. `n_total`, `n_unique`, ρ, the equivariance sample counts and the
+> round-trip rates for **bingo and udfs** are therefore all inflated by recursive
+> re-entry, and the population is not "adapter output" — an unknown fraction are
+> S2D re-decodes. Verified by diffing the Picasso as-run copy against local
+> (`asrun_study.py:371`).
+>
+> **This also supersedes caveat 1 below**: ρ ≈ 288 was attributed to pooling.
+> Pooling is real but recursion inflation is at least as large, and the two
+> cannot be separated from the existing output.
+>
+> **Synthetic and adversarial are unaffected and stand**: neither monkey-patches
+> `fast_canonical_string`, so neither can recurse. Those are the rows the AC-6
+> conclusion now rests on.
+>
+> **FIXED and re-running (2026-07-29, later).** `keep_fn` threaded through both
+> round-trip helpers, plus a re-entrancy guard on `TwoArmRecorder.__call__` and
+> an `n_reentrant_calls` field so the property is provable from the output.
+> Measured `n_reentrant_calls = 0`, so the threading is what fixed it and the
+> guard is a backstop. Corrected local numbers, both arms, C++ engine:
+>
+> | Problem | DAGs | Bingo's own counter | study n_total / n_unique | ρ | agreement | round-trip |
+> |---|---|---|---|---|---|---|
+> | Nguyen-5 | 10,520 | 10520 / 5936 | 10,520 / 5,936 | **1.772** | 1.000000 | 10,520/10,520 |
+> | I.6.20a | 351,200 | 351200 / 197739 | 351,200 / 197,739 | **1.776** | 1.000000 | **351,200/351,200** |
+>
+> The study's counters now reproduce **Bingo's own independent dedup counters
+> exactly**, and ρ lands on the production 1.793. Under recursion they could not
+> have matched — that cross-check is what confirms the fix.
+> **Caveats 2 and 3 are both closed**: round-trip uses `fast_canonical_string` in
+> both arms and is 100 % on 351,200 real DAGs each, so the 0.6 % failure rate was
+> the same artefact and not a property of the representation.
+> **v2 CAMPAIGN COMPLETE — 30/30 tasks, 0 FAILED, 0 OOM.** Jobs `1679689` /
+> `1679698`, results in `~/execs/isalsr/t07_norm_removal_v2`, 51/51 files.
+>
+> | | bingo keep | bingo drop | udfs keep | udfs drop |
+> |---|---|---|---|---|
+> | `n_total` | 10,286,517 | 10,286,517 | 265,092 | 265,092 |
+> | `n_unique` | **5,736,798** | **5,736,798** | **141,009** | **141,009** |
+> | ρ | **1.7931** | **1.7931** | 1.8800 | 1.8800 |
+> | raised / timeout | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+> | equivariance fails | **0** / 1,639,064 | **0** / 1,639,064 | **0** / 42,480 | **0** / 42,480 |
+> | round-trip | **100 %** | **100 %** | **100 %** | **100 %** |
+> | comparator | `fast_canonical_string` (both arms) | | | |
+> | per-DAG agreement | **1.000000** | | **1.000000** | |
+>
+> **ρ = 1.7931 against the paper's independently produced 1.793** — four
+> significant figures from a different code path, where the contaminated run gave
+> 288.5. That is the external cross-check the first campaign lacked.
+>
+> **All three caveats are closed.** Removing `𝒩` from the canonicaliser is a
+> measured no-op on 10,551,609 real DAGs; round-trip holds at 100 % in both arms
+> under one comparator; and the 0.6 % failure rate was the recursion artefact,
+> not a property of the representation.
+>
+> One precision: the 21 carried-over `synthetic`/`adversarial` files predate the
+> fix. They cannot have recursed (no monkey-patch) and their agreement and
+> equivariance figures stand, but their **drop-arm** round-trip rows still use
+> `structural_key` and remain comparator artefacts. No claim depends on them.
+>
+> **No submitted TPAMI number, and no T15 or T06 number, is affected** — verified,
+> not assumed: re-entry requires an installed monkey-patch, and
+> `grep -rn` over `experiments/models/` finds none in production, while T15's
+> script patches but never round-trips and T06's ledger patches nothing.
+
+**On the clean populations (500,012 DAGs) the arms agree on every one.** Neither
+raised nor timed out on any real DAG in the contaminated runs either, which is
+still meaningful for the raise/timeout axis. On the adversarial population `keep` gives **53 silent
+wrong answers in 96 samples (55.2 %)** and refuses nothing; `drop` gives 0 and
+refuses all 12 loudly (`keep` silent-wrong 7, `drop` loud-refusal 12). That pair
+of columns is the whole argument for removal in one line: keeping `𝒩` means being
+quietly wrong on inputs outside `𝒞`; dropping it means refusing loudly on inputs
+that genuinely have no encoding in Σ_SR.
+
+Synthetic is the only non-adversarial place the arms differ in *behaviour*: at
+k ≥ 21, `keep` records 359 **timeouts** where `drop` records 358 **raises**, same
+k-distribution. `𝒩` makes an orphan-`Const` DAG canonicalisable in principle but
+expensive, so it burns the budget; without `𝒩` it is refused immediately. `drop`
+ends with one *more* success (499,642 vs 499,641) and an identical ρ.
+
+#### Three caveats that must travel with these numbers
+
+1. **The ρ values here are NOT the paper's reduction factor.** ρ ≈ 288 (bingo),
+   326–343 (udfs) against the paper's 1.793. `n_total` is summed over 15 tasks
+   while `n_unique` is the **union** of their distinct sets, and independent seeds
+   rediscover the same structures, so the union barely grows. A pooled-union
+   artefact; the JSON honestly names the field `rho_lower_bound`. It does not
+   affect the conclusion (both arms get the identical value) but **must never be
+   quoted as a reduction factor.**
+2. **The round-trip axis is not yet validly compared.** `keep` used
+   `round_trip_comparator = fast_canonical_string`, `drop` used `structural_key`.
+   The synthetic `drop` figure `round_trip_rate = 0.0187` is a **comparator
+   artefact, not a failure**. Round-trip fidelity under `drop` is **unverified**.
+   **The AC-6 code change is held until this is closed** — re-measurement with a
+   common comparator is in flight.
+3. **New finding, not caused by `𝒩`, potentially more important than anything
+   else here.** In the `keep` arm — the production configuration — round-trip
+   succeeds on only **99.39 %** of real DAGs: 93,333,870 / 93,910,005 (bingo) and
+   36,179,317 / 36,401,276 (udfs), i.e. ~576,000 and ~222,000 failures.
+   Synthetic `keep` is a clean 1.0000, and the rate is ~0.6 % in *both* arms, so
+   `𝒩` is not the cause. **Round-trip fidelity is Theorem 3.13**, so a 0.6 %
+   failure rate on real search output is a finding in its own right. Candidate
+   explanation: the `Sub`/`Div` alphabet mismatch of T16 — 61.1 % of Bingo
+   candidates carry those labels and the paper's `𝓛` does not contain them. Note
+   61.1 % containing vs 0.6 % failing rules out a simple "contains Sub/Div ⇒
+   fails" rule; the finer condition is under investigation. **Flagged, not
+   concluded.**
+
+Full write-up, mechanism, safe class and options:
+`.claude/notes/review/tasks/T07-appendix/const_normalization_equivariance.md` §7.3.
+
+#### Operational note for whoever reruns this
+
+`--export` on SLURM separates **variables** with commas, so a comma-separated
+value is silently truncated at the first comma and the remainder is parsed as
+malformed export entries. Job `1679359` lost 4 of its 5 problems that way and
+failed every task with `PROBLEM_IDX >= 1` in under 3 seconds. The problem list now
+uses `|` as separator in both launcher and worker. The dry-run output shows this
+plainly — read it.
+
+### 2026-07-29 — `𝒩` REMOVED from the canonicaliser. Mario's half of T07 is closed.
+
+**The change.** CONST normalisation is no longer applied during canonicalisation
+or isomorphism testing. Removed from `canonical.py` (3 sites), `labeled_dag.py`
+`is_isomorphic`, and `native/src/canonical.cpp`. `LabeledDAG.
+normalize_const_creation` **still exists, unchanged** — it is now purely a
+*producer-side* repair (the host adapters call their own `_normalize_const_edges`);
+the canonicaliser simply never invokes it. `output_node`'s docstring was also
+corrected: it still described the pre-T15 relocation policy.
+
+**Verification — property table, `experiments/scripts/t07_property_check.py`**
+(one script, <1 min, both engines, re-run after any canonicaliser change):
+
+| | Property | Result |
+|---|---|---|
+| P7 | S2D output satisfies the precondition by construction | 800/800 |
+| P1 | Completeness (⇐): isomorphic ⇒ same string | **0 failures / 3,995 permutations** |
+| P4 | Engine equivalence, cpp == python | 0 disagreements / 800 |
+| P2 | Completeness (⇒): same string ⇒ isomorphic | 0 failures / **799 colliding pairs** |
+| P3 | Round-trip `D ≅ S2D(fcs(D), m)` | 0 failures / 800 |
+| P5 | `eval(D) = eval(𝒩(D))` | 0 failures / 8 CONST-bearing DAGs |
+| P6 | `𝒩` absent from the canonicaliser | orphan refused on both engines; `𝒩(D)` canonicalises on both |
+
+P2 and P5 were **vacuous on the first run** (0 colliding pairs, 0 evaluable
+CONST DAGs) and were fixed before being reported: P2 now seeds the pool with
+deliberate isomorphic copies, P5 builds well-formed CONST DAGs explicitly
+including the `x → Cos → Const` shape the pre-T15 policy broke.
+
+**Test suite**: **4,605 unit passed / 5 skipped**, **474 property+integration
+passed**, ruff and `mypy --strict` clean. 21 tests encoding the old contract were
+**rewritten in place, none deleted, skipped or xfail-ed** — verified by grepping
+the three files for suppressions (0 hits) and by the test count rising 4,584 →
+4,605. The non-equivariance of `𝒩` is **preserved as a method-level regression
+pin**, so the knowledge survives and nobody reintroduces `𝒩` into the
+canonicalisation path.
+
+**Behaviour change, stated plainly.** A DAG with an in-degree-0 `Const` is now
+**refused loudly** by the canonicaliser instead of being silently repaired into a
+different graph. That is correct: such a DAG has no encoding in Σ_SR at all.
+Producers establish the precondition; the canonicaliser assumes it.
+
+**Environment trap found and documented in `CLAUDE.md`.** `pip install -e .
+--no-build-isolation` fails silently (`BackendUnavailable: scikit_build_core`)
+and leaves the stale `.so` loaded; `pip … | tail` reports `tail`'s exit status,
+not pip's. I reported two "successful" rebuilds that had not happened. It was
+caught only because the D-1 check ran against **both** backends and they
+disagreed — `cpp` reproducing the old strings while `python` raised. Use
+`--force-reinstall --no-deps` and always verify the `.so` mtime.
+
+---
+
+## 7bis. Hand-over to Ezequiel — what is left, and what is now settled
+
+**Settled by measurement; nothing here needs re-deriving.**
+
+- **AC-5 / R1.3.** The definition of `normalize_const_creation` is final. Text,
+  properties N1–N5, the plain-language justification, both historical defects and
+  the evidence table are in
+  `T07-appendix/const_normalization_equivariance.md` **§4bis** (definition) and
+  **§5** (paper prose, jargon-free). Mario carries these into `methodology.tex`.
+- **AC-6 — discharged without amending any theorem.** `𝒩` is out of the
+  canonicalisation path, so `fcs` is a pure function of `D` and the object the
+  theorem describes is the object the code canonicalises. **Theorems 3.13, 3.14
+  and 3.15 keep their statements exactly as submitted.** Two alternatives were
+  explored and are closed: restating on `𝒩(D)` is **refuted** by the D-1
+  counterexample (§1.6), and the adapter-image lemma is unnecessary once `𝒩` is
+  not in the pipeline.
+- **AC-7.** Rule 1 non-exclusion is carried per-op: `Pow` 13,261 DAGs / 1,507
+  exercising, `Sub` 13,226 / 1,507, `Div` 13,253 / 1,503, **0 failures**, 100 %
+  round-trip. Plus the property table above.
+- **AC-8.** T06's precondition statement is unchanged and remains correct.
+
+**Yours, and none of it is blocked on Mario.**
+
+1. **AC-1 – AC-4: the Lemma 3.14 / A.2 proof.** All five gaps in §3.1 still
+   stand. Note the reachability hypothesis is now consumed *twice*: once in Rule
+   1's non-exclusion argument, and once because the canonicaliser no longer
+   repairs violations — it refuses them. The second use makes the hypothesis
+   load-bearing in a way the submitted text did not need it to be, which
+   strengthens rather than complicates the proof.
+2. **A sixth gap, found 2026-07-29 and not previously recorded.** Lemma 3.14
+   applies Theorem 3.13 to an arbitrary labeled DAG `D`, but **Theorem 3.13 is
+   stated only for `D = S2D(w, m)`** — DAGs in the image of S2D
+   (`methodology.tex:974-975`). The lemma's "therefore `D ≅ S2D(fcs_D, m)`" does
+   not follow for a `D` that is not assumed to be an S2D image. Either widen
+   3.13's quantifier or add the hypothesis to 3.14. A round-2 reviewer checking
+   the chain will find this.
+3. **D-2 — Definition 3.9(iv) is unsound for the implemented alphabet.** It
+   constrains operand order for `Pow` only, but `Sub` and `Div` are
+   non-commutative and appear in every production config. Three-node
+   counterexample and the measurement (61.1 % of Bingo candidates carry them) in
+   **T16**. This falsifies Theorem 3.15's (⇐) direction *as stated*; the code is
+   right and the definition is too coarse.
+4. **D-3 — Rule 1's stated scope.** Prose says `Pow`; the implementation covers
+   `BINARY_OPS = {Sub, Div, Pow}` (`canonical.py:611,689,995,1064`), and the
+   Table 3 caption already says "binary non-commutative node". Same fix family
+   as D-2; make both in one pass.
+5. **T16's direction is a decision only you can take**, and it is on the critical
+   path: aligning the *code* to the paper (decomposing `Sub`/`Div` into
+   `Add`+`Neg` / `Mul`+`Inv`) implies a **full re-execution**, because `x − y`
+   becomes two nodes and every k-stratified number moves. It must be settled
+   **before T02 Wave 1 launches**, or Wave 1 runs the wrong code. The main
+   scientific risk is that protected `Inv` makes `a/b` and `Mul(a, Inv(b))`
+   numerically different near zero — quantified as T16 AC-5.
+
+**Two editorial items inherited from T15**, both small: `methodology.tex:830`
+(inside `\begin{comment}`, so unrendered) and its **rendered twin** in
+`supplementary.tex` near `:398` still read
+`// redirect all Const creation edges to x_1`. That describes neither the current
+policy nor the submitted one correctly, and the canonicaliser no longer performs
+any normalisation at all — so the pseudocode's first line should simply go.
 
 ---
 

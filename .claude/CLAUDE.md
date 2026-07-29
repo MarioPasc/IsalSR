@@ -164,6 +164,31 @@ experiments/models/
 `orchestrator.py` factories (`create_runner`, `create_translator`). The analyzer is
 model-agnostic — it consumes unified RunLog/TrajectoryRow schemas.
 
+**Rebuilding the C++ extension (read before trusting any `backend="cpp"` result)**:
+
+```bash
+python -m pip install -e . --force-reinstall --no-deps    # correct
+python -m pip install -e . --no-build-isolation           # SILENTLY FAILS
+```
+
+- `--no-build-isolation` requires `scikit_build_core` in the env. It is **not**
+  installed, so pip aborts with `BackendUnavailable: Cannot import
+  'scikit_build_core.build'` and **the stale `.so` keeps being loaded**.
+- Never read the exit status through a pipe: `pip ... | tail` reports `tail`'s
+  status, not pip's. Use `set -o pipefail` or `${PIPESTATUS[0]}`.
+- **Verify the rebuild actually happened**, every time:
+  ```bash
+  stat -c "%y" $(python -c "from isalsr.core import _native; print(_native.__file__)")
+  ```
+  The editable install is scikit-build-core's (`_editable_skbc_isalsr.pth`), and
+  it places the `.so` under `site-packages/isalsr/core/`, **not** in the repo
+  tree — so a repo-local `find` will not reveal a stale build.
+- Python sources resolve from the repo while the extension resolves from
+  site-packages, so a C++ edit can appear to have no effect while the Python
+  half of the same change works. **Run any core-semantics check against BOTH
+  backends**; disagreement is the tell. This is how the 2026-07-29 removal of
+  CONST normalisation was caught mid-verification.
+
 **Operational requirements**:
 - Bingo runners **must** pass `max_time=cfg.max_time` to `evolve_until_convergence()`.
   Without it, evolution runs until `max_evals` (10M), far exceeding SLURM time limits.

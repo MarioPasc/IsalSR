@@ -393,12 +393,18 @@ class LabeledDAG:
         For a valid expression DAG, this is the final output node whose
         value is the expression's result.
 
-        CONST-tolerance: After ``normalize_const_creation()`` moves CONST
-        in-edges to x_1, operation nodes whose only child was a CONST
-        become extra non-VAR sinks. Since CONST nodes are evaluation-
-        neutral leaves (they ignore in-edges and return ``const_value``),
-        CONST sinks are not true outputs. This method ignores CONST sinks
-        when a unique non-CONST sink exists.
+        CONST-tolerance: a DAG may carry more than one non-VAR sink when one
+        of them is a CONST node. Since CONST nodes are evaluation-neutral
+        leaves (they ignore in-edges and return ``const_value``), a CONST sink
+        is not a true output. This method ignores CONST sinks when a unique
+        non-CONST sink exists.
+
+        (The previous wording described ``normalize_const_creation()`` as
+        "moving CONST in-edges to x_1". That was the pre-2026-07-27 policy; it
+        relocated edges, dropped them when the replacement closed a cycle, and
+        was not evaluation-preserving. The current repair only *adds* an edge to
+        an in-degree-0 CONST, and it is no longer applied during
+        canonicalisation at all.)
 
         Raises:
             ValueError: If there is no non-VAR sink node, or if there are
@@ -453,10 +459,16 @@ class LabeledDAG:
         if not isinstance(other, LabeledDAG):
             return False
 
-        # Normalize CONST creation edges before comparison so that DAGs
-        # differing only in where CONST was created are considered isomorphic.
-        self_dag = self.normalize_const_creation() if self._has_const_nodes() else self
-        other_dag = other.normalize_const_creation() if other._has_const_nodes() else other
+        # CONST normalisation is NOT applied here (removed 2026-07-29, T07).
+        # Applying it made this predicate inherit the non-equivariance of
+        # `normalize_const_creation`: it returned False on pairs produced by
+        # `permutations.permute_internal_nodes`, i.e. on graphs that are
+        # isomorphic by construction. This is now a straight labeled-DAG
+        # isomorphism test. CONST provenance is ordinary structure: two DAGs
+        # whose CONST nodes hang off different parents are different labeled
+        # DAGs and are correctly reported as non-isomorphic.
+        self_dag = self
+        other_dag = other
 
         if self_dag._node_count != other_dag._node_count:
             return False
