@@ -310,6 +310,15 @@ class IsalSREvaluation(Evaluation):
             if self.dedup.ledger is not None:
                 self.dedup.ledger.record_post(dag)
 
+            # Probe hook — outside every timer and outside the canonicalisation
+            # try/except, so it fires for every successfully converted DAG
+            # (including atlas hits and subsequent failures).  Inert when no
+            # probe is installed: one is-not-None check, nothing else.
+            import experiments.models.equivalence_probe as _ep_bingo  # noqa: PLC0415
+
+            if _ep_bingo.ACTIVE_PROBE is not None:
+                _ep_bingo.ACTIVE_PROBE.record_bingo(dag, indv)
+
             # Resolve canonical hash: atlas fast-path or online fallback
             t0 = time.perf_counter()
             canon_hash: int | None = None

@@ -171,6 +171,15 @@ class _CanonicalDeduplicator:
             if self.ledger is not None:
                 self.ledger.record_post(labeled_dag)
 
+            # Probe hook — inert in production (one is-not-None check).
+            # Only fires in the fast-canonical branch when a gate driver
+            # installs a probe before the run.
+            if self.use_fast_canonical:
+                import experiments.models.equivalence_probe as _ep  # noqa: PLC0415
+
+                if _ep.ACTIVE_PROBE is not None:
+                    _ep.ACTIVE_PROBE.record_udfs(labeled_dag, cgraph)
+
             canon_hash = self._resolve_canonical_hash(labeled_dag)
 
             if canon_hash is None:

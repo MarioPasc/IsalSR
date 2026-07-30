@@ -27,11 +27,15 @@ for _p in (os.path.join(_PROJECT_ROOT, "src"), _PROJECT_ROOT):
 
 from experiments.scripts.bench_canonical import (  # noqa: E402
     CORPUS_PER_BUCKET_QUICK,
+    ENCODING_KWARGS,
     FIXED_SEED,
     K_BUCKETS,
     N_REPS,
     N_WARMUP,
+    VALID_ENCODINGS,
+    _bucket_for_k,
     _build_bucket_corpus,
+    _count_k,
     _is_fully_reachable,
     _mad,
     _median,
@@ -271,3 +275,202 @@ def test_quick_run_speedup_positive_when_cpp_available() -> None:
         spd = bd.get("speedup")
         assert spd is not None
         assert spd > 0.5, f"Bucket {bname}: speedup={spd} suspiciously low"
+
+
+# ---------------------------------------------------------------------------
+# New: encoding constants
+# ---------------------------------------------------------------------------
+
+
+class TestEncodingConstants:
+    """Tests for ENCODING_KWARGS and VALID_ENCODINGS."""
+
+    def test_legacy_in_valid_encodings(self) -> None:
+        assert "legacy" in VALID_ENCODINGS
+
+    def test_split_in_valid_encodings(self) -> None:
+        assert "split" in VALID_ENCODINGS
+
+    def test_encoding_kwargs_legacy_decompose_false(self) -> None:
+        assert ENCODING_KWARGS["legacy"]["decompose"] is False
+
+    def test_encoding_kwargs_split_decompose_true(self) -> None:
+        assert ENCODING_KWARGS["split"]["decompose"] is True
+
+    def test_encoding_kwargs_split_share_unary_false(self) -> None:
+        assert ENCODING_KWARGS["split"]["share_unary"] is False
+
+
+# ---------------------------------------------------------------------------
+# New: _count_k and _bucket_for_k helpers
+# ---------------------------------------------------------------------------
+
+
+class TestCountK:
+    """Tests for _count_k."""
+
+    def test_single_var_gives_zero(self) -> None:
+        from isalsr.core.node_types import NodeType
+
+        dag = LabeledDAG(max_nodes=1)
+        dag.add_node(NodeType.VAR, var_index=0)
+        assert _count_k(dag) == 0
+
+    def test_var_plus_sin_gives_one(self) -> None:
+        from isalsr.core.node_types import NodeType
+
+        dag = LabeledDAG(max_nodes=2)
+        dag.add_node(NodeType.VAR, var_index=0)
+        dag.add_node(NodeType.SIN)
+        dag.add_edge(0, 1)
+        assert _count_k(dag) == 1
+
+    def test_two_vars_plus_add_gives_one(self) -> None:
+        from isalsr.core.node_types import NodeType
+
+        dag = LabeledDAG(max_nodes=3)
+        dag.add_node(NodeType.VAR, var_index=0)
+        dag.add_node(NodeType.VAR, var_index=1)
+        dag.add_node(NodeType.ADD)
+        dag.add_edge(0, 2)
+        dag.add_edge(1, 2)
+        assert _count_k(dag) == 1
+
+    def test_empty_dag_gives_zero(self) -> None:
+        dag = LabeledDAG(max_nodes=1)
+        assert _count_k(dag) == 0
+
+
+class TestBucketForK:
+    """Tests for _bucket_for_k."""
+
+    @pytest.mark.parametrize("k", [1, 2, 3, 4])
+    def test_small_k_gives_lt5_bucket(self, k: int) -> None:
+        assert _bucket_for_k(k) == "k_lt5"
+
+    @pytest.mark.parametrize("k", [5, 9, 14])
+    def test_mid_k_gives_5_to_14_bucket(self, k: int) -> None:
+        assert _bucket_for_k(k) == "k_5_to_14"
+
+    @pytest.mark.parametrize("k", [15, 20, 31])
+    def test_large_k_gives_15_to_31_bucket(self, k: int) -> None:
+        assert _bucket_for_k(k) == "k_15_to_31"
+
+    @pytest.mark.parametrize("k", [0, 32, 100])
+    def test_out_of_range_gives_none(self, k: int) -> None:
+        assert _bucket_for_k(k) is None
+
+    def test_bucket_boundaries_are_consistent_with_k_buckets(self) -> None:
+        """Every bucket name returned must correspond to a K_BUCKETS entry."""
+        valid_names = {bname for bname, _, _ in K_BUCKETS}
+        for k in range(1, 32):
+            result = _bucket_for_k(k)
+            if result is not None:
+                assert result in valid_names
+
+
+# ---------------------------------------------------------------------------
+# New: --encodings flag — default reproduces old schema
+# ---------------------------------------------------------------------------
+
+
+def test_explicit_legacy_encoding_gives_schema_10() -> None:
+    """--encodings legacy (explicit) must produce the same schema_version 1.0 as default."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = os.path.join(tmpdir, "report.json")
+        rc = main(["--quick", "--out", out_path, "--encodings", "legacy"])
+        assert rc == 0
+        with open(out_path, encoding="utf-8") as fh:
+            report = json.load(fh)
+
+    assert report.get("schema_version") == "1.0"
+    assert "k_buckets" in report
+    assert "overall" in report
+    assert "encodings" not in report  # multi-encoding key absent in single-encoding mode
+
+
+def test_unknown_encoding_exits_nonzero() -> None:
+    """An unrecognised encoding name must cause a non-zero exit."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = os.path.join(tmpdir, "report.json")
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--quick", "--out", out_path, "--encodings", "bogus"])
+        assert exc_info.value.code != 0
+
+
+# ---------------------------------------------------------------------------
+# New: multi-encoding (legacy,split) — requires bingo-nasa
+# ---------------------------------------------------------------------------
+
+
+def _bingo_available() -> bool:
+    try:
+        import bingo  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+@pytest.mark.skipif(not _bingo_available(), reason="bingo-nasa not installed")
+def test_multi_encoding_quick_run_writes_schema_11() -> None:
+    """--encodings legacy,split writes a schema 1.1 report with both encoding sections."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = os.path.join(tmpdir, "bench_enc.json")
+        rc = main(["--quick", "--out", out_path, "--encodings", "legacy,split"])
+        assert rc == 0, f"main() returned non-zero exit code {rc}"
+        assert os.path.exists(out_path)
+
+        with open(out_path, encoding="utf-8") as fh:
+            report = json.load(fh)
+
+    assert report.get("schema_version") == "1.1"
+
+    prov = report["provenance"]
+    assert prov["encodings"] == ["legacy", "split"]
+    assert prov["seed"] == FIXED_SEED
+    assert prov["quick_mode"] is True
+
+    # Both encodings present.
+    assert "encodings" in report
+    for enc in ("legacy", "split"):
+        assert enc in report["encodings"], f"Missing encoding section: {enc}"
+        enc_data = report["encodings"][enc]
+        assert "k_buckets" in enc_data
+        assert "overall" in enc_data
+        for bname, _, _ in K_BUCKETS:
+            assert bname in enc_data["k_buckets"], f"{enc}: missing bucket {bname}"
+
+    # Migration block present.
+    assert "migration" in report
+    mig = report["migration"]
+    assert "per_encoding_k_stats" in mig
+    assert "per_encoding_bucket_counts" in mig
+    assert "n_bucket_changed" in mig
+    assert "fraction_changed" in mig
+    assert "legacy" in mig["per_encoding_k_stats"]
+    assert "split" in mig["per_encoding_k_stats"]
+
+    # split k-stats should show higher mean k than legacy (T16 decomposition adds nodes).
+    legacy_mean = mig["per_encoding_k_stats"]["legacy"]["mean"]
+    split_mean = mig["per_encoding_k_stats"]["split"]["mean"]
+    assert split_mean >= legacy_mean, (
+        f"Expected split mean k ({split_mean}) >= legacy ({legacy_mean}) after T16 decomposition"
+    )
+
+
+@pytest.mark.skipif(not _bingo_available(), reason="bingo-nasa not installed")
+def test_multi_encoding_tables_emitted_once_per_encoding(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """stdout must contain one table per encoding when --encodings legacy,split."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = os.path.join(tmpdir, "bench_enc.json")
+        main(["--quick", "--out", out_path, "--encodings", "legacy,split"])
+
+    captured = capsys.readouterr()
+    # Each encoding header must appear exactly once.
+    assert captured.out.count("--- Encoding: legacy") == 1
+    assert captured.out.count("--- Encoding: split") == 1
+    # Migration block header must appear.
+    assert "K-bucket migration" in captured.out
