@@ -7,8 +7,41 @@
 | Owner | **Mario** (+ Claude Code) |
 | Depends on | — |
 | Blocks | T02, T03, T06 |
-| Status | **SUBSTANTIALLY COMPLETE** — AC-0,1,2,4,5,7 met; AC-3 partial (evolved-DAG gate outstanding); AC-6 reported and escalated |
+| Status | **SUBSTANTIALLY COMPLETE, AND NOW THE CRITICAL-PATH BLOCKER.** AC-0,1,2,4,7 met; **AC-3 partial** (evolved-DAG gate outstanding); **AC-5 and AC-6 must be redone on the decomposed alphabet** (T16); **AC-8 new** |
 | Target | 2026-08-10 |
+
+---
+
+## 0. What remains — read this first (added 2026-07-30)
+
+**T01 is the highest-value next action on the whole revision.** Every other Wave-1
+blocker has cleared:
+
+| Wave-1 blocker (`EXECUTION-PLAN.md` §2b) | State |
+|---|---|
+| **T01** | **OUTSTANDING — this ticket** |
+| T06 instrumentation half | done |
+| T08 root-cause half | done |
+| T16 corrected alphabet | **done 2026-07-30**, gate G9 passed on Picasso (job 1692451) |
+| T02 §5.3 MANIFEST schema | to freeze |
+| P1–P3 engineering checks | to confirm |
+
+The critical path is `T01 → T02 → T09 → T13 → T12 → T14`, and T02 is a multi-week
+Picasso campaign. **Anything that delays T01 delays submission.** Launch is targeted
+at ≈2026-08-10 against a 2026-09-10 number freeze.
+
+Three concrete items, in dependency order:
+
+1. **AC-3 gate 3** — the ≥100,000 evolved-DAG replay, byte-exact, both engines.
+   This is the one genuinely unfinished piece of the port itself.
+2. **AC-8 (new)** — every equivalence gate must also run on **decomposed** DAGs.
+   The stored trajectories the replay draws on were produced under the *old*
+   alphabet, so gate 3 as written certifies the engine on a population Wave 1 will
+   never canonicalise. See §5.3 gate 6.
+3. **AC-5 / AC-6 redone** — the benchmark and the projected `S` were measured on
+   legacy-alphabet DAGs. T16 raises `k` by ~22 % and per-DAG canonicalisation cost by
+   **+24.6 %** (Bingo) / **+10.8 %** (UDFS), so both numbers are stale, and the
+   direction is unfavourable. AC-6 is the go/no-go for committing the campaign.
 
 ---
 
@@ -133,6 +166,24 @@ string identity** against the Python engine:
    `…/results/model_validation/real_benchmarks/wl_subtree_unified/`: byte-identical.
 4. **Round-trip**: `S2D(D2S(D, x_1))` ≅ `D` on all of the above, under both engines.
 5. Any single mismatch blocks the ticket. Do not "explain" a mismatch — fix it.
+6. **Decomposed alphabet** (added 2026-07-30, T16). Gates 1–4 must **also** pass on
+   DAGs carrying the paper's alphabet — `Neg`/`Inv` present, `Sub`/`Div` absent,
+   `Pow` the only order-sensitive binary operation.
+
+   **Why this is not redundant with gates 1–4.** Gate 3 replays DAGs from
+   `…/wl_subtree_unified/`, a campaign produced *before* T16, so every replayed DAG
+   is legacy-encoded. Passing gate 3 alone would certify the C++ engine on a label
+   distribution Wave 1 will never canonicalise. The exhaustive and corpus gates are
+   alphabet-agnostic in principle — `Neg`/`Inv` are ordinary labels the canonicaliser
+   already handles — but "in principle" is exactly what this gate exists to refuse.
+
+   **Cheapest sound construction**: replay the same stored trajectories through the
+   *current* adapters, which decompose inline, and compare the two engines on the
+   resulting DAGs. `experiments/scripts/measure_decomposition_impact.py` already
+   builds all three encodings (`legacy`, `split`, `shared`) paired per DAG and can be
+   reused rather than rewritten. Cover `split` — the production setting — and confirm
+   the `k` distribution of the replayed population matches the shifted one
+   (Bingo mean 5.47 → 6.72, p95 11 → 15), not the legacy one.
 
 ### 5.4 Benchmark
 Copy IsalHG's `CPP_SPEEDUP.md` methodology: best-of-9, median-of-4-reps, 3 warmup
@@ -160,16 +211,49 @@ mixing constants as Python. Pin them in a test.
   a new `docs/engineering/CPP_BUILD.md`.
 - **AC-2.** Pure-Python fallback verified: the full test suite passes with the
   extension absent, and passes with it present.
-- **AC-3.** All four equivalence gates in §5.3 pass with **zero** mismatches.
+- **AC-3.** All **six** equivalence gates in §5.3 pass with **zero** mismatches.
   Evidence: a committed report with counts, not a claim.
+  **Status 2026-07-30: PARTIAL.** Gates 1, 2 and 4 pass. **Gate 3 (≥100,000 evolved
+  DAGs) is outstanding** and gate 6 is new. This is the single unfinished piece of
+  the port itself and the first thing to do.
 - **AC-4.** `python -m pytest tests/ -v`, `ruff check`, and `mypy --strict` all clean.
 - **AC-5.** Benchmark table produced: per-DAG canonicalisation time, Python vs C++,
   by k-bucket, on Picasso hardware, with the speedup factor and its dispersion.
+  **REOPENED 2026-07-30 (T16).** The measured table used legacy-alphabet DAGs.
+  Decomposition raises `k` ~22 % on both hosts, which **moves DAGs across the paper's
+  own k-buckets** (`k < 5`, `5 ≤ k < 15`, `15 ≤ k < 32`) — Bingo p95 goes 11 → 15, so
+  mass shifts out of the middle bucket. Re-measure on decomposed DAGs and report both,
+  so the continuity table in T02 §5 can attribute movement to the engine and to the
+  alphabet separately rather than confounding them.
 - **AC-6.** A projected `S` for Bingo and UDFS computed from the measured C++
   canonicalisation cost and the *existing* ρ values, stated as a projection. This is
   the go/no-go signal for T02: if the projection does not move Bingo's `S` above 1.0,
   say so in §7 and escalate before committing the campaign.
+  **REOPENED 2026-07-30 (T16), and the correction pushes the wrong way.** The
+  projection must use the **decomposed** canonicalisation cost, which is **+24.6 %**
+  (Bingo) / **+10.8 %** (UDFS) above legacy, because that is what Wave 1 will actually
+  pay. Do not net this against the C++ speedup by assumption — the two are independent
+  and both land in Wave 1. Use the ρ values that go with the decomposed alphabet
+  (Bingo exactly invariant; UDFS +1.4 %), not the submitted ones.
+  **This is the go/no-go and it is now harder to clear. If it fails, escalate before
+  committing 36,000 core-hours — an honest negative here is worth more than a
+  campaign that confirms it slowly.**
 - **AC-7.** §8 filled.
+- **AC-8 (new, 2026-07-30, T16).** The equivalence gate covers the **decomposed**
+  alphabet (§5.3 gate 6): `Neg`/`Inv` present, `Sub`/`Div` absent, `Pow` the only
+  order-sensitive binary operation, byte-exact between engines. Evidence: counts from
+  a replay through the current adapters, plus the `k` distribution of the replayed
+  population showing the shift.
+  Rationale: T16 changed what Wave 1 canonicalises. An engine certified only on the
+  pre-T16 label distribution is certified on a population that will never occur.
+- **AC-9 (new, 2026-07-30).** The two literal canonical strings printed in the
+  manuscript are re-derived under the final engine **and** the final alphabet:
+  `VcVspv*pv+PpcnnC` (`methodology.tex:256`, a figure caption explicitly labelled
+  "the canonical string") and `VgnV*C` (`methodology.tex:272`, inside a
+  `\begin{comment}` block, so not typeset). The first is the one that matters.
+  These were already flagged in §7 as the manuscript-number carve-out; T16 makes the
+  re-derivation mandatory rather than precautionary, since a string containing `-` or
+  `/` is now *by construction* unreachable from the adapters.
 
 ---
 
@@ -986,6 +1070,60 @@ Post-move verification, all four required before the move is called done:
   submission — this is the manuscript-number carve-out flagged when the fix-both-
   engines decision was taken. `methodology.tex:256` is the one that matters.
 
+
+### 2026-07-30 — T16 lands; T01 becomes the critical-path blocker; AC-5/AC-6 reopened, AC-8/AC-9 added
+
+**Status change, and it is not a change in this ticket's code.** T16 (the Σ_SR
+alphabet correction) completed and passed gate G9 on a Picasso compute node
+(job 1692451, native C++ engine, 4/4 production configs). With T06's instrumentation
+half and T08's root-cause half already done, **T01 is now the only substantive
+`EXECUTION-PLAN.md` §2b blocker left before Wave 1.** §0 records this.
+
+**Three consequences for this ticket, none of which were foreseeable when it was
+written.**
+
+1. **The equivalence gate now has a population problem (new AC-8, §5.3 gate 6).**
+   Gate 3 replays ≥100,000 DAGs from `…/wl_subtree_unified/`, a campaign produced
+   *before* T16. Every one of those DAGs is legacy-encoded — it carries `Sub` and
+   `Div` nodes that the adapters can no longer emit. Passing gate 3 as written would
+   certify the C++ engine against a label distribution **Wave 1 will never
+   canonicalise**. The fix is cheap (replay the same trajectories through the current
+   adapters, which decompose inline) but it has to be done deliberately, because
+   nothing about it fails loudly: the gate would report a clean pass on the wrong
+   corpus.
+
+2. **AC-5's benchmark is stale in a way that matters structurally, not just
+   numerically.** Decomposition raises `k` by ~22 % on both hosts, which moves DAGs
+   **across the paper's own k-buckets** — Bingo p95 goes 11 → 15, so mass leaves the
+   `5 ≤ k < 15` bucket. A speedup table stratified by k is therefore comparing
+   different populations per bucket before and after. Report both encodings so T02's
+   continuity table can separate the engine effect from the alphabet effect instead
+   of confounding them.
+
+3. **AC-6's go/no-go got harder, and this should be said plainly rather than
+   discovered in September.** AC-6 asks whether the projected `S` clears 1.0 for
+   Bingo. T16 raises per-DAG canonicalisation cost by **+24.6 %** (Bingo) / **+10.8 %**
+   (UDFS), and canonicalisation cost is precisely the denominator that has to shrink
+   for `S` to rise. The C++ speedup and the alphabet cost increase are **independent**
+   and both land in Wave 1; netting them by assumption is exactly the reasoning error
+   that would commit 36,000 core-hours to a result we could have predicted.
+   The offsetting term is real but small and must not be oversold: ρ was **exactly**
+   invariant on Bingo (3,858 distinct strings in both encodings) and rose 1.4 % on
+   UDFS. So the representation got strictly better at its job while costing more per
+   DAG. **If the recomputed projection does not clear 1.0, escalate before launching
+   — R1.1's complaint is about `S`, and an honest negative is worth more than a
+   campaign that confirms it slowly.**
+
+**AC-9 added** for the two literal canonical strings in `methodology.tex`. These were
+already noted in the 2026-07-27 entry as a manuscript-number carve-out; T16 promotes
+them from precautionary to mandatory, because a canonical string containing `-` or
+`/` is now unreachable from the adapters by construction. `methodology.tex:256` is
+typeset and is the one that matters; `:272` sits inside a `\begin{comment}` block.
+
+**Not changed by T16**: AC-1, AC-2, AC-4 and the determinism work (§5.5) are all
+alphabet-independent — `Neg` and `Inv` are ordinary labels the canonicaliser already
+handled, and no C++ source was touched. The full suite is green at
+**5,258 passed, 5 skipped**, ruff and mypy clean, on commit `582c779`.
 
 ---
 

@@ -46,7 +46,7 @@ the frozen MANIFEST schema, and checks P1–P3** — see `EXECUTION-PLAN.md` §2
 
 | # | Title | Owner | Depends on | Blocks |
 |---|---|---|---|---|
-| [T01](T01-cpp-core-port.md) | C++ core port + numerical-equivalence gate | Mario | — | T02, T03, T06 |
+| [T01](T01-cpp-core-port.md) | C++ core port + numerical-equivalence gate — **NOW THE ONLY SUBSTANTIVE WAVE-1 BLOCKER LEFT.** AC-3 gate 3 outstanding; AC-5/AC-6 reopened by T16; AC-8/AC-9 added | Mario | — | T02, T03, T06 |
 | [T02](T02-cpp-reexecution-campaign.md) | **Priority.** Re-execution on the C++ engine + continuity table | Mario | T01 | T04, T08, T09, T10 |
 | [T03](T03-gray-code-integration.md) | *Secondary.* Gray-code: design analysis, implementation, conditional ablation | Ezequiel + Mario | T01 | T13 |
 

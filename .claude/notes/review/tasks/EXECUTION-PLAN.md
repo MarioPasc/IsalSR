@@ -99,7 +99,7 @@ re-running 3,000 jobs to recover a counter.
 
 | Ticket | What exactly | Why it blocks |
 |---|---|---|
-| **T01** | Whole ticket, equivalence gate passed | It is the engine. |
+| **T01** | Whole ticket, equivalence gate passed | It is the engine. **As of 2026-07-30 this is the only substantive blocker left in this table** — T06's instrumentation half, T08's root-cause half and T16 are all done. Outstanding: AC-3 gate 3 (≥100,000 evolved DAGs), plus AC-8 (the gate must cover the **decomposed** alphabet — the stored trajectories it replays are legacy-encoded), plus AC-5/AC-6 re-measured on decomposed DAGs. **AC-6 is the go/no-go for this campaign and T16 pushed it the wrong way** (canonicalisation cost +24.6 % Bingo / +10.8 % UDFS). If the projected `S` does not clear 1.0, escalate before committing 36,000 core-hours. |
 | **T06** | The **instrumentation half only** (§4.1 counters for the five fallback paths) — not the analysis, not the write-up | R1.2 wants violation rates on the DAGs *arriving at the canonicaliser during real searches*. That population exists only while Wave 1 runs. Miss it and the only way back is a second campaign. |
 | **T08** | The **root-cause half only** (§5.1) — why Bingo–IsalSR produced NaN on Vlad-2 / Korns-12 and why 35 Bingo cells were missing. Plus any *runtime* fix it implies (memory profile, the B12 clone path) | If the cause is still live, Wave 1 reproduces it at full scale. The analyzer-side fixes (NaN-as-winner, NaN policy in the paired test) are post-hoc and are **not** blocking. |
 | **T02** | §5.3 MANIFEST schema, frozen | Written by the runs themselves. A field added afterwards is a field you do not have. |
