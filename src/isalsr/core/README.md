@@ -38,7 +38,132 @@ Edge u -> v: "u provides input to v" (data flow direction).
 C/c instructions check for cycles via DFS reachability before adding edges.
 V/v instructions never create cycles (new node has no outgoing edges).
 
-## 6. Canonical String
+## 6. CONST Creation Edges and the Reachability Precondition
+
+### 6.1 Why the precondition exists
+
+Every insertion instruction of Sigma_SR creates a node **together with an edge
+from the acting pointer**: `V[label]` / `v[label]` add a new node *and* the edge
+(pointer node) -> (new node). The alphabet contains **no** instruction that
+creates a node in isolation.
+
+A non-VAR node of in-degree 0 is therefore **unencodable**: no string w satisfies
+S2D(w, m) ~= D, and D2S cannot emit that node, because no pointer can ever be
+placed on one of its in-neighbours. This is the Round-Trip Fidelity hypothesis
+stated contrapositively:
+
+> every non-VAR node of D is reachable from some VAR node via directed edges.
+
+For every label except CONST the condition holds automatically -- operation nodes
+consume operands, hence have in-edges. **CONST is the sole exception**: it is an
+evaluation-neutral leaf that ignores its in-edges, so host SR systems emit
+constants as expression-tree terminals with nothing pointing into them.
+
+### 6.2 The operation
+
+`LabeledDAG.normalize_const_creation()` supplies the missing *creation edge*.
+
+```
+N(D):
+    D' <- copy(D)                      # nodes, labels, _input_order verbatim
+    if D has no CONST node: return D'  # guard: no-op on CONST-free DAGs
+    for c in sorted(CONST nodes of D'):        # increasing node index
+        if in_degree(c) > 0: continue         # already encodable
+        for i in 1..m:                        # lowest-indexed variable first
+            if add_edge(x_i, c) succeeds:     # add_edge refuses cycle-closing
+                break
+    return D'
+```
+
+Complexity: at most `|CONST|` constants x `m` anchor attempts, each one
+acyclicity check in O(|V|+|E|), so `O(|CONST| * m * (|V|+|E|))` worst case. On
+host-adapter output `x_1` always succeeds (see 6.4 / E5), so it is `|CONST|`
+checks.
+
+**No edge is ever removed**, and CONST nodes of in-degree >= 1 are untouched.
+
+### 6.3 Properties (all load-bearing)
+
+| # | Property | Why |
+|---|----------|-----|
+| N1 | Edge-monotone: same nodes/labels, `E(D) subset E(N(D))` | only adds edges, so reachability is never destroyed |
+| N2 | Idempotent: `N(N(D)) = N(D)` | anchored CONSTs are skipped; refused ones stay refused |
+| N3 | **Identity on the hypothesis class** | if every non-VAR node is reachable from a VAR, no CONST has in-degree 0, so `N(D) = D`. In particular `N` is the identity on the entire image of S2D |
+| N4 | Evaluation-preserving: `eval(N(D)) = eval(D)` | CONST ignores in-edges, and no out-degree changes, so the sink set (output node) is unchanged |
+| N5 | Isomorphism-equivariance | **fails in general**; holds on `C = C1 ∪ C2` -- see 6.5 |
+
+N3 is the key property: the normalization and the theorem hypothesis are the same
+condition in constructive and declarative form. It is what keeps the canonical
+string a *complete* labeled-DAG invariant rather than a complete invariant of some
+coarser quotient.
+
+### 6.4 Measured justification
+
+| # | Experiment | Result |
+|---|------------|--------|
+| E1 | Incidence of the violation, 4 populations | S2D corpus 0/14,841 (0.00%); synthetic DAGs 0/49,980 (0.00%); **Bingo 132,746/154,568 (85.88%)**; **UDFS 3,890/3,890 (100.00%)**. After `N`: **0** everywhere |
+| E2 | k-stratified Bingo profile | 0.00% at k=0, 27.31% at k=1, 50.91% at k=2, 85.19% at k=8, 98.22% at k=16, **100.00% for all k>=24**. Matches "violated iff >=1 CONST terminal"; residual 0 in all 37 (method,k) cells over 158,458 DAGs |
+| E3 | N3 (identity on the hypothesis class) | 0 canonical-string disagreements and 0 edges removed on 10^5 random DAGs satisfying reachability |
+| E4 | Policy-invariance of reported numbers | all normalization policies structurally identical on **12,176,790** Bingo and **234,865** UDFS DAGs; identical distinct-string counts and rho. Policies separate only on synthetic DAGs with an orphan CONST reaching a VAR (169 extra merged classes; synthetic rho 1.040 -> 1.042) |
+| E5 | Order-independence on adapter output | `permute_internal_nodes`, K=8 per DAG: **0 failures / 123,240 tests** on 15,530 Bingo DAGs, all with every VAR a pure source. 0 failures on random S2D m=2,3 (3,200-4,000 tests each) |
+
+Scripts: `experiments/models/fallback_ledger.py` (E1, E2),
+`experiments/scripts/validate_const_repair_synthetic.py` (E3),
+`measure_const_normalization_arms.py` (E4),
+`experiments/scripts/validate_const_equivariance.py` (E5).
+Tests: `tests/unit/test_const_normalization_repair.py`,
+`tests/unit/test_const_normalization_equivariance.py`,
+`tests/unit/test_fallback_ledger.py`.
+
+### 6.5 Limits and where the step is applied
+
+**N5 fails in general.** The tie-break "least index that does not close a cycle"
+is stated over node indices, and node indices are exactly what isomorphism
+permutes. Anchoring one orphan CONST creates paths that can make another orphan's
+preferred anchor cycle-closing. Three conditions must hold simultaneously:
+
+1. >= 2 CONST nodes with in-degree 0;
+2. >= 1 VAR node that is the target of an edge;
+3. a directed path from an orphan CONST to a VAR.
+
+`N` is provably equivariant on `C = C1 ∪ C2`:
+
+- `C1` = DAGs satisfying reachability -- `N = id` there (N3);
+- `C2` = DAGs in which no VAR node is an edge target -- no orphan CONST can reach
+  a variable, so `x_1` never closes a cycle, every orphan anchors to `x_1`, and
+  the result is independent of processing order.
+
+`C` is **sufficient, not tight**: some DAGs outside `C` do not fail. Do not
+present it as a characterization of the failure set.
+
+**Where the repair happens.** It is a *producer-side* step. The host adapters
+call their own specialization (`_normalize_const_edges` in
+`experiments/models/{bingo,udfs}/adapter.py`, which anchors unconditionally to
+node 0 -- sound because adapter output is entirely inside `C2`). The
+canonicalizer **assumes** the precondition and refuses loudly on an in-degree-0
+CONST rather than repairing it silently: such a DAG has no encoding in Sigma_SR
+at all. Keeping `N` out of the canonical map makes `fcs` a pure function of `D`,
+so N5 cannot affect the canonical string.
+
+### 6.6 What the operation is NOT
+
+It is **not** "redirect all CONST creation edges to x_1". A relocation policy
+(delete existing CONST in-edges, add `x_1 -> c`) is unsound on three counts:
+
+1. **It can orphan the node.** `C`/`c` instructions can direct an edge *into* a
+   variable, so `x_1` may lie downstream of the CONST; the replacement edge is
+   then refused as cycle-closing while the original was already deleted.
+   Measured: **48** canonicalization failures on 10^5 random DAGs, vs **0** for
+   the additive repair.
+2. **It is not evaluation-preserving.** On `x -> COS -> CONST(1.0)` it moves the
+   output sink from CONST to COS: 1.0 becomes cos(1.5) = 0.0707.
+3. **It is not injective on isomorphism classes.** It merges DAGs whose CONST
+   nodes hang off different parents, which are different labeled DAGs under the
+   isomorphism definition -- breaking the (=>) direction of completeness.
+
+See `docs/md_files/changes/d2s_canonicalisation_failures.md`.
+
+## 7. Canonical String
 
 w*_D = lexmin{ w in argmin |D2S(D, x_1)| }
 
@@ -50,7 +175,7 @@ Three algorithm families:
 - `pruned_canonical_string()`: 6-tuple pruned exhaustive. Faster but ~0.03% suboptimal.
 - `fast_canonical_string()`: **PREFERRED.** Greedy-invariant with three modes.
 
-### 6.1 Fast Canonical (Greedy-Invariant)
+### 7.1 Fast Canonical (Greedy-Invariant)
 
 At each V/v branch point, candidates are sorted by an isomorphism-invariant key.
 If the best candidate is unique, it is taken greedily (no backtracking). Ties are
@@ -80,7 +205,7 @@ Three modes control the invariant sort key:
    and statistically for k=10-15 (100 random permutations each). All three modes
    produce valid complete invariants.
 
-### 6.2 Pruning Limitation (Historical)
+### 7.2 Pruning Limitation (Historical)
 
 The 6-component structural tuple tau(v) = (|in_N1|, |out_N1|, ..., |out_N3|) captures
 local neighborhood density at hops 1-3. It is automorphism-invariant but does not
@@ -94,7 +219,7 @@ Empirical measurement (28,890 entries across Nguyen and Feynman benchmarks):
 - 0.09% same-length lexicographic differences (different tie-breaking)
 - 0.03% length mismatches (pruned is longer than exhaustive)
 
-## 7. Search Space Reduction
+## 8. Search Space Reduction
 
 For k internal nodes, O(k!) equivalent labelings collapse to one canonical string.
 Central contribution of the paper.

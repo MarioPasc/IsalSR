@@ -128,6 +128,12 @@ public:
     /// adds x_i → c for each CONST c with in-degree 0, taking the lowest-indexed
     /// variable that does not close a cycle (Invariant 9).
     /// Identity on any DAG whose non-VAR nodes are all reachable from a variable.
+    ///
+    /// Producer-side only.  fast_canonical_string() does NOT call this; callers
+    /// that build DAGs from expression trees must establish the reachability
+    /// precondition themselves.  Do not reintroduce it into the canonicaliser:
+    /// it iterates CONST nodes in node-index order, which is exactly what
+    /// isomorphism permutes, so it is not isomorphism-equivariant in general.
     NativeLabeledDAG normalize_const_creation() const;
 
     bool has_const_nodes() const;

@@ -178,21 +178,25 @@ NB_MODULE(_native, m) {
         },
         nb::arg("dag"), nb::arg("timeout_sec"),
         "Compute fast canonical string (wl_only mode) for a NativeLabeledDAG.\n\n"
-        "Applies normalize_const_creation() internally when CONST nodes are present.\n"
+        "A pure function of ``dag``: no CONST normalization is applied. The "
+        "caller must supply a DAG whose non-VAR nodes are all reachable from "
+        "some variable; a CONST node with in-degree 0 has no encoding in "
+        "Sigma_SR and raises RuntimeError.\n"
         "``timeout_sec`` < 0 means no limit.\n"
         "Raises CanonicalTimeoutError if the budget is exceeded.");
 
     // -- fast_canonical_string_raw -------------------------------------------
-    // Skips normalize_const_creation entirely.  Exists so that experiments can
-    // compare normalization policies on one identical DAG stream (T15); not a
-    // production entry point.
+    // The core routine without fast_canonical_string's trivial-case guards
+    // (empty DAG, variables-only DAG).  Neither entry point normalizes CONST
+    // creation edges; this one exists so that experiments can address the core
+    // routine directly (T15/T07).  Not a production entry point.
     testing.def("fast_canonical_string_raw",
         [](const isalsr::NativeLabeledDAG& dag, double timeout_sec) -> std::string {
             return isalsr::fast_canonical_string_wl_only(dag, timeout_sec);
         },
         nb::arg("dag"), nb::arg("timeout_sec"),
-        "Compute the fast canonical string WITHOUT applying "
-        "normalize_const_creation.\n\n"
+        "Compute the fast canonical string, bypassing the trivial-case guards "
+        "of fast_canonical_string.\n\n"
         "Raises RuntimeError if some node cannot be reached, which is exactly "
         "what happens when a CONST node has no in-edge.");
 

@@ -243,14 +243,26 @@ python -m pip install -e . --no-build-isolation           # SILENTLY FAILS
    (evaluation-neutral) but need a "creation edge" for D2S reachability.
    `normalize_const_creation()` adds `x_i -> c` **only for CONST nodes with in-degree 0**,
    taking the lowest-indexed variable that does not close a cycle. It never removes an
-   edge. Applied in canonical, is_isomorphic, from_sympy.
+   edge.
+   **It is a PRODUCER-side step (updated 2026-07-29, T07).** The host adapters call
+   their own specialisation (`_normalize_const_edges`, anchoring unconditionally to
+   node 0 — sound because adapter output never makes a VAR an edge target). The
+   canonicaliser and `is_isomorphic` do **not** apply it: they assume the precondition
+   and raise on an in-degree-0 CONST, which has no encoding in Σ_SR at all. This keeps
+   `fcs` a pure function of `D`. Do not reintroduce the call into `canonical.py`,
+   `is_isomorphic` or `canonical.cpp` — `normalize_const_creation` is **not
+   isomorphism-equivariant** in general (it iterates CONST nodes in node-index order,
+   which is exactly what isomorphism permutes); it is equivariant only on
+   `𝒞₁ ∪ 𝒞₂` = {reachability holds} ∪ {no VAR is an edge target}.
    **It is the identity on any DAG satisfying the Round-Trip Fidelity reachability
    hypothesis** — that is what makes the canonical string a *complete* labeled-DAG
    invariant. CONST provenance is ordinary structure: two DAGs whose CONST nodes hang
    off different parents are different labeled DAGs and get different canonical strings.
    The former behaviour (relocate *all* CONST in-edges onto node 0) dropped edges when
    `add_edge` refused them as cycle-closing, merged non-isomorphic DAGs, and was not
-   evaluation-preserving. See `docs/md_files/changes/d2s_canonicalisation_failures.md`.
+   evaluation-preserving. Full definition, properties N1–N5 and the five measurements
+   (E1–E5) that justify the step: `src/isalsr/core/README.md` §6. See also
+   `docs/md_files/changes/d2s_canonicalisation_failures.md`.
 10. **Label-aware pruning (B13).** The 6-tuple pruning must partition candidates BY LABEL
     before taking max-τ. Cross-label pruning is invalid (automorphisms preserve labels).
     Implemented in canonical.py for both V (primary) and v (secondary) sections.
