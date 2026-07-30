@@ -7,9 +7,9 @@
 | Owner | **Ezequiel** (primary — proofs, `methodology.tex`) · **Mario** (empirical verification, tests) |
 | Depends on | — (can start immediately; independent of compute) |
 | Blocks | T03 phase 3, T06, T13 |
-| Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis for his path, which now also carries a sixth gap (Lemma 3.14 applies Thm 3.13 outside its stated domain), D-2, D-3 and the **T16** decision that gates T02 Wave 1. Remaining for Mario: AC-9 (page cost → T13) and AC-10 (§8). |
+| Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis, now split by whether an item depends on the **T16 alphabet fork** (`BINARY_OPS = {Pow}` as declared vs `{Pow, Sub, Div}` as run): §7bis.2 is alphabet-independent and can start today (all five proof gaps plus a sixth, the Thm 3.13 domain mismatch), §7bis.3 is alphabet-dependent (D-2, D-3, Def 3.2 token count) and should wait, §7bis.4 is the T16 decision itself, which gates T02 Wave 1. Remaining for Mario: AC-9 (page cost → T13) and AC-10 (§8). |
 | Target | 2026-08-24 |
-| Last updated | 2026-07-29 — norm-removal study landed; AC-6 answered; D-1/D-2/D-3 recorded; T16 opened; 0.6 % round-trip finding flagged |
+| Last updated | 2026-07-30 — §7bis restructured around the T16 alphabet fork. Earlier 2026-07-29: norm-removal study landed; AC-6 answered; D-1/D-2/D-3 recorded; T16 opened. (The 0.6 % round-trip finding flagged that day was **closed** the same day: it was the recursion artefact of §7.5, not a property of the representation — round-trip is 100 % in both arms on 10,551,609 real DAGs.) |
 
 ---
 
@@ -855,7 +855,51 @@ disagreed — `cpp` reproducing the old strings while `python` raised. Use
 
 ## 7bis. Hand-over to Ezequiel — what is left, and what is now settled
 
-**Settled by measurement; nothing here needs re-deriving.**
+> **Read §7bis.0 first.** Half of what is left below is blocked on one decision
+> (T16) and half is not. The list is organised by that split, because working the
+> blocked half before the decision means writing text that may have to be
+> deleted.
+
+### 7bis.0 The fork that organises everything below
+
+The manuscript and the production runs disagree about **which binary operations
+are non-commutative**, and several of the remaining items read differently
+depending on how that is resolved.
+
+| | Non-commutative binary ops | Where this holds today |
+|---|---|---|
+| **As declared** (Def 3.2, `𝓛 = {+, *, g, i, s, c, e, l, r, ^, a, k}`) | `BINARY_OPS = {Pow}` | the manuscript, `methodology.tex:93-135` |
+| **As implemented and as run** | `BINARY_OPS = {Pow, Sub, Div}` | `node_types.py`, both adapters, **every** production YAML |
+
+`Sub` and `Div` are not a corner case in the runs: **61.1 %** of production-
+configured Bingo candidates contain at least one (3,054 / 5,000 AGraphs, T16 §2),
+and they occur about as often as `Add` and `Mul`. `OperationSet.commutative()`,
+the factory that would realise the declared alphabet, is used by **no**
+production config.
+
+T16 offers two ways to close this, and **the choice is yours** because it is your
+alphabet and your theorems:
+
+- **Branch A — align the paper to the code** (T16 §4a). `𝓛` gains `-` and `/`;
+  12 labels/31 tokens becomes 14/35; the commutative encoding is demoted to an
+  available variant the reported runs did not use. Manuscript-only, **no number
+  moves, no re-execution.**
+- **Branch B — align the code to the paper** (T16 §4b). The adapters decompose
+  `a − b → Add(a, Neg(b))` and `a / b → Mul(a, Inv(b))`. Every claim becomes true
+  exactly as written, and **every number is recomputed**, because `x − y` becomes
+  two nodes instead of one and `k` shifts for 61.1 % of candidates.
+
+Mario's provisional choice is **B**; it is recorded as pending your confirmation
+and it **gates T02 Wave 1**, which must not launch under the wrong alphabet.
+
+**Nothing about `normalize_const_creation`, `Const`, or the R1.3 answer depends
+on this fork.** `Const` (`k`) is in `𝓛` under both branches, so AC-5, AC-6, AC-7,
+AC-8, the numbered definition, the R1.3 response text and its figure stand
+unchanged whichever way you decide.
+
+---
+
+### 7bis.1 Settled by measurement — nothing here needs re-deriving
 
 - **AC-5 / R1.3.** The definition of `normalize_const_creation` is final. Text,
   properties N1–N5, the plain-language justification, both historical defects and
@@ -869,50 +913,133 @@ disagreed — `cpp` reproducing the old strings while `python` raised. Use
   explored and are closed: restating on `𝒩(D)` is **refuted** by the D-1
   counterexample (§1.6), and the adapter-image lemma is unnecessary once `𝒩` is
   not in the pipeline.
-- **AC-7.** Rule 1 non-exclusion is carried per-op: `Pow` 13,261 DAGs / 1,507
-  exercising, `Sub` 13,226 / 1,507, `Div` 13,253 / 1,503, **0 failures**, 100 %
-  round-trip. Plus the property table above.
+- **AC-7.** Rule 1 non-exclusion is carried **per op**, so it backs the proof
+  under either branch of the fork: `Pow`, `Sub` and `Div` each tested separately,
+  **0 failures**, 100 % round-trip. Numbers in the table in §7bis.2. Plus the
+  property table above.
 - **AC-8.** T06's precondition statement is unchanged and remains correct.
 
-**Yours, and none of it is blocked on Mario.**
+### 7bis.2 Yours, and **independent of the alphabet fork** — start now
 
-1. **AC-1 – AC-4: the Lemma 3.14 / A.2 proof.** All five gaps in §3.1 still
-   stand. Note the reachability hypothesis is now consumed *twice*: once in Rule
-   1's non-exclusion argument, and once because the canonicaliser no longer
-   repairs violations — it refuses them. The second use makes the hypothesis
-   load-bearing in a way the submitted text did not need it to be, which
-   strengthens rather than complicates the proof.
-2. **A sixth gap, found 2026-07-29 and not previously recorded.** Lemma 3.14
-   applies Theorem 3.13 to an arbitrary labeled DAG `D`, but **Theorem 3.13 is
-   stated only for `D = S2D(w, m)`** — DAGs in the image of S2D
-   (`methodology.tex:974-975`). The lemma's "therefore `D ≅ S2D(fcs_D, m)`" does
-   not follow for a `D` that is not assumed to be an S2D image. Either widen
-   3.13's quantifier or add the hypothesis to 3.14. A round-2 reviewer checking
-   the chain will find this.
-3. **D-2 — Definition 3.9(iv) is unsound for the implemented alphabet.** It
-   constrains operand order for `Pow` only, but `Sub` and `Div` are
-   non-commutative and appear in every production config. Three-node
-   counterexample and the measurement (61.1 % of Bingo candidates carry them) in
-   **T16**. This falsifies Theorem 3.15's (⇐) direction *as stated*; the code is
-   right and the definition is too coarse.
-4. **D-3 — Rule 1's stated scope.** Prose says `Pow`; the implementation covers
-   `BINARY_OPS = {Sub, Div, Pow}` (`canonical.py:611,689,995,1064`), and the
-   Table 3 caption already says "binary non-commutative node". Same fix family
-   as D-2; make both in one pass.
-5. **T16's direction is a decision only you can take**, and it is on the critical
-   path: aligning the *code* to the paper (decomposing `Sub`/`Div` into
-   `Add`+`Neg` / `Mul`+`Inv`) implies a **full re-execution**, because `x − y`
-   becomes two nodes and every k-stratified number moves. It must be settled
-   **before T02 Wave 1 launches**, or Wave 1 runs the wrong code. The main
-   scientific risk is that protected `Inv` makes `a/b` and `Mul(a, Inv(b))`
-   numerically different near zero — quantified as T16 AC-5.
+None of the five items below changes wording depending on T16. They are the
+whole of AC-1…AC-4 except for Rule 1's *named scope*, and they are not blocked on
+Mario or on compute.
 
-**Two editorial items inherited from T15**, both small: `methodology.tex:830`
-(inside `\begin{comment}`, so unrendered) and its **rendered twin** in
-`supplementary.tex` near `:398` still read
+1. **Gap 1 — termination (AC-4).** Establish that the FCS run terminates having
+   placed every node and every edge, rather than assuming it. The argument runs
+   through "candidate pool non-empty at every branch point ⇒ progress ⇒
+   termination". Its only contact with the fork is that non-emptiness is what
+   Rule 1 could destroy; write it over "every non-commutative binary operation"
+   and it holds verbatim under both branches. **No text differs between A and B.**
+2. **Gap 2 — the pools are not identical (AC-2).** The proof's central sentence,
+   *"exactly the same candidate pool as D2S"*, is false: Rule 1 **removes**
+   candidates. This is true under both branches — Rule 1 restricts even when it
+   filters `Pow` alone — so the sentence must go either way, replaced by a
+   statement about pool **inclusion** (Rule 1 restricts, Rule 2 selects within).
+   The reviewer located this contradiction themselves; a proof that does not
+   visibly discharge it will read as evasive.
+3. **Gap 4 — `κ`-minimal choice ∈ `𝒲(D)` (AC-1).** Definition 3.5 defines `𝒲(D)`
+   by *free* choice among uninserted out-neighbours at each branch point, and has
+   no `κ`. Showing that a `κ`-minimal choice *is* one of those free choices is
+   exactly the step R2.1 says is missing. Purely about the choice function;
+   labels do not enter. **No text differs between A and B.**
+4. **Gap 5 — consume the reachability hypothesis (AC-3).** It is the lemma's
+   stated hypothesis and the submitted proof never invokes it. It is now consumed
+   **twice**: once inside Rule 1's non-exclusion argument, and once because the
+   canonicaliser no longer repairs a violation but refuses it. The second use
+   makes the hypothesis genuinely load-bearing in a way the submitted text did
+   not need, which strengthens the proof rather than complicating it.
+   **No text differs between A and B.**
+5. **The sixth gap — a domain mismatch inside the chain, found 2026-07-29 and not
+   previously recorded.** Lemma 3.14 applies Theorem 3.13 to an arbitrary labeled
+   DAG `D`, but **Theorem 3.13 is stated only for `D = S2D(w, m)`**, i.e. DAGs in
+   the image of S2D (`methodology.tex:974-975`). The lemma's *"therefore
+   `D ≅ S2D(fcs_D, m)`"* does not follow for a `D` that is not assumed to be an
+   S2D image. Either widen 3.13's quantifier or add the hypothesis to 3.14. This
+   is a quantifier-domain question with no label content whatsoever.
+   **No text differs between A and B.** A round-2 reviewer checking the chain
+   will find it.
+
+**How to write these without waiting for T16.** State Rule 1 over a set
+`𝓝 ⊆ 𝓛` of non-commutative binary operations, prove non-exclusion for an
+arbitrary member of `𝓝`, and instantiate `𝓝` in exactly one place at the end:
+`𝓝 = {Pow}` under Branch B, `𝓝 = {Sub, Div, Pow}` under Branch A. Then the
+T16 decision costs you a one-line edit instead of a rewrite.
+
+**The empirical backing for Rule 1 non-exclusion already covers both branches**,
+so you are not waiting on a measurement either (AC-7, closed by Mario):
+
+| Op | DAGs tested | DAGs where Rule 1 actually excluded a candidate | Failures | Round-trip |
+|---|---|---|---|---|
+| `Pow` | 13,261 | 1,507 | **0** | 100 % |
+| `Sub` | 13,226 | 1,507 | **0** | 100 % |
+| `Div` | 13,253 | 1,503 | **0** | 100 % |
+
+39 tests, C++ backend, broken out per op precisely so that `Pow`'s density cannot
+mask a gap in the other two.
+
+### 7bis.3 Yours, and **decided by the alphabet fork** — do not draft these first
+
+Both items below are the *same defect seen twice*: the manuscript names `Pow`
+where the running code means `{Pow, Sub, Div}`. Under Branch B they are not
+defects at all and need no edit; under Branch A they are mandatory text changes.
+
+| # | Item | Location | **Branch A** (`𝓝 = {Pow, Sub, Div}`) | **Branch B** (`𝓝 = {Pow}`) |
+|---|---|---|---|---|
+| D-2 | Definition 3.9(iv) constrains operand order for `Pow` alone | `methodology.tex:920-929`, Remark `:955-957` | **Edit required.** Widen (iv) to `{Sub, Div, Pow}`; delete or restrict to `{Add, Mul}` the Remark's claim that all other binaries are commutative | **No edit.** (iv) is already correct, and the Remark is already correct |
+| D-3 | Rule 1's prose scope says "`Pow` node" | `methodology.tex:752-760` | **Edit required.** Scope becomes `BINARY_OPS`; note the Table 3 caption ("binary non-commutative node") **already** matches the code, so the manuscript is internally inconsistent today | **No edit** to the prose. Optional one-sentence remark that the implementation applies Rule 1 to a superset, because S2D can still decode legacy `V-`/`V/` strings (T16 §5.2 keeps the core constant wide on purpose) |
+| — | Def 3.2 / Table 1 / the token count | `methodology.tex:93-119` | **Edit required.** `𝓛` gains `-` and `/`: 12 labels → 14, **31 tokens → 35**. The commutative-encoding paragraph (`:121-135`) must be demoted from a property of the runs to an available variant | **No edit.** 12 labels / 31 tokens stands, and the commutative-encoding paragraph becomes true of the runs for the first time |
+
+**Why D-2 is the more serious of the two, under Branch A.** It needs no exotic
+input. Three-node DAGs with identical edge sets: `Sub` with `σ=(x₁,x₂)` gives
+`V-PnC`, with `σ=(x₂,x₁)` gives `pv-nC`; likewise `Div` (`V/PnC` / `pv/nC`). For
+`Sub` and `Div` the identity bijection satisfies Definition 3.9 (i)–(iii), and
+(iv) is vacuous because the node is not `Pow` — so `D₁ ≅ D₂` per the definition
+while `fcs_{D₁} ≠ fcs_{D₂}`. That falsifies the **(⇐)** direction of Theorem 3.15
+*as stated*. **The code is right** (`x₁ − x₂ ≠ x₂ − x₁`); the definition is too
+coarse. Under Branch B the counterexample cannot be constructed from adapter
+output at all, because `Sub` and `Div` never reach the representation.
+
+**No reported number is wrong under either branch.** The implementation is
+self-consistent and *stricter* than the declared definition: it distinguishes
+DAGs the definition would merge, which is the safe direction. What is wrong today
+is the description.
+
+### 7bis.4 The T16 decision itself — yours, and on the critical path
+
+Confirm Branch A or Branch B (T16 AC-1). Two things make this urgent rather than
+merely open:
+
+- **It gates T02 Wave 1.** Under Branch B the adapters change, so `k` shifts for
+  61.1 % of candidates and every k-stratified number moves: `ρ` and the reduction
+  factor, T06's violation-rate profile, T02's overhead-by-k, the bottleneck-type
+  analysis, the search-space-reduction figures. Wave 1 must not launch before
+  this is settled, or it runs the wrong code.
+- **The direction of the `ρ` change is not predictable a priori.** More nodes
+  means more structural variety (pushes `ρ` down) but also more opportunity for
+  isomorphic rediscovery (pushes `ρ` up). It has to be measured, not argued.
+
+**The main scientific risk of Branch B**, and it is worth knowing before you
+choose it: protected `Inv` is `1/x` for `|x| > ε` and `1` otherwise, so `a / b`
+and `Mul(a, Inv(b))` are **not** numerically identical near zero. The
+decomposition is therefore not exactly semantics-preserving in the protected
+regime. This is T16 AC-5 (Mario's measurement, not yet run) and it must be
+quantified rather than assumed.
+
+**The reviewer-optics trade**, stated plainly since it is part of the decision:
+Branch A answers R2.3 with "we mis-described our alphabet" and demotes the
+"no operand-order tracking is required" selling point; Branch B keeps every claim
+true as written and costs a full re-execution of the IsalSR arm on the
+50-problem suite (the baseline arm never invokes the adapter and is unaffected).
+
+### 7bis.5 Editorial, inherited from T15 — Mario's, listed so you can see them
+
+`methodology.tex:830` (inside `\begin{comment}`, so unrendered) and its
+**rendered twin** in `supplementary.tex` near `:398` still read
 `// redirect all Const creation edges to x_1`. That describes neither the current
-policy nor the submitted one correctly, and the canonicaliser no longer performs
-any normalisation at all — so the pseudocode's first line should simply go.
+policy nor the submitted one correctly, and the canonicaliser performs no
+normalisation at all — so the pseudocode's first line is replaced by an explicit
+statement of the precondition it assumes. Alphabet-independent.
 
 ---
 

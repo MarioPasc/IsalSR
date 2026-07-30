@@ -158,6 +158,13 @@ campaign schedule.
 Confirm 4a or 4b with Ezequiel. Everything below assumes 4b; under 4a the work
 is a manuscript edit only and this ticket closes into T09/R2.3.
 
+**What each branch costs inside T07 is enumerated in
+`T07-theorem-foundation.md` §7bis.3** — a per-item table of which manuscript
+edits become mandatory under 4a and which evaporate under 4b (Def 3.9(iv), Rule
+1's prose scope, Def 3.2's label set and token count). T07 §7bis.2 lists the
+proof work that is unaffected either way, so Ezequiel is not blocked on this
+decision for the bulk of Lemma 3.14/A.2.
+
 ### 5.2 If 4b — implementation
 - Adapters decompose `Sub`/`Div` into `Add`+`Neg` / `Mul`+`Inv`
   (`bingo/adapter.py`, `udfs/adapter.py`; UDFS additionally has `sub_l`/`sub_r`,
