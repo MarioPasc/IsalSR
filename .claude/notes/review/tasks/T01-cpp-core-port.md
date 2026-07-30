@@ -7,12 +7,32 @@
 | Owner | **Mario** (+ Claude Code) |
 | Depends on | — |
 | Blocks | T02, T03, T06 |
-| Status | **SUBSTANTIALLY COMPLETE, AND NOW THE CRITICAL-PATH BLOCKER.** AC-0,1,2,4,7 met; **AC-3 partial** (evolved-DAG gate outstanding); **AC-5 and AC-6 must be redone on the decomposed alphabet** (T16); **AC-8 new** |
-| Target | 2026-08-10 |
+| Status | **ONE CRITERION OPEN (AC-5).** AC-0,1,2,3,4,6,7,8,9 met. **AC-3 gate 3 and AC-8 closed 2026-07-30** — 117,798 evolved, decomposed DAGs, 0 mismatches. **AC-9 closed**, no manuscript edit needed. **AC-6 answered and escalated: `S` cannot move (`dS/dT_canon = 0` exactly); Wave 1 NOT approved.** **AC-5 open** — needs a Picasso compute node; harness ready, nothing submitted |
+| Target | was 2026-08-10; **no longer schedule-critical** — T02 is on hold, see `EXECUTION-PLAN.md` §3 |
 
 ---
 
-## 0. What remains — read this first (added 2026-07-30)
+## 0. What remains — read this first (rewritten 2026-07-30, late)
+
+> **Superseded by the day's work. Read this box, not the text below it.**
+>
+> Of the three items this section opened with, **two are closed and the third is
+> answered**:
+>
+> | Item | State |
+> |---|---|
+> | AC-3 gate 3 — ≥100,000 evolved DAGs, byte-exact | **CLOSED.** 117,798 DAGs, 0 mismatches, 0 errors |
+> | AC-8 — the gate must run on the **decomposed** alphabet | **CLOSED**, in the same pass: the adapters decompose by default since T16, so a live search already produces the paper's alphabet. 0 `Sub`, 0 `Div`, 0 `-`, 0 `/` |
+> | AC-9 — re-derive the manuscript's canonical strings | **CLOSED.** `VcVspv*pv+PpcnnC` is a fixpoint under both engines; no manuscript edit |
+> | AC-6 — projected `S`, the go/no-go | **ANSWERED, and negative.** `dS/dT_canon = 0` **exactly**; there is no break-even `T_canon`. No engine can move `S` |
+> | AC-5 — benchmark on Picasso, both encodings | **STILL OPEN.** Harness written and verified locally; **nothing submitted** |
+>
+> **Wave 1 is NOT approved (Mario, 2026-07-30).** T02 is on hold, so **T01 is no
+> longer the critical-path blocker** this section was written to declare. The
+> remaining work is one benchmark run, not a schedule emergency.
+>
+> The section below is kept for the reasoning that produced the plan, but its
+> framing — "highest-value next action", the 2026-08-10 launch — no longer holds.
 
 **T01 is the highest-value next action on the whole revision.** Every other Wave-1
 blocker has cleared:
@@ -213,9 +233,15 @@ mixing constants as Python. Pin them in a test.
   extension absent, and passes with it present.
 - **AC-3.** All **six** equivalence gates in §5.3 pass with **zero** mismatches.
   Evidence: a committed report with counts, not a claim.
-  **Status 2026-07-30: PARTIAL.** Gates 1, 2 and 4 pass. **Gate 3 (≥100,000 evolved
-  DAGs) is outstanding** and gate 6 is new. This is the single unfinished piece of
-  the port itself and the first thing to do.
+  **Status 2026-07-30 (late): MET.** Gates 1, 2 and 4 pass (synthetic corpora, and on
+  a Picasso node at job 1659650). **Gate 3 and gate 6 now pass**: 117,798 evolved DAGs
+  harvested live from real Bingo and UDFS searches through the T16 adapters, 0
+  mismatches, 0 errors, `self_comparison=false`, C++ canonicaliser capability-probed.
+  Report `evolved_gate_full.json`; driver
+  `experiments/scripts/equivalence_gate_evolved.py`.
+  Gate 3 is satisfied by **live generation, not replay** — `wl_subtree_unified/`
+  persists only aggregate counts, so the replay the ticket specified was never
+  possible (established 2026-07-27, P3 REFUTED).
 - **AC-4.** `python -m pytest tests/ -v`, `ruff check`, and `mypy --strict` all clean.
 - **AC-5.** Benchmark table produced: per-DAG canonicalisation time, Python vs C++,
   by k-bucket, on Picasso hardware, with the speedup factor and its dispersion.
@@ -246,6 +272,14 @@ mixing constants as Python. Pin them in a test.
   population showing the shift.
   Rationale: T16 changed what Wave 1 canonicalises. An engine certified only on the
   pre-T16 label distribution is certified on a population that will never occur.
+  **Status 2026-07-30: MET.** 0 `Sub` nodes, 0 `Div` nodes, 0 `-` and 0 `/` characters
+  across 117,798 DAGs — while the Bingo *host* operator set still contained `-` and `/`,
+  which is what makes the result evidence about the adapter boundary rather than about
+  a sanitised corpus. Paired `k` shift measured within the evolved population:
+  Bingo 8.13 → 10.25 (+26.1 %, p95 15 → 19), UDFS 4.85 → 6.27 (+29.2 %, p95 5 → 8).
+  **The check this criterion literally specified — matching T16's 5.47 → 6.72 /
+  p95 11 → 15 — is wrong** and would have failed a correct engine: those figures come
+  from randomly generated graphs, not an evolved population. See §7.
 - **AC-9 (new, 2026-07-30).** The two literal canonical strings printed in the
   manuscript are re-derived under the final engine **and** the final alphabet:
   `VcVspv*pv+PpcnnC` (`methodology.tex:256`, a figure caption explicitly labelled
@@ -254,6 +288,14 @@ mixing constants as Python. Pin them in a test.
   These were already flagged in §7 as the manuscript-number carve-out; T16 makes the
   re-derivation mandatory rather than precautionary, since a string containing `-` or
   `/` is now *by construction* unreachable from the adapters.
+  **Status 2026-07-30: MET, and no manuscript edit is needed.** `VcVspv*pv+PpcnnC`
+  (m = 2, k = 4) is a canonical **fixpoint** under both engines, agrees with the
+  exhaustive lexmin, and is the unique output over all 24 internal-node permutations.
+  Its labels are `{var, +, *, s, c}` — five of the paper's twelve — so T16 cannot
+  reach it and the determinism fix cannot move it. `VgnV*C` sits inside a
+  `\begin{comment}` block and is not claimed to be canonical, so the criterion does
+  not bite; it is however **wrong on its own terms** (it builds `Mul(x₁)` with `Neg`
+  dangling, not `−x₁·x₂`) and that is flagged to Ezequiel in §7.
 
 ---
 
@@ -1451,12 +1493,44 @@ expensive. With canonicalisation already excluded, Bingo–IsalSR needs ≈2.1×
 search time than baseline (5,214 s vs 2,478 s over 300 sampled runs), and at most about
 a third of that gap is bookkeeping a port could remove.
 
-**Recommendation to Mario: proceed with Wave 1.** The campaign's deliverable against
-R1.1 was never `S`; it is that overhead falls from 39.2 % to ≈7 % and Bingo's
-wall-clock penalty — currently exceeding the Nemenyi critical difference at
-`results.tex:193–196` — plausibly collapses inside it. That deliverable is intact and
-is worth the 36,000 core-hours. But the decision is Mario's, and the negative half of
-it is stated here in full rather than buried.
+**My recommendation was to proceed with Wave 1**, on the grounds that the campaign's
+deliverable against R1.1 was never `S` — it is that overhead falls from 39.2 % to ≈7 %
+and that Bingo's wall-clock penalty, currently exceeding the Nemenyi critical
+difference at `results.tex:193–196`, plausibly collapses inside it.
+
+### 2026-07-30 — **DECISION: Wave 1 is NOT approved (Mario). Correction to the entry above.**
+
+Mario's answer to the AC-6 escalation was **not** to proceed. Recorded here plainly
+because the commit message on `625656d` states the opposite — it was written against my
+recommendation before the decision came back, and a reader of the git log alone would be
+misled. `EXECUTION-PLAN.md` §3 Wave 1 now carries the hold, and §2b's T01 row is
+updated.
+
+**Nothing has been submitted to Picasso.** `slurm/t01_close/{launcher,worker}.sh` exist
+and are syntax-checked; no `sbatch`, no `--test-only`, no deploy. Picasso remains at
+`b34cded` on `main`'s old state, with an unrelated set of uncommitted working-tree
+changes discovered during the aborted pull (32 files, ~3,178 insertions — almost
+certainly stale rsync deposits from the commits between `a66d896` and `582c779`, which
+are now all committed locally). **Those were left untouched.** They should be
+inspected before anyone next syncs that checkout; a `git reset --hard` there would
+discard 93 lines that exist nowhere else, and I did not judge that call to be mine.
+
+**Consequences for this ticket.**
+
+- **AC-5 stays OPEN.** It requires a Picasso compute node by its own wording, and that
+  measurement has not been taken. The workstation harness is complete and verified;
+  only the run is missing.
+- **AC-6 is answered** — the projection is recorded above and the go/no-go was
+  escalated and decided. The criterion asked for a projection, an escalation, and an
+  honest statement if `S` does not clear 1.0. All three happened.
+- **AC-3, AC-8, AC-9 are closed** on the workstation and do not depend on Picasso.
+- The ticket therefore cannot be marked complete. §6 is not fully met, so §8 stays as
+  the draft it was, with §8.1's `S` rows unchanged — they were already correct.
+
+**What this means for the tickets T01 blocks.** T02 is paused by the same decision, so
+T01 is no longer the schedule-critical item it was this morning. T03 and T06 depend on
+T01's *engine*, which is finished, verified and byte-exact — not on AC-5's benchmark
+number — so neither is gated by what remains open here.
 
 ---
 

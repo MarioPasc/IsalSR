@@ -70,7 +70,7 @@ Every condition must hold, with evidence, before Wave 1:
 
 | # | Condition | Evidence |
 |---|---|---|
-| G1 | T01 equivalence gate passed: byte-exact canonical strings vs Python, exhaustive k=1..8, the 14,841-DAG corpus, and ≥100,000 replayed evolved DAGs | T01 AC-3 report, zero mismatches |
+| G1 | T01 equivalence gate passed: byte-exact canonical strings vs Python, exhaustive k=1..8, the generated corpus, and ≥100,000 evolved DAGs | T01 AC-3 report, zero mismatches. **Workstation half PASSED 2026-07-30**: 117,798 evolved DAGs (Bingo 78,990 / UDFS 38,808), 0 mismatches, 0 errors, `self_comparison=false`, capability probe confirms the C++ canonicaliser is live. Report `evolved_gate_full.json`, commit `98fd57a`. Note the corpus is **generated live**, not replayed — `wl_subtree_unified/` persists only aggregate counts, so replay was never possible (see §2b check P1). **Not yet re-run on a Picasso compute node.** |
 | G2 | `pytest` + `ruff` + `mypy --strict` clean on the exact commit being synced | command output, not a claim |
 | G3 | Local smoke completes and its `run_log.json` **parses** and carries every field the analyzer reads | parsed output, not file existence |
 | G4 | Smoke on an `isalsr` arm shows `n_duplicates_eliminated > 0` | a zero here means the dedup hook is dead and the whole arm is a null result |
@@ -99,7 +99,7 @@ re-running 3,000 jobs to recover a counter.
 
 | Ticket | What exactly | Why it blocks |
 |---|---|---|
-| **T01** | Whole ticket, equivalence gate passed | It is the engine. **As of 2026-07-30 this is the only substantive blocker left in this table** — T06's instrumentation half, T08's root-cause half and T16 are all done. Outstanding: AC-3 gate 3 (≥100,000 evolved DAGs), plus AC-8 (the gate must cover the **decomposed** alphabet — the stored trajectories it replays are legacy-encoded), plus AC-5/AC-6 re-measured on decomposed DAGs. **AC-6 is the go/no-go for this campaign and T16 pushed it the wrong way** (canonicalisation cost +24.6 % Bingo / +10.8 % UDFS). If the projected `S` does not clear 1.0, escalate before committing 36,000 core-hours. |
+| **T01** | Whole ticket, equivalence gate passed | It is the engine. **Status 2026-07-30 (late): AC-3 gate 3, AC-8 and AC-9 are CLOSED; AC-5 remains open and AC-6 has been answered but the answer is not what this table assumed.** Gate 3 and gate 6 closed together on the workstation — 117,798 evolved DAGs through the live search, 0 mismatches, 0 `Sub`/`Div`, paired k shift +26.1 % (Bingo) / +29.2 % (UDFS). AC-9 closed with no manuscript edit. **AC-5 is blocked on a Picasso measurement that has NOT been run** — `slurm/t01_close/` is written and syntax-checked but nothing has been submitted. **AC-6 is answered and the answer is structural: `S` cannot move.** `dS/dT_canon = 0` exactly, so there is no break-even `T_canon` and the literal go/no-go fails regardless of engine speed — it would fail against a 1,000× engine. What the port does deliver is Bingo overhead 39.2 % → ≈7.4 % on the decomposed alphabet (the alphabet itself costs ≈1.3 pp). **Wave 1 is NOT approved as of 2026-07-30 (Mario).** Do not submit. |
 | **T06** | The **instrumentation half only** (§4.1 counters for the five fallback paths) — not the analysis, not the write-up | R1.2 wants violation rates on the DAGs *arriving at the canonicaliser during real searches*. That population exists only while Wave 1 runs. Miss it and the only way back is a second campaign. |
 | **T08** | The **root-cause half only** (§5.1) — why Bingo–IsalSR produced NaN on Vlad-2 / Korns-12 and why 35 Bingo cells were missing. Plus any *runtime* fix it implies (memory profile, the B12 clone path) | If the cause is still live, Wave 1 reproduces it at full scale. The analyzer-side fixes (NaN-as-winner, NaN policy in the paired test) are post-hoc and are **not** blocking. |
 | **T02** | §5.3 MANIFEST schema, frozen | Written by the runs themselves. A field added afterwards is a field you do not have. |
@@ -127,7 +127,23 @@ re-running 3,000 jobs to recover a counter.
 
 ## 3. The waves
 
-### Wave 1 — C++ headline (T02) · **priority, launches first**
+### Wave 1 — C++ headline (T02) · **priority, but NOT APPROVED**
+
+> **🔴 HOLD, 2026-07-30 (Mario). Wave 1 is not approved and nothing is to be
+> submitted for it.** This supersedes "launches first" below and the ≈2026-08-10
+> target in the campaign schedule. The technical blockers named in §2b are largely
+> cleared — T01's equivalence gate now passes on 117,798 evolved, decomposed DAGs —
+> so this hold is a **decision**, not a readiness problem.
+>
+> The decision context, stated so it is not re-litigated from memory: AC-6 established
+> that the C++ port **cannot move `S`**. `T_search` is derived as
+> `wall_clock − canon_time_total`, so `dS/dT_canon = 0` exactly and Bingo's `S = 0.93`
+> is invariant to engine speed. R1.1's complaint is specifically about `S`. What the
+> campaign would buy is the overhead figure (39.2 % → ≈7.4 %) and the wall-clock
+> penalty, not the quantity the reviewer questioned. Whether 36,000 core-hours is the
+> right price for that is the open question.
+>
+> Nothing below is cancelled; it is paused pending that decision.
 
 | Array | Arm | Suite | Runs |
 |---|---|---|---|
