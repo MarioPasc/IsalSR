@@ -1125,6 +1125,339 @@ alphabet-independent — `Neg` and `Inv` are ordinary labels the canonicaliser a
 handled, and no C++ source was touched. The full suite is green at
 **5,258 passed, 5 skipped**, ruff and mypy clean, on commit `582c779`.
 
+### 2026-07-30 — Closing plan for the four open criteria (recorded before any work)
+
+**Entry state verified by me, not assumed.** `backends.engine()` = `cpp`,
+`build_hash=298fc1188bf1b051`, `isa_level=x86-64-v3`, `.so` rebuilt today 09:57 at
+`…/site-packages/isalsr/core/_native.cpython-311-x86_64-linux-gnu.so`. So the
+extension in the tree is current with the T16 Python changes and the numbers below
+are being taken against the engine Wave 1 would actually run.
+
+**A naming hazard found while reading the harness, recorded because it will mislead
+anyone else who opens it.** `equivalence_gate.py`'s `--gate {1,2,3}` does **not**
+number the same things as the ticket's §5.3. The mapping is:
+
+| Harness flag | §5.3 gate | Content |
+|---|---|---|
+| `--gate 1` | gate 1 | exhaustive k=1..8 permutation |
+| `--gate 2` | gate 2 | generated corpus |
+| `--gate 3` | **gate 4** | round-trip isomorphism |
+| — | **gate 3** | evolved DAGs — **absent** |
+| — | **gate 6** | decomposed alphabet — **absent** |
+
+So the harness has never had a gate for either of the two things still open. Its
+"3 gates PASS" on Picasso job 1659650 is real but covers §5.3 gates 1, 2 and 4 only.
+
+**Plan.**
+
+| # | Item | AC | Owner | Gate to next |
+|---|---|---|---|---|
+| W1 | Integration spec: exact dual-engine hook points in both `isalsr_runner`s; what `measure_decomposition_impact.py`'s host generators actually produce (evolved vs sampled); adapter `decompose` API | AC-3/AC-8 | investigator | spec verified by me against the code |
+| W2 | Harness gains §5.3 gate 3 (evolved, ≥100,000 DAGs, both hosts, live dual-engine) **and** `--encoding {split,legacy}` on gates 1/2/4, plus the replayed-`k` distribution | AC-3, AC-8 | implementer | zero mismatches, `k` distribution matches the shifted one |
+| W3 | `bench_canonical.py` gains a decomposed corpus mode; both encodings reported per k-bucket | AC-5 | implementer | table produced locally |
+| W4 | Re-derive `VcVspv*pv+PpcnnC` (`methodology.tex:256`) and `VgnV*C` (`:272`) under the final engine **and** the decomposed alphabet | AC-9 | **me** | strings reproduced or the discrepancy characterised |
+| W5 | Recompute the AC-6 projection on the decomposed cost (+24.6 % Bingo / +10.8 % UDFS) and the T16 ρ values | AC-6 | **me** | escalated to Mario with numbers |
+| W6 | Picasso: rebuild env at `582c779`+, run W2 and W3 on a compute node | AC-3, AC-5 | **me** | AC-3/AC-5 closed on Picasso hardware |
+
+W4 and W5 are mine because both are decisions rather than deliverables: W4 can change
+a typeset manuscript figure caption, and W5 is the go/no-go on 36,000 core-hours.
+Delegation is one reader plus one writer at a time, in the main tree — the §4.3
+worktree hazard applies unchanged, since every check here dereferences the built
+extension.
+
+### 2026-07-30 — AC-9 CLOSED: the typeset canonical string survives T16 unchanged
+
+Run by me in the main tree against the current `.so`, not delegated.
+
+**`methodology.tex:256` — `VcVspv*pv+PpcnnC`, the figure caption explicitly labelled
+"the canonical string". It is correct, and nothing needs to change.**
+
+| Check (m = 2 variables, k = 4) | Result |
+|---|---|
+| `fast_canonical_string(S2D(w), backend="python")` | `VcVspv*pv+PpcnnC` — **fixpoint** |
+| `fast_canonical_string(..., backend="cpp")` | `VcVspv*pv+PpcnnC` — byte-identical |
+| Exhaustive `canonical_string` (true lexmin, no pruning) | `VcVspv*pv+PpcnnC` — agrees |
+| All 4! = 24 internal-node permutations, both engines | **1** distinct string, 0 engine disagreements |
+| Label set | `{var, +, *, s, c}` — Sin, Cos, Add, Mul |
+
+The alphabet question resolves itself: the string's labels are five of the paper's
+twelve, and it contains no `-` and no `/`, so it was never reachable-only-under-the-
+legacy-encoding. T16 does not touch it. The determinism fix does not touch it either
+— it is the exhaustive lexmin, which no hash choice can move. AC-9's load-bearing
+item therefore **passes with no manuscript edit**.
+
+**`methodology.tex:272` — `VgnV*C`, inside `\begin{comment}`, not typeset. It is not
+a canonical string, and it is not claimed to be one** — the surrounding text calls it
+an "Example trace" of S2D. So AC-9's re-derivation requirement does not bite. Both
+engines agree it canonicalises to `V*Vg`.
+
+**But the commented example is wrong on its own terms, and that is worth recording
+before someone un-comments it.** The text says `w = VgnV*C` with m = 2 "building the
+expression $-x_1 * x_2$". Executing it gives node labels `[var, var, g, *]` and edges
+`{0→2, 0→3}` only:
+
+- `Vg` inserts Neg with edge x₁→Neg; the primary does **not** advance (invariant 4).
+- `n` moves the *secondary* to Neg.
+- `V*` inserts Mul from the **primary**, which is still x₁ — so the edge is x₁→Mul,
+  not Neg→Mul.
+- `C` adds primary→secondary = x₁→Neg, which already exists, so it is a no-op.
+
+The result is `Mul(x₁)` with `Neg(x₁)` dangling and x₂ isolated — not `−x₁·x₂`. The
+example needs a different string (the intended edge Neg→Mul requires the *secondary*
+to be the Mul's source, i.e. a `v*` or a `c`). `methodology.tex` is Ezequiel's file
+and the block is not typeset, so this is **flagged, not fixed**. Hands to T11/T12 if
+the block is ever restored.
+
+### 2026-07-30 — Gate-3/gate-6 design: one probe closes both, and gate 6's stated check is wrong
+
+**Port surface confirmed** (investigator, then re-verified by me against the code):
+
+| Item | Finding |
+|---|---|
+| Canonicalisation call sites | **Two, not one.** Bingo at `bingo/isalsr_runner.py:338–341` inside `IsalSREvaluation._serial_eval`; UDFS at `udfs/isalsr_runner.py:120` inside `_CanonicalDeduplicator._resolve_canonical_hash`. No shared helper. |
+| Current kwargs at both | `timeout=…` only — neither passes `backend=`, so both run `DEFAULT_BACKEND` (`backends.py:42`), which is `cpp` whenever the extension loads |
+| Adapter encoding API | `decompose: bool = True` keyword-only on **both** adapters (`bingo/adapter.py:66`, `udfs/adapter.py:87`); `legacy/split/shared` map per `measure_decomposition_impact.py:75–79` |
+| `measure_decomposition_impact.py` host generators | Produce **randomly sampled** individuals, **not evolved** ones. So they cannot serve the evolved gate on their own. |
+| Canonicalisation throughput | ~34,500 DAG/s (Bingo), ~61,000 DAG/s (UDFS) on the workstation, C++ engine, random DAGs |
+
+The throughput finding kills the assumption baked into §5.3 that gate 3 is expensive:
+100,000 canonicalisations is **seconds**, not hours. The cost of the gate is entirely
+the searches that produce the DAGs. Gate 3 was never blocked on compute — it was
+blocked on the absence of a stored DAG stream, which is why the live-replay
+substitute was chosen back on 2026-07-27.
+
+**Design call: one probe closes gate 3 and gate 6 together.** Because T16 made
+`decompose=True` the adapter *default*, evolved DAGs harvested from a live search are
+**already** decomposed. So a single instrumented run over real short Bingo/UDFS
+searches yields the evolved distribution (gate 3) carrying the paper's alphabet
+(gate 6). No second corpus is needed. The probe is installed by the driver and is
+`None` in production, so a campaign run cannot be perturbed by it — that inertness is
+the property I care most about, given that Wave 1 is 3,000 runs.
+
+**Correction to §5.3 gate 6 as written, and it matters.** Gate 6 says to "confirm the
+`k` distribution of the replayed population matches the shifted one (Bingo mean
+5.47 → 6.72, p95 11 → 15)". Those figures come from T16 §4.2, and the T16 write-up
+states plainly (`t16_commutative_decomposition.md:97–102`) that they were measured on
+**randomly generated graphs, not evolved live-search populations**, and that the
+measurement "establishes direction and invariance, not magnitude". An evolved
+population has no obligation to reproduce them — the same document notes ρ there
+(1.2960) is not production ρ (1.7931) for exactly this reason. Asserting equality
+against them would fail for a correct engine.
+
+**What the gate checks instead**: build each harvested host individual under *both*
+`legacy` and `split` from the same individual, and report the **paired** shift within
+the evolved population. That is a strictly stronger test — same DAGs, one variable
+changed — and it is the comparison T02's continuity table actually needs in order to
+separate the alphabet effect from the engine effect. Recorded as a deliberate
+deviation from the ticket text rather than absorbed silently.
+
+#### A defect caught on verification: the probe was billing itself to `T_canon`
+
+The first implementation placed the Bingo hook at `isalsr_runner.py:342`, which sits
+between `t0_canon = time.perf_counter()` and the `canon_time_total` accumulation. So
+every probe operation was charged to `T_canon` — the single metric this whole ticket
+exists to reduce. Three consequences, all avoidable:
+
+1. Production runs (probe absent) still paid the `import` statement ≈2.9 M times per
+   Bingo run, **inside** the overhead measurement.
+2. Probed runs charged two full canonicalisations to `T_canon`, making the gate's own
+   timings meaningless.
+3. The hook sat *after* a successful `fast_canonical_string`, so the Bingo probe could
+   never observe a canonicalisation failure — while the UDFS hook, placed before the
+   call, could. The failure-equivalence property was therefore being tested on one
+   host only.
+
+Fixed by moving it to mirror UDFS exactly: immediately after `record_post(dag)`
+(`isalsr_runner.py:310–319`), outside every timer and outside the `try`. Recorded
+because the class of error is the one to watch for in T02 — instrumentation that
+quietly contaminates the number being instrumented.
+
+### 2026-07-30 — **AC-3 gate 3 and AC-8 CLOSED. 117,798 evolved DAGs, zero mismatches.**
+
+Run by me in the main tree on commit `f28fa9c`, 308 s wall-clock, C++ extension
+`build_hash=298fc1188bf1b051`. Report:
+`scratchpad/evolved_gate_full.json`.
+
+| Field | Value |
+|---|---|
+| `engine_a` / `engine_b` | `python` / `cpp` |
+| `self_comparison` | **false** |
+| Capability probe | `fast_canonical_string(backend='cpp')` succeeded — C++ canonicaliser live, not merely the `.so` loaded |
+| DAGs compared | **117,798** (Bingo 78,990 · UDFS 38,808) |
+| **Mismatches** | **0** |
+| **Errors** | **0** |
+| Alphabet: `Sub` nodes / `Div` nodes / `-` chars / `/` chars | **0 / 0 / 0 / 0** |
+| `pass` | **true** |
+
+Seeds 42/137/999, 90 s per host per seed, `use_fast_canonical: true`.
+
+**The alphabet result is stronger than the bare zeros suggest.** The Bingo host
+operator set in this run was `["+", "-", "*", "/", "sin", "cos", "exp"]` — the host
+still emits `Sub` and `Div`, exactly as T16 requires (editing the host operator sets
+is an explicit T16 non-goal, since it would change the host's search and break the
+paired design). Zero `Sub`/`Div` nevertheless reached the canonicaliser across 117,798
+candidates. That is the adapter-boundary decomposition doing its job on a live search,
+not a corpus constructed to be clean.
+
+#### The paired k-shift, measured on the evolved population
+
+Same individuals, one variable changed. Pairing is exact — `legacy` and `split` counts
+are identical per host (78,990 and 38,808), so the reported mean delta is a true paired
+delta with no dropped pairs.
+
+| Host | Encoding | mean `k` | median | p95 |
+|---|---|---|---|---|
+| Bingo | legacy | 8.13 | 8 | 15 |
+| Bingo | **split** | **10.25** | **10** | **19** |
+| UDFS | legacy | 4.85 | 5 | 5 |
+| UDFS | **split** | **6.27** | **6** | **8** |
+
+Paired mean delta: Bingo **+2.12 (+26.1 %)**, UDFS **+1.42 (+29.2 %)**.
+
+**This vindicates the correction to gate 6 recorded above.** T16 measured +22.9 %
+(Bingo mean 5.47 → 6.72, p95 11 → 15) on *randomly generated* graphs. The evolved
+population starts higher (legacy mean 8.13, not 5.47) and shifts further (+26.1 %, not
++22.9 %), with p95 going 15 → 19 rather than 11 → 15. Had the gate asserted equality
+against T16's figures as §5.3 gate 6 literally instructs, **it would have failed
+against a correct engine.** Direction and rough magnitude agree; absolute values do
+not, exactly as the T16 write-up itself warned.
+
+#### Bucket migration — larger than the ticket anticipated, and it has a sign
+
+Against the paper's own buckets:
+
+| Host | Bucket | legacy | split | Δ | legacy % → split % |
+|---|---|---|---|---|---|
+| Bingo | `k < 5` | 12,187 | 7,918 | −4,269 | 15.4 % → 10.0 % |
+| Bingo | `5 ≤ k < 15` | 61,963 | 56,580 | −5,383 | 78.4 % → 71.6 % |
+| Bingo | `15 ≤ k < 32` | 4,840 | **14,489** | **+9,649** | 6.1 % → **18.3 %** |
+| Bingo | `k ≥ 32` | 0 | **3** | +3 | — |
+| UDFS | `k < 5` | 5,502 | 1,824 | −3,678 | 14.2 % → 4.7 % |
+| UDFS | `5 ≤ k < 15` | 33,306 | 36,984 | +3,678 | 85.8 % → 95.3 % |
+| UDFS | `15 ≤ k < 32` | 0 | 0 | 0 | — |
+
+Three things T02 needs from this:
+
+1. **Bingo's top bucket triples** (6.1 % → 18.3 %), drawing from *both* lower buckets.
+   The ticket predicted mass leaving the middle bucket; it also leaves the bottom one.
+2. **The sign is favourable for the engine comparison, and this must not be
+   double-counted.** The top bucket is where C++ wins most (13.54× vs 10.00×), so
+   decomposition shifts mass toward the regime where the port helps most. That
+   partially offsets the +24.6 % absolute cost increase **in the ratio**, but not in
+   absolute cost. AC-6 must not net these by assumption.
+3. **The paper's bucket scheme no longer covers the population.** Three Bingo DAGs
+   land at `k ∈ {32, 33}`, outside `15 ≤ k < 32`. Negligible in mass (0.004 %) but the
+   top bucket needs an open right edge in T02's continuity table, or three DAGs vanish
+   silently.
+
+#### A finding that belongs to T15 and T06, not to T01
+
+**Zero canonicalisation failures in 117,798 evolved DAGs.** T15 was opened precisely to
+establish the failure rate on real Bingo/UDFS DAGs rather than on uniformly random
+ones, where the measured rate was 6/4,000 = 0.15 %. On this evolved population the rate
+is **0/117,798**, an upper 95 % bound of ≈2.5×10⁻⁵ by the rule of three. The synthetic
+rate does not transfer. Handed to T15 and T06 rather than claimed here.
+
+One honest consequence: with zero failures, the failure-equivalence property (both
+engines raising the same exception type and message) is **vacuous on this population**.
+It remains verified on the synthetic corpus (6/6 identical, 2026-07-27 entry). Stated
+rather than reported as a pass.
+
+#### Two limitations of this gate, stated because it is AC-3 evidence
+
+1. **Population is Nguyen-1 at pop=200 / stack=24**, not the production pop=500 /
+   stack=32 across 50 problems. The k range covered (0–33) spans and exceeds the
+   campaign's, so engine equivalence is well exercised, but the *distribution* is not
+   Wave 1's.
+2. **UDFS contributed 38,808 DAGs**, short of the ≥40,000-per-host floor I set myself
+   (the ticket's requirement is ≥100,000 total, which is met with 17.8 % margin). UDFS
+   is 33 % of the corpus, so neither host is token-represented. Recorded rather than
+   rounded up.
+
+### 2026-07-30 — AC-5 harness extended to both encodings; the Picasso measurement is blocked
+
+`bench_canonical.py` gains `--encodings legacy,split`. Verified by me: with the flag
+absent the report schema is unchanged (`schema_version`, `provenance`, `k_buckets`,
+`overall`, no `encodings` key), so the job-1659650 numbers stay directly comparable.
+Suite **5,292 passed, 5 skipped**; `ruff check src/ tests/` and `mypy src/isalsr/`
+clean.
+
+Corpus construction follows the same paired principle as the evolved gate: the same
+randomly sampled Bingo individuals converted under each encoding, each DAG bucketed by
+the `k` it actually has *in that encoding*, so bucket migration is visible rather than
+hidden. The random corpus reproduces T16's population closely (legacy mean `k` 5.42
+vs T16's 5.47; split 6.56 vs 6.72; p95 12 → 15 vs 11 → 15), which is a useful
+cross-check that the two harnesses agree on the same population — and a reminder that
+this is *not* the evolved population measured above (8.13 → 10.25, p95 15 → 19).
+
+**Quick-mode numbers are not quotable and I am not quoting them.** At 50 DAGs/bucket
+the legacy top bucket drew only **26** DAGs against split's 158, because only ~1 % of
+randomly generated AGraphs reach `k ≥ 15` under the legacy encoding. A median over 26
+DAGs is not stable, and the apparent legacy-vs-split gap in that bucket (18.7× vs
+12.5×) is sample composition, not the alphabet. Full mode raises the attempt budget to
+27,000 (`max_attempts = target × 3 × 30`), which should yield ~250 legacy top-bucket
+DAGs — adequate. **AC-5 therefore closes only on the full Picasso run**, which is what
+`slurm/t01_close/` exists for.
+
+**Blocked.** `slurm/t01_close/{launcher,worker}.sh` are written and syntax-checked
+(`picasso-sbatch` invoked first, per the standing rule). The worker is CPU-only, one
+core, `--constraint=intel` — pinned deliberately, because both the published costs and
+the earlier AC-5 table come from an Intel Xeon Gold 6230R, and benchmarking on an AMD
+node would make the tables incomparable. It rebuilds the extension, asserts
+`backends.engine() == "cpp"`, then runs the synthetic gates, the evolved gate and the
+paired benchmark. **The `rsync --delete` that would deploy it was refused by the
+permission layer, so nothing has been submitted.** Picasso is at `b34cded`, ten commits
+behind, and therefore does not have T16 at all — it cannot produce a decomposed
+measurement until it is synced.
+
+### 2026-07-30 — AC-6 recomputed on the decomposed cost. **The go/no-go fails, structurally, and it always would have.**
+
+Escalated rather than self-decided, per the 2026-07-27 decision.
+
+**Inputs.** Submitted Bingo `T_canon` = 0.817 ms/DAG, `OH` = 39.2 %, `S` = 0.93,
+ρ = 1.83; UDFS 0.296 ms/DAG, `OH` = 0.05 %, `S` = 1.07, ρ = 1.56 (`results.tex:57–58`).
+Engine speedup 10.00× overall on Picasso (job 1659650). T16 decomposed cost
+**+24.6 %** (Bingo) / **+10.8 %** (UDFS), measured on the C++ engine, so it composes
+with the speedup rather than duplicating it.
+
+| Quantity | Submitted | C++ only | **C++ + decomposed alphabet** |
+|---|---|---|---|
+| Bingo `T_canon` | 0.817 ms | ≈0.082 ms | **≈0.102 ms** |
+| Bingo `OH` | 39.2 % | ≈6.1 % | **≈7.4 %** |
+| Bingo wall-clock | — | −35.3 % | **−34.3 %** |
+| UDFS `T_canon` | 0.296 ms | ≈0.030 ms | **≈0.033 ms** |
+| UDFS `OH` | 0.05 % | ≈0.006 % | **≈0.006 %** |
+| **Bingo `S`** | **0.93** | **0.93** | **0.93** |
+| **UDFS `S`** | **1.07** | **1.07** | **≈1.07** |
+
+The alphabet correction costs about **1.3 percentage points of overhead** and nothing
+else. It does not threaten the headline: 39.2 % → single digits either way.
+
+**`S` does not move, and no engineering can move it.** `dS/dT_canon = 0` **exactly**,
+not approximately: both runners derive `search_only = wall_clock − canon_time_total`,
+so for any speedup *f*, `(wall_clock − T_canon(1−1/f)) − T_canon/f = wall_clock −
+T_canon`. There is **no break-even `T_canon`** — the quantity is absent from `S` by
+construction. T16 does not change this either: Bingo's ρ is *exactly* encoding-invariant
+(3,858 distinct strings under both encodings), so the dedup decisions, and hence
+`T_search`, are identical. UDFS's ρ rises 1.4 %, which can only help, but not
+predictably enough to quote.
+
+**So AC-6's literal test — "does the projection move Bingo's `S` above 1.0" — fails,
+and it would have failed against a 1,000× engine.** This was first established on
+2026-07-27 and is unchanged by T16; what T16 adds is only the +1.3 pp above. The
+honest reading, which §8.4 already carries and which must not be softened: `S = 0.93`
+reflects deduplication changing Bingo's search trajectory, not canonicalisation being
+expensive. With canonicalisation already excluded, Bingo–IsalSR needs ≈2.1× more
+search time than baseline (5,214 s vs 2,478 s over 300 sampled runs), and at most about
+a third of that gap is bookkeeping a port could remove.
+
+**Recommendation to Mario: proceed with Wave 1.** The campaign's deliverable against
+R1.1 was never `S`; it is that overhead falls from 39.2 % to ≈7 % and Bingo's
+wall-clock penalty — currently exceeding the Nemenyi critical difference at
+`results.tex:193–196` — plausibly collapses inside it. That deliverable is intact and
+is worth the 36,000 core-hours. But the decision is Mario's, and the negative half of
+it is stated here in full rather than buried.
+
 ---
 
 ## 8. Proposed answer
