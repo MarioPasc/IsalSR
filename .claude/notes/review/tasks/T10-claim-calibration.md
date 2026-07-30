@@ -12,6 +12,31 @@
 
 ---
 
+## T16 impact — the cost side of `S` moves against us (added 2026-07-30)
+
+T16 aligned the adapters to the paper's alphabet, so `Sub`/`Div` are now emitted as
+`Add`+`Neg` / `Mul`+`Inv`. **Canonicalisation gets more expensive**, because the DAGs
+are bigger: `k` +22.9 % (Bingo) / +22.0 % (UDFS), and per-DAG canonicalisation cost
+**+24.6 %** (Bingo) / **+10.8 %** (UDFS) on a random-population probe.
+
+**Why this matters here specifically.** R1.1's complaint is about `S = T_BL / T_IS`
+being framed as "approximately neutral" at 0.93. The alphabet correction pushes the
+IsalSR arm's canonicalisation cost **up**, so the honest expectation is that `S` does
+not improve on this account and may worsen. **Do not write the calibration text
+against the old cost numbers, and do not assume the C++ port's speedup and the
+alphabet's cost increase cancel** — they are independent and both land in Wave 1.
+Wait for the measured `S`.
+
+The offsetting consideration, which is real but must not be oversold: on Bingo the
+reduction factor was **exactly** invariant under the change (3,858 distinct strings
+in both encodings), and on UDFS it *rose* 1.4 % because host-native `neg`/`inv` now
+unify with decomposed ones. So the representation got strictly better at its job
+while costing more per DAG. That is a trade to state plainly, not a win to claim.
+
+Full write-up: `docs/md_files/changes/t16_commutative_decomposition.md`.
+
+---
+
 ## 1. Why R1.1 and E3 are grouped
 
 Same defect, same two files, same fix. In both cases **the Results and Introduction

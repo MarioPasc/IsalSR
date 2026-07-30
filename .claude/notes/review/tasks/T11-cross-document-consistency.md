@@ -12,6 +12,45 @@
 
 ---
 
+## T16 impact — R2.2's `{g,i}` vs `{−,/}` now has a real answer (added 2026-07-30)
+
+**Read this before starting the cross-document sweep. It changes what "consistent"
+means for R2.2.**
+
+R2.2 flags that the documents disagree about whether the alphabet contains `{g, i}`
+(Neg, Inv) or `{−, /}` (Sub, Div). Until 2026-07-30 this was not merely an editing
+slip: the manuscript said `{g, i}` and **the implementation actually used `{−, /}`**,
+on 61.1 % of production candidates. The documents disagreed because the artefacts
+disagreed.
+
+**T16 resolved it in the code's favour of the paper.** Both adapters now emit the
+paper's alphabet: `x − y = Add(x, Neg(y))`, `x / y = Mul(x, Inv(y))`, with `Pow` the
+only non-commutative operation. Verified on all 10 production configs over ~130,000
+DAGs: zero `Sub`/`Div` nodes, zero `-`/`/` characters in any canonical string.
+
+**Consequence for the sweep: harmonise everything onto `{g, i}`.** That is now the
+true description of the implementation, so it is the correct target — no compromise
+wording is needed and no caveat is required. Two specifics:
+
+- `NodeType.SUB`/`DIV` and `BINARY_OPS` **still exist in `isalsr.core`**, because S2D
+  must keep decoding legacy `V-`/`V/` strings and the property corpora contain them.
+  If a document describes the *core library's* type registry rather than Σ_SR, `{−,
+  /}` is accurate there. Do not "fix" those into inconsistency.
+- **A separate documentation error surfaced and is not yet fixed anywhere**: the
+  manuscript describes UDFS as searching over a configured operator set, but UDFS's
+  YAML `operator_set` key is **dead configuration** — the vendored search ignores it
+  and always samples every operator in `config.NODE_ARITY`, including `neg`, `inv`,
+  and both orientations of subtraction and division
+  (`vendor/DAG_search/dag_search.py:1226-1227`). Whatever the manuscript says about
+  the UDFS operator set needs checking against that. Owner unassigned.
+
+**The arXiv preprint decision is unchanged** — no v3 (README "Decisions already
+taken"). R2.2 is answered as a comment in the response letter.
+
+Full write-up: `docs/md_files/changes/t16_commutative_decomposition.md`.
+
+---
+
 ## 1. Why these are grouped
 
 All four are the same defect class: **a document in the submitted package disagrees

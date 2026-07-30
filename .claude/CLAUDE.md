@@ -86,6 +86,21 @@ SUB(x,y) = ADD(x, NEG(y)), DIV(x,y) = MUL(x, INV(y)). Use `OperationSet.commutat
 for a fully commutative alphabet (no SUB, DIV; optionally include POW).
 Inspired by GraphSR (Xiang et al.).
 
+**The adapters decompose (T16, 2026-07-30). This is now mandatory, not optional.**
+The paper's Σ_SR has **12 labels and no `-` or `/`**: `Pow` is the only
+non-commutative operation. `experiments/models/commutative_encoding.py` applies
+`SUB → ADD+NEG` and `DIV → MUL+INV` **inline inside both adapters**, so every
+consumer of `agraph_to_labeled_dag` / `compgraph_to_labeled_dag` inherits it.
+Three hard non-goals: do **not** edit the YAML host operator sets (that changes the
+host's search and breaks the paired design); do **not** remove `NodeType.SUB`/`DIV`
+or narrow `BINARY_OPS` (S2D must still decode legacy `V-`/`V/` strings); do **not**
+decompose inside the canonicaliser (`fcs` stays a pure function of the DAG).
+`decompose=False` reproduces the pre-T16 encoding for A/B work only.
+Sharing of emitted NEG/INV is **off** (`SHARE_DECOMPOSED_UNARY = False`) — measured
+benefit was 0.6 % on k and 0.05 % on ρ, not worth breaking `undecompose()`.
+Full write-up: `docs/md_files/changes/t16_commutative_decomposition.md`.
+**Every IsalSR number produced before this date used the wrong alphabet.**
+
 ### Initial State
 
 For m input variables x_1, ..., x_m:
@@ -126,6 +141,7 @@ src/isalsr/core/dag_evaluator.py     Evaluate DAG numerically (topological sort)
 src/isalsr/core/commutative.py       SUB/DIV <-> ADD+NEG/MUL+INV conversion
 src/isalsr/core/permutations.py      Permute internal node IDs (isomorphic copies)
 src/isalsr/core/algorithms/          D2S algorithm variants
+src/isalsr/viz/                      DAG + instruction-string + CDLL drawing (canonical)
 src/isalsr/adapters/                 NetworkX, SymPy bridges
 src/isalsr/evaluation/               Fitness metrics, constant optimization
 src/isalsr/search/                   String mutation/crossover, search algorithms
@@ -288,7 +304,35 @@ python -m pip install -e . --no-build-isolation           # SILENTLY FAILS
 - `isalsr.adapters`: optional deps. Each adapter imports its library independently.
 - `isalsr.evaluation`: numpy, scipy. Fitness metrics and constant optimization.
 - `isalsr.search`: numpy. String-level search operators and algorithms.
+- `isalsr.viz`: may import `isalsr.core`. **matplotlib is imported inside function
+  bodies only**, never at module scope. Must NOT be imported by `core`, `adapters`,
+  `evaluation` or `search`.
 - `experiments/`, `benchmarks/`: may use anything (torch, matplotlib, pandas, etc.)
+
+### Visualization -- `src/isalsr/viz/` is the ONLY supported implementation
+
+All drawing of DAGs, instruction strings and the CDLL lives in `src/isalsr/viz/`.
+Import from the package root (`from isalsr.viz import ...`), never from its
+submodules -- the public surface in `__init__.py` is the thing that is maintained.
+
+| Entry point | Draws |
+|---|---|
+| `make_trace_figure` | **Top-level entry.** 2 x N grid; one column per D2S step |
+| `draw_dag` | Labeled DAG, dispatched through the backend registry |
+| `draw_instruction_strip` | Instruction string as token cells |
+| `draw_cdll` | CDLL chain with primary/secondary pointer markers |
+| `TraceLayout` | All geometry and font sizes (`show_cdll` toggles the CDLL sub-row) |
+
+- **Do not add drawing code to `experiments/scripts/`.** Scripts that predate this
+  package and carry their own implementation (e.g. `generate_algorithm_overview.py`
+  and its local `draw_cdll_ring`) are **deprecated**. Leave them as they are; do not
+  extend them and do not port new figures onto them.
+- Size in-figure fonts for the **final** rendered size. A figure scaled to
+  `\linewidth` in the response letter (single-column a4, 2.3 cm margins) is ~6.46 in,
+  so a 13.6 in figure renders at ~0.47x and a 9.5 pt annotation lands near 4.5 pt.
+- Anchor CDLL traversal with `stable_anchor`, not the primary pointer: starting from
+  a moving pointer makes the ring appear to rotate between steps when only the
+  pointer moved.
 
 ### Coding Conventions
 
@@ -436,6 +480,13 @@ Full details: `src/isalsr/core/README.md`
 |-------|---------|
 | `/test-and-verify` | Full pipeline: pytest + ruff + mypy + hypothesis alignment check |
 
+### Skills (`.claude/skills/`) -- TPAMI revision workflow
+
+| Skill | Purpose |
+|-------|---------|
+| `review-ticket` | Drive one ticket in `.claude/notes/review/tasks/` to completion: plan, delegate, submit and monitor Picasso jobs, verify, write the work log. |
+| `review-answer` | Turn a completed ticket into the reviewer-facing answer in `reviews/response_to_reviewers.tex`: audit the ticket's numbers for retractions, interview the user about figures/tables, write to a fixed narrative spine and style contract, verify, push to Overleaf. |
+
 ### Advisor's Non-Negotiable Constraints
 
 These constraints MUST be enforced at all times. The `proposal-guard` agent checks them:
@@ -469,6 +520,7 @@ These constraints MUST be enforced at all times. The `proposal-guard` agent chec
 - @docs/design/experimental_design/isalsr_experimental_design.md -- Three-axis comparison framework
 - @docs/design/experimental_design/experimental_design_amendments.md -- Cache integration amendments
 - @docs/design/experimental_design/data_benchmarking_design.md -- Dataset sizes, train/test splits, literature justification
+- @docs/md_files/changes/t16_commutative_decomposition.md -- Adapter-level SUB/DIV decomposition, the NEG/INV sharing experiment, and its validation (2026-07-30)
 - @docs/md_files/changes/bottleneck_type_analysis.md -- Bottleneck-type analysis: when does IsalSR help? (2026-04-19)
 - @docs/md_files/changes/hard_problem_selection_rationale.md -- Why we chose the 10 hard problems (SRBench, McDermott, screening)
 - @docs/md_files/changes/candidate_problem_screening.md -- Screening 8 SR benchmark suites for IsalSR-compatible candidates (2026-04-20)

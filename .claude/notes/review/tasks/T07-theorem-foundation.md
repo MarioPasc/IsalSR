@@ -7,8 +7,49 @@
 | Owner | **Ezequiel** (primary — proofs, `methodology.tex`) · **Mario** (empirical verification, tests) |
 | Depends on | — (can start immediately; independent of compute) |
 | Blocks | T03 phase 3, T06, T13 |
-| Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis, now split by whether an item depends on the **T16 alphabet fork** (`BINARY_OPS = {Pow}` as declared vs `{Pow, Sub, Div}` as run): §7bis.2 is alphabet-independent and can start today (all five proof gaps plus a sixth, the Thm 3.13 domain mismatch), §7bis.3 is alphabet-dependent (D-2, D-3, Def 3.2 token count) and should wait, §7bis.4 is the T16 decision itself, which gates T02 Wave 1. Remaining for Mario: AC-9 (page cost → T13) and AC-10 (§8). |
+| Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis. The **T16 alphabet fork is RESOLVED (2026-07-30, Branch B — the code aligns to the paper)**, so `𝓝 = {Pow}` and Definition 3.9(iv), Rule 1's prose and Definition 3.2 all stand as submitted: **D-2 and D-3 evaporate and §7bis.3 is now empty of work.** What remains for Ezequiel is §7bis.2 alone: the five Lemma 3.14/A.2 gaps plus a sixth, the Theorem 3.13 domain mismatch. All of it is alphabet-independent and none of it is blocked. Remaining for Mario: AC-9 (page cost → T13) and AC-10 (§8). |
 | Target | 2026-08-24 |
+
+---
+
+## T16 impact — Branch B is IMPLEMENTED, and one scope clarification is owed to the completeness theorem (added 2026-07-30)
+
+**Branch B is no longer a decision, it is code.** Both adapters emit the paper's
+alphabet; verified on all 10 production configs over ~130,000 real candidates: zero
+`Sub`/`Div` nodes, zero `-`/`/` characters in any canonical string, `Pow` the only
+order-sensitive binary operation present. So `𝓝 = {Pow}` is now **true of the
+artefacts**, not only of the definitions. **D-2 and D-3 are closed, not merely
+projected to close**: Definition 3.9(iv), Rule 1's prose and Definition 3.2 all stand
+exactly as submitted, and the three-node `Sub`/`Div` counterexample to Theorem
+3.15's (⇐) direction **cannot be constructed from adapter output at all**.
+
+Empirically re-established on the decomposed population (n=5000 per host, C++
+engine): round-trip `D ≅ S2D(fcs(D), m)` **100 %**; completeness under
+`permute_internal_nodes` (20 permutations × 100 DAGs) **100 %**; no false merges on
+UDFS.
+
+### One scope clarification for the completeness statement — NEW, and it is pre-existing, not caused by T16
+
+`fast_canonical_string` returns the **empty string for every `k = 0` DAG regardless
+of `m`**. Two variable-only DAGs with `m = 1` and `m = 2` are non-isomorphic labeled
+DAGs and receive the *same* canonical string.
+
+This is **correct behaviour, not a defect**: the canonical string encodes the
+*instruction sequence*, and the number of input variables `m` is a parameter of the
+initial state consumed by S2D, not part of the string. The invariant is therefore
+complete **for labeled DAGs over a fixed `m`**, which is the only regime that arises
+in production (`m` is fixed per problem).
+
+**But the theorem should say so.** If Theorem 3.15 is stated as "`fcs` is a complete
+invariant for labeled DAGs" without fixing `m`, the `k = 0` case is a literal
+counterexample. Recommended: quantify over `𝒟_m`, labeled DAGs with exactly `m`
+pre-inserted variable nodes, and note that `fcs` is complete within each `𝒟_m`.
+**This is Ezequiel's call**, flagged here rather than edited into `methodology.tex`.
+
+Verified identical (5/5/5 occurrences) across legacy and both decomposed encodings,
+so **T16 introduces nothing here** — the measurement merely surfaced it.
+
+Full write-up: `docs/md_files/changes/t16_commutative_decomposition.md`.
 | Last updated | 2026-07-30 — §7bis restructured around the T16 alphabet fork. Earlier 2026-07-29: norm-removal study landed; AC-6 answered; D-1/D-2/D-3 recorded; T16 opened. (The 0.6 % round-trip finding flagged that day was **closed** the same day: it was the recursion artefact of §7.5, not a property of the representation — round-trip is 100 % in both arms on 10,551,609 real DAGs.) |
 
 ---
@@ -889,8 +930,25 @@ alphabet and your theorems:
   exactly as written, and **every number is recomputed**, because `x − y` becomes
   two nodes instead of one and `k` shifts for 61.1 % of candidates.
 
-Mario's provisional choice is **B**; it is recorded as pending your confirmation
-and it **gates T02 Wave 1**, which must not launch under the wrong alphabet.
+> ### RESOLVED 2026-07-30 — **Branch B.** Ezequiel decided; T16 AC-1 is closed.
+>
+> > *"Debes relanzar los experimentos para que todos usen el alfabeto definido en
+> > el artículo. Es importante que esté alineada la teoría con el código. […]
+> > Habrá que publicar el código fuente cuando acepten el artículo. Lo siguiente
+> > que va a hacer todo el mundo es pasarle el artículo y el código a un LLM, el
+> > cual se dará cuenta en menos de un segundo de cualquier incoherencia entre
+> > ambos."*
+>
+> **What this means for your half of T07, and it is the best available outcome:**
+> the declared alphabet becomes the alphabet that runs, so `𝓝 = {Pow}` throughout,
+> **Definition 3.9(iv), Rule 1's prose, Definition 3.2 and the "31 tokens" count
+> all stand exactly as submitted.** D-2 and D-3 evaporate. §7bis.3 below is
+> retained as the record of what Branch A would have cost, and for the
+> counterexamples, which stay useful as tests.
+>
+> The cost lands on Mario: the adapters must decompose, and the IsalSR arm
+> re-runs on `D1 + D2`. Implementation spec, invariance analysis and validation
+> gates are in **T16 §5–§8**. It still **gates T02 Wave 1**.
 
 **Nothing about `normalize_const_creation`, `Const`, or the R1.3 answer depends
 on this fork.** `Const` (`k`) is in `𝓛` under both branches, so AC-5, AC-6, AC-7,
@@ -978,11 +1036,17 @@ so you are not waiting on a measurement either (AC-7, closed by Mario):
 39 tests, C++ backend, broken out per op precisely so that `Pow`'s density cannot
 mask a gap in the other two.
 
-### 7bis.3 Yours, and **decided by the alphabet fork** — do not draft these first
+### 7bis.3 Was decided by the alphabet fork — **now resolved: no edits required**
 
-Both items below are the *same defect seen twice*: the manuscript names `Pow`
-where the running code means `{Pow, Sub, Div}`. Under Branch B they are not
-defects at all and need no edit; under Branch A they are mandatory text changes.
+**Branch B was chosen (§7bis.0), so every row below lands in the "no edit"
+column. Nothing in this subsection is work for you any more.** It is kept for
+three reasons: it records what Branch A would have cost, the counterexamples
+remain useful as regression tests, and the last row still carries one live
+obligation for T09.
+
+Both items are the *same defect seen twice*: the manuscript names `Pow` where the
+running code meant `{Pow, Sub, Div}`. Branch B removes `Sub` and `Div` from the
+representation, so the manuscript becomes correct without being touched.
 
 | # | Item | Location | **Branch A** (`𝓝 = {Pow, Sub, Div}`) | **Branch B** (`𝓝 = {Pow}`) |
 |---|---|---|---|---|
@@ -1005,10 +1069,10 @@ self-consistent and *stricter* than the declared definition: it distinguishes
 DAGs the definition would merge, which is the safe direction. What is wrong today
 is the description.
 
-### 7bis.4 The T16 decision itself — yours, and on the critical path
+### 7bis.4 The T16 decision — **taken 2026-07-30. Recorded for context only.**
 
-Confirm Branch A or Branch B (T16 AC-1). Two things make this urgent rather than
-merely open:
+Branch B. Nothing here is outstanding for you; the consequences below are now
+Mario's, tracked in T16. Two of them were what made the decision urgent:
 
 - **It gates T02 Wave 1.** Under Branch B the adapters change, so `k` shifts for
   61.1 % of candidates and every k-stratified number moves: `ρ` and the reduction
@@ -1019,18 +1083,20 @@ merely open:
   means more structural variety (pushes `ρ` down) but also more opportunity for
   isomorphic rediscovery (pushes `ρ` up). It has to be measured, not argued.
 
-**The main scientific risk of Branch B**, and it is worth knowing before you
-choose it: protected `Inv` is `1/x` for `|x| > ε` and `1` otherwise, so `a / b`
-and `Mul(a, Inv(b))` are **not** numerically identical near zero. The
-decomposition is therefore not exactly semantics-preserving in the protected
-regime. This is T16 AC-5 (Mario's measurement, not yet run) and it must be
-quantified rather than assumed.
+**One correction to what this section previously said.** It called protected
+`Inv` "the main scientific risk of Branch B", on the grounds that `a / b` and
+`Mul(a, Inv(b))` differ near zero. That mis-classified the risk: IsalSR's
+evaluator is never in the fitness path — the runners cache `canon_hash → fitness`
+from the host, and `grep` over `experiments/models/` finds no use of
+`evaluate_dag`. The protected regime therefore matters for *validating* the
+decomposition and for dedup soundness, not for any reported number. See T16 §7.1.
 
-**The reviewer-optics trade**, stated plainly since it is part of the decision:
-Branch A answers R2.3 with "we mis-described our alphabet" and demotes the
-"no operand-order tracking is required" selling point; Branch B keeps every claim
-true as written and costs a full re-execution of the IsalSR arm on the
-50-problem suite (the baseline arm never invokes the adapter and is unaffected).
+**The reviewer-optics trade, for the record.** Branch A would have answered R2.3
+with "we mis-described our alphabet" and demoted the "no operand-order tracking
+is required" selling point. Branch B keeps every claim true as written, at the
+cost of re-running the IsalSR arm on `D1 + D2`. Ezequiel's deciding argument was
+neither of these: the source must be published on acceptance, and a paper/code
+divergence will be found immediately by any reader with an LLM.
 
 ### 7bis.5 Editorial, inherited from T15 — Mario's, listed so you can see them
 

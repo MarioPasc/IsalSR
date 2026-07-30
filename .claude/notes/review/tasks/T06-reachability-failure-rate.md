@@ -7,9 +7,43 @@
 | Owner | **Mario** (+ Claude Code) |
 | Depends on | T01 (instrument the engine once), T07 (must agree on what the precondition *is*) |
 | Blocks | T09 (a supplementary subsection), T10 |
-| Status | **SUBSTANTIALLY COMPLETE** — AC-0…AC-6 and AC-8 met, all re-verified in the main tree. **AC-7 is blocked on T07** (NOT STARTED, Ezequiel): the precondition statement used here is T15's settled one, which needs his confirmation, not new work. The EXECUTION-PLAN §2b instrumentation half is **done**, so Wave 1 is no longer gated by this ticket. |
+| Status | **COMPLETE for the measurement it was opened to make.** AC-0…AC-8 all met; **AC-7 closed 2026-07-29 by T07** (precondition statement confirmed unchanged). The EXECUTION-PLAN §2b instrumentation half is done, so Wave 1 is not gated by this ticket. **One new dependency, 2026-07-30: T16 Branch B.** The DAG-level rates this ticket reports are argued to be *invariant* under the alphabet decomposition and stand as published; only the `k`-stratification needs re-measuring afterwards (new AC-9). **R1.2's response letter answer is being drafted now and may use the DAG-level rates as final.** |
 | Target | 2026-08-24 |
-| Last worked | 2026-07-28 — instrumentation landed, all four populations measured, §7 filled |
+
+---
+
+## T16 impact — the invariance argument is now MEASURED, and it is sharper than stated (added 2026-07-30)
+
+T16 is implemented, not merely decided. The invariance this ticket's numbers depend
+on has been measured rather than argued, and **it holds — but at DAG level only.**
+
+**Measured** (n=5000 per host, seed 42, C++ engine, paired per DAG, legacy vs
+decomposed): confusion matrix `FP=0, FN=0` on **both** hosts and **both** decomposed
+encodings; `violated_post = 0` everywhere. **No DAG changes its verdict.**
+
+**The refinement, which matters when the `k`-stratified table is rebuilt.** The
+DAG-level rate is invariant, but the **node-level** violating count is *not*: it rises
+(Bingo 0.46 → 0.60 mean, UDFS 1.52 → 1.67). The reason is exact. Decomposing
+`Sub(a,b)` where `a` is reachable from a variable and `b` is not creates a **new**
+violating node `Neg(b)`, where the original `Sub` was not violating — but `b` is then
+itself a non-variable node with no variable ancestor, so the DAG was **already**
+counted as violating through `b`. Hence the verdict never flips while the count grows.
+
+**Consequence: this ticket's headline rates stand as published** — 85.88 % (Bingo),
+100 % (UDFS), 0 % (S2D corpus and synthetic), `violated_post = 0`. **AC-9 is
+satisfied.** R1.2's answer may quote them as final.
+
+**Still to redo after Wave 1**: the `k`-stratification only. `k` shifts right by
+~22 % (Bingo mean 5.47 → 6.72, p95 11 → 15; UDFS 3.27 → 3.99), so every per-`k`
+figure changes even though the aggregate does not.
+
+**Caveat on the probe population**: the measurement above used randomly generated
+candidates, where `violated_pre` is 41.02 % (Bingo) / 75.06 % (UDFS) — *not* this
+ticket's 85.88 % / 100 %, which come from evolved live-search populations. The probe
+establishes **invariance**, not magnitude. The magnitudes remain this ticket's own.
+
+Full write-up: `docs/md_files/changes/t16_commutative_decomposition.md`.
+| Last worked | 2026-07-30 — AC-7 closed by T07; T16 Branch B impact assessed; AC-9 added |
 
 ---
 
@@ -142,7 +176,14 @@ what the code actually does before writing it down.
   cost numbers, or the two campaigns run separately.
 - **AC-6.** The fallback's soundness direction (§4.4) verified in code, not assumed.
 - **AC-7.** The precondition statement used here matches T07's revised statement.
+  *(**CLOSED 2026-07-29 by T07.** T07 §7bis.1: "T06's precondition statement is
+  unchanged and remains correct." The statement stands as
+  `methodology.tex:976` — every non-variable node of `D` is reachable from some
+  variable via directed paths — and no rate in this ticket is affected.)*
 - **AC-8.** §7 filled.
+- **AC-9.** *(added 2026-07-30, from T16.)* The `k`-stratified rates re-measured on
+  the decomposed alphabet, or the §6 invariance argument confirmed empirically and
+  the DAG-level rates restated as unchanged. See the 2026-07-30 log entry.
 
 ---
 
@@ -675,6 +716,63 @@ All three policies structurally identical on **234,865 / 234,865**; `repair` vs
 T06 its path-5 rate for the UDFS population for free. **T15 status updated
 accordingly; that ticket is not mine to close, so its Status line is left for
 Mario.**
+
+---
+
+### 2026-07-30 — AC-7 closed by T07; T16 Branch B assessed; AC-9 opened
+
+**AC-7 is closed.** T07 §7bis.1 records: *"T06's precondition statement is
+unchanged and remains correct."* The statement this ticket measured against —
+`methodology.tex:976`, every non-variable node of `D` reachable from some variable
+via directed paths — is the one T07 is proving against. No rate here moves. All of
+AC-0…AC-8 are now met.
+
+**New dependency: T16 chose Branch B on 2026-07-30** (Ezequiel). The adapters will
+decompose `Sub` and `Div` into `Add`+`Neg` and `Mul`+`Inv`, so the DAGs this ticket
+measured will grow by `#Sub + #Div` nodes for the 61.1 % of candidates that carry
+them. That touches this ticket in exactly one place.
+
+**What is invariant, with the argument.** `Neg` and `Inv` are unary: each has
+exactly one in-edge, from its operand. They therefore *inherit* their operand's
+ancestry. If the operand has a variable ancestor, so does the new node; if it does
+not, then the DAG already violated the condition through that operand. So
+decomposition **creates no new violating DAG and removes none**, and the
+**DAG-level violation rates are unchanged**:
+
+| Population | $N$ | violated on arrival | after |
+|---|---|---|---|
+| S2D corpus | 14,841 | 0 (0.00 %) | 0 |
+| Synthetic random DAGs | 49,980 | 0 (0.00 %) — **vacuous, see below** | 0 |
+| Bingo | 154,568 | 132,746 (**85.88 %**) | 0 |
+| UDFS | 3,890 | 3,890 (**100.00 %**) | 0 |
+
+**The synthetic row must not be quoted as independent evidence**, here or in the
+response letter. Its generator (`_dag_generators.py:38-43`) emits no CONST nodes,
+so it cannot exhibit the violation and its 0 % is vacuous with respect to the
+CONST mechanism — the caveat already recorded in the 2026-07-28 entry above, and
+repeated here because this table would otherwise be read as four independent
+confirmations. Its real value is narrower and still worth having: no *non-CONST*
+structure in 49,980 random DAGs violates the precondition, which rules out
+competing violation mechanisms. It is also vacuous for the invariance claim in
+this entry, for the same reason.
+
+Note the argument is about *DAGs*, not *nodes*: `Neg(Const)` where the `Const` is
+an orphan adds a second unreachable **node**, so node-level counts do rise. This
+ticket reports DAG-level rates, so nothing published here changes.
+
+**This is a proof sketch, not a measurement.** T16 AC-9 requires it confirmed
+empirically on both hosts before it is relied on. If it fails, these four rows
+must be re-measured and R1.2's answer corrected.
+
+**What does move**: the `k`-stratification (0.00 % at $k=0$ → 100 % for
+$k \ge 24$). The rate-versus-$k$ curve keeps its shape and its mechanism — the
+violation occurs iff the expression contains at least one constant terminal, and
+that is unaffected by decomposition — but the $k$ values themselves shift right,
+so the per-$k$ figures need re-measuring after the re-run. Opened as **AC-9**.
+
+**Consequence for the response letter**: the DAG-level rates may be quoted as
+final; the per-$k$ series should be presented as the mechanism it is, and not in a
+form that a later re-measurement would falsify.
 
 ---
 

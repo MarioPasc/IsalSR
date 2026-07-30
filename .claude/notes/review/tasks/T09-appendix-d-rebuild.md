@@ -12,6 +12,51 @@
 
 ---
 
+## T16 impact — R2.3 is answered here, and the disclosure framing is UNDECIDED (added 2026-07-30)
+
+**R2.3 is delegated to T16 for its substance and returns here for its wording.**
+
+The technical position, which is now true of the code: **Σ_SR and the host operator
+set are different objects.** The host searches over `{+, −, ×, ÷, sin, cos, exp,
+log}`; Σ_SR has twelve labels and no `-` and no `/`, because `−` and `÷` enter the
+representation through the commutative decomposition `x − y = Add(x, Neg(y))` and
+`x / y = Mul(x, Inv(y))`. `Pow` is the only non-commutative operation, which is what
+makes Definition 3.9(iv) sound as written. Nothing in Definition 3.2 needs to change.
+
+**OPEN DECISION — how much of the history to disclose. Not settled; do not assume
+either way when drafting.** The reviewer asked specifically about the relationship
+between Σ_SR and the host operator set, so *some* answer about that relationship is
+unavoidable; what is open is whether the answer also states that the submitted
+implementation diverged from Definition 3.2 and was corrected. Two considerations
+that belong to whoever decides, recorded so the decision is made on facts:
+
+1. **The numbers move visibly.** `k`, canonical string length, canonicalisation cost
+   and ρ all change between the submitted tables and the revision (§ below), and
+   this ticket's own continuity table exists to explain movement. A reader comparing
+   versions will see it.
+2. **Ezequiel's stated rationale for fixing the code at all** (T16 §4) was that
+   TPAMI acceptance obliges publishing the source, and the first thing a reader does
+   is hand the paper and the code to an LLM, which finds a paper/code divergence
+   immediately. That argument bears on disclosure as much as on the fix.
+
+**Numbers this ticket must carry into the continuity table** (measured, n=5000,
+seed 42, C++ engine):
+
+| Quantity | Bingo | UDFS |
+|---|---|---|
+| mean `k` | 5.47 → 6.72 (+22.9 %) | 3.27 → 3.99 (+22.0 %) |
+| mean canonical length | 21.2 → 26.9 (+27 %) | 11.1 → 13.5 (+22 %) |
+| canonicalisation cost | +24.6 % | +10.8 % |
+| ρ (random-population probe) | 1.2960 → 1.2960 (exactly invariant) | 2.1505 → 2.1805 (+1.4 %) |
+
+**R², NRMSE and solution recovery do not move** — fitness is computed by the host on
+the host's own representation. Production ρ magnitudes come from Wave 1, not from
+the probe above.
+
+Full write-up: `docs/md_files/changes/t16_commutative_decomposition.md`.
+
+---
+
 ## 1. Why these are grouped
 
 Five defects, one root cause, stated in `verified-discrepancies.md`:

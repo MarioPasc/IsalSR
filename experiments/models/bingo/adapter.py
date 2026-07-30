@@ -17,6 +17,12 @@ from typing import Any
 
 import numpy as np
 
+from experiments.models.commutative_encoding import (
+    emit_binary,
+    extra_node_budget,
+    new_unary_cache,
+    undecompose,
+)
 from isalsr.core.labeled_dag import LabeledDAG
 from isalsr.core.node_types import BINARY_OPS, NodeType
 
@@ -46,6 +52,10 @@ BINGO_UNARY_OPS: frozenset[int] = frozenset({6, 7, 8, 9, 11, 12})
 BINGO_BINARY_OPS: frozenset[int] = frozenset({2, 3, 4, 5, 10})
 # Bingo terminals (arity 0)
 BINGO_TERMINALS: frozenset[int] = frozenset({0, 1, -1})
+# Bingo binary ops that the commutative decomposition rewrites (T16):
+# 3 = SUBTRACTION -> ADD + NEG, 5 = DIVISION -> MUL + INV.
+# 10 = POWER is deliberately excluded: it has no commutative decomposition.
+BINGO_DECOMPOSABLE_OPS: frozenset[int] = frozenset({3, 5})
 
 
 # ======================================================================
@@ -57,6 +67,9 @@ def agraph_to_labeled_dag(
     agraph: Any,
     const_values: tuple[float, ...] | None = None,
     ledger: Any | None = None,
+    *,
+    decompose: bool = True,
+    share_unary: bool | None = None,
 ) -> LabeledDAG:
     """Convert a Bingo AGraph to an IsalSR LabeledDAG.
 
@@ -66,6 +79,9 @@ def agraph_to_labeled_dag(
     - Unary ops: edge from param1 row
     - Binary ops: edges from param1 (first operand) then param2 (second)
     - Unused rows: filtered via get_utilized_commands()
+    - Commutative decomposition (T16): SUBTRACTION and DIVISION are emitted as
+      ``Add(a, Neg(b))`` and ``Mul(a, Inv(b))``, so the resulting DAG carries only
+      labels from the paper's alphabet.  POWER is left alone.
     - CONST normalization: invariant #9
 
     Args:
@@ -74,6 +90,12 @@ def agraph_to_labeled_dag(
         ledger: Optional FallbackLedger for instrumentation.  When provided,
             ``record_pre`` is called immediately before ``_normalize_const_edges``
             to measure Round-Trip Fidelity precondition violations.
+        decompose: Set false to reproduce the pre-T16 encoding, in which
+            SUBTRACTION and DIVISION map to ``NodeType.SUB`` / ``NodeType.DIV``.
+            Used only for A/B measurement and legacy regression tests.
+        share_unary: Override the module default for reusing a ``Neg``/``Inv``
+            node when the same operand is wrapped more than once. ``None`` uses
+            ``commutative_encoding.SHARE_DECOMPOSED_UNARY``.
 
     Returns:
         IsalSR LabeledDAG.
@@ -99,9 +121,15 @@ def agraph_to_labeled_dag(
 
     m = max(var_indices) + 1 if var_indices else 1
 
-    # Count utilized non-terminal rows for capacity estimate
+    # Count utilized non-terminal rows for capacity estimate. Decomposition adds
+    # one Neg/Inv node per SUBTRACTION/DIVISION row, and add_node raises at the
+    # cap, so the budget must cover them.
     n_utilized = sum(1 for i in range(n_rows) if utilized[i])
-    dag = LabeledDAG(max_nodes=m + n_utilized + 10)
+    n_decomposable = sum(
+        1 for i in range(n_rows) if utilized[i] and int(cmd[i, 0]) in BINGO_DECOMPOSABLE_OPS
+    )
+    dag = LabeledDAG(max_nodes=m + n_utilized + extra_node_budget(n_decomposable, decompose) + 10)
+    unary_cache = new_unary_cache(share_unary)
 
     # Create VAR nodes (one per distinct variable index)
     var_node_map: dict[int, int] = {}  # var_index -> dag node id
@@ -144,28 +172,32 @@ def agraph_to_labeled_dag(
             raise ValueError(f"Unsupported Bingo op code: {op_code}")
 
         node_type = BINGO_OP_TO_ISALSR[op_code]
-        dag_id = dag.add_node(node_type)
-        row_to_node[i] = dag_id
 
         if op_code in BINGO_UNARY_OPS:
             # Unary: edge from param1
+            dag_id = dag.add_node(node_type)
             src = row_to_node.get(param1)
             if src is not None:
                 dag.add_edge(src, dag_id)
         elif op_code in BINGO_BINARY_OPS:
-            # Binary: param1 = first operand, param2 = second operand
-            # Sequential add_edge preserves order via _input_order (invariant B8)
-            src1 = row_to_node.get(param1)
-            src2 = row_to_node.get(param2)
-            if src1 is not None:
-                dag.add_edge(src1, dag_id)
-            if src2 is not None and src2 != src1:
-                dag.add_edge(src2, dag_id)
-            elif src2 is not None and src2 == src1:
-                # Self-referencing (e.g., x+x): edge already added.
-                # For ADD/MUL this is fine (single edge means one input).
-                # For SUB/DIV/POW: x-x=0, x/x=1 are constant expressions.
-                pass
+            # Binary: param1 = first operand, param2 = second operand.
+            # Sequential add_edge preserves order via _input_order (invariant B8).
+            # emit_binary rewrites SUBTRACTION/DIVISION into the commutative
+            # alphabet (T16) and returns the id of the resulting ADD/MUL; POWER,
+            # ADDITION and MULTIPLICATION pass through unchanged, including the
+            # pre-existing single-edge behaviour when param1 == param2.
+            dag_id = emit_binary(
+                dag,
+                node_type,
+                row_to_node.get(param1),
+                row_to_node.get(param2),
+                decompose=decompose,
+                unary_cache=unary_cache,
+            )
+        else:
+            dag_id = dag.add_node(node_type)
+
+        row_to_node[i] = dag_id
 
     # Measure RTF precondition BEFORE repair (violated_pre counts orphan CONSTs).
     if ledger is not None:
@@ -194,13 +226,23 @@ def labeled_dag_to_agraph(dag: LabeledDAG) -> Any:
 
     Builds a topological-ordered command array from the DAG.
 
+    Bingo's opcode table has no ``Neg`` or ``Inv``, so a decomposed DAG is first
+    put back into ``Sub``/``Div`` form (T16). This is the inverse of the
+    decomposition applied by :func:`agraph_to_labeled_dag`.
+
     Args:
-        dag: IsalSR LabeledDAG.
+        dag: IsalSR LabeledDAG, decomposed or not.
 
     Returns:
         Bingo AGraph.
+
+    Raises:
+        ValueError: If the DAG carries a ``Neg``/``Inv`` node that cannot be
+            absorbed back into a ``Sub``/``Div``.
     """
     from bingo.symbolic_regression.agraph.agraph import AGraph
+
+    dag = undecompose(dag)
 
     isalsr_to_bingo: dict[NodeType, int] = {v: k for k, v in BINGO_OP_TO_ISALSR.items()}
 

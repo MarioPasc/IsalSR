@@ -12,6 +12,34 @@ a launch, this file wins; update the ticket.
 - **Gray is secondary** and reserves no queue capacity. See Wave 4.
 - **Nothing launches as an array until the certification gate in §2 passes.**
 
+**Amendment 2026-07-30 (T16) — the IsalSR arm needs a FULL re-run, on the corrected
+alphabet.**
+
+Every IsalSR number in the submitted paper was produced under the **wrong
+alphabet**. The paper's Σ_SR (Definition 3.2) has twelve labels and **no `-` and no
+`/`**: subtraction and division are supposed to enter through the commutative
+decomposition `x − y = Add(x, Neg(y))`, `x / y = Mul(x, Inv(y))`, leaving `Pow` as
+the only non-commutative operation. The adapters emitted `Sub` and `Div` as
+primitive node types anyway, and **61.1 % of production candidates contain them**.
+Ezequiel's decision (T16 §4) is to align the *code* to the paper, because TPAMI
+acceptance obliges us to publish the source and a paper/code divergence is the
+first thing any reader's LLM will find.
+
+**Consequence for this plan: none on the budget, everything on the gate.** Wave 1
+already re-runs IsalSR on all of `S50` and Wave 2 on `EXT`, so the corrected
+alphabet adds **zero** additional runs — `S50 + EXT` was already the scope. What
+changes is that **Wave 1 must launch against the corrected adapter**, and that the
+IsalSR arm now has *two independent reasons* its submitted numbers are void: the
+C++ engine change (T02) and the alphabet correction (T16). The `baseline` arm is
+still not re-run on `S50` (§5) and that remains sound — **the baseline never invokes
+the adapter**, so the alphabet correction cannot touch it.
+
+The quantities that move are `k`, canonical string length, ρ and the reduction
+factor, canonicalisation cost, and every k-stratified table. Fitness and every
+fitness-derived metric (R², NRMSE, solution recovery) do **not** move: fitness is
+computed by the host on the host's own representation and the runners cache
+`canon_hash -> fitness` without ever calling `evaluate_dag`. See T16 §6.
+
 ---
 
 ## 1. Notation
@@ -50,6 +78,7 @@ Every condition must hold, with evidence, before Wave 1:
 | G6 | `sbatch --test-only` passes | exit 0 |
 | G7 | **One** real task submitted (`--array=1-1`), completed, log read, output validated | the single most valuable 12 h of the campaign |
 | G8 | `MANIFEST.json` writes correctly: git commit, build hash, compiler flags, node CPU, engine, config hash, seed | inspect the file from G7 |
+| G9 | **T16 alphabet.** The adapter being synced emits **no** `NodeType.SUB` and **no** `NodeType.DIV`, and no canonical string contains `-` or `/`. Assert on the G7 task's own candidate stream, not only in unit tests. Run `bash slurm/alphabet_gate/launcher.sh` (~90 s) | a zero count from the real run; a non-zero count means Wave 1 is measuring the wrong alphabet and every ρ it produces is void. **PASSED on Picasso 2026-07-30, job 1692451**, CPU node, native C++ engine confirmed: 5,551 / 5,551 / 225 / 461 DAGs across `bingo_nguyen`, `bingo_hard`, `udfs_nguyen`, `udfs_hard`; `POW` present only in `bingo_hard`; zero forbidden labels. **Re-run against the exact Wave-1 commit** |
 
 G7 is not optional and is not parallelisable with the full launch. Everything that
 only appears on a compute node — module differences, dataset paths, permissions,
@@ -74,6 +103,7 @@ re-running 3,000 jobs to recover a counter.
 | **T06** | The **instrumentation half only** (§4.1 counters for the five fallback paths) — not the analysis, not the write-up | R1.2 wants violation rates on the DAGs *arriving at the canonicaliser during real searches*. That population exists only while Wave 1 runs. Miss it and the only way back is a second campaign. |
 | **T08** | The **root-cause half only** (§5.1) — why Bingo–IsalSR produced NaN on Vlad-2 / Korns-12 and why 35 Bingo cells were missing. Plus any *runtime* fix it implies (memory profile, the B12 clone path) | If the cause is still live, Wave 1 reproduces it at full scale. The analyzer-side fixes (NaN-as-winner, NaN policy in the paired test) are post-hoc and are **not** blocking. |
 | **T02** | §5.3 MANIFEST schema, frozen | Written by the runs themselves. A field added afterwards is a field you do not have. |
+| **T16** | The **adapter decomposition** (`experiments/models/commutative_encoding.py` + both adapters). Implementation and validation complete 2026-07-30 | The alphabet is baked into every candidate the run canonicalises. Launching Wave 1 on the old adapter means re-running all 3,000 jobs, and — worse — the error is invisible in the logs, so it would only surface during September analysis. |
 
 ### Three engineering checks that are nobody's ticket but will bite
 
@@ -106,6 +136,11 @@ re-running 3,000 jobs to recover a counter.
 
 **3,000 runs, 2 arrays.** The `baseline` arm is **not** re-run here (§5) — its March
 numbers stand and are paired against these.
+
+**Runs the T16-corrected adapter.** Every candidate is canonicalised under the
+paper's alphabet: no `Sub`, no `Div`, `Pow` the only non-commutative operation.
+This is gate G9 and it is checked on the G7 task's real candidate stream, not only
+in unit tests.
 
 Carries the measurement add-ons required by T06 (reachability and fallback
 counters). **Verify at G3 that they do not perturb the timings T10 depends on** — if
@@ -186,11 +221,14 @@ not early stopping, it is the protocol.
 
 ## 5. SETTLED — the `baseline` arm is **not** re-run on S50
 
-**Decision taken 2026-07-27 (Mario).** The `baseline` code path is untouched by the
-C++ port, so its S50 numbers do not change and re-running them buys nothing worth
-36,000 core-hours. Only two things get fresh compute: **IsalSR** (full re-run) and
-the **naive hash dedup** arm (fresh full run). Baseline runs only on `EXT`, where no
-prior data exists.
+**Decision taken 2026-07-27 (Mario), reconfirmed 2026-07-30 against T16.** The
+`baseline` code path is untouched by the C++ port **and by the T16 alphabet
+correction** — it never invokes the adapter at all — so its S50 numbers do not
+change and re-running them buys nothing worth 36,000 core-hours. Only two things get
+fresh compute: **IsalSR** (full re-run of `S50 + EXT`, now for two independent
+reasons: the C++ engine and the corrected alphabet) and the **naive hash dedup** arm
+(fresh full run, on decomposed DAGs — T16 §5.2). Baseline runs only on `EXT`, where
+no prior data exists.
 
 ### The residual confound — characterise it, do not ignore it
 

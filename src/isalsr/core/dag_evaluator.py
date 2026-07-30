@@ -160,9 +160,21 @@ def _apply_variadic(label: NodeType, xs: list[float]) -> float:
 def _protected_inv(x: float) -> float:
     """Protected multiplicative inverse: 1/x if |x| > epsilon, else 1.0.
 
-    Semantically equivalent to ``_protected_div(1.0, x)`` -- same epsilon
-    threshold (1e-10) and fallback value (1.0).  This guarantees that
-    ``MUL(a, INV(b))`` evaluates identically to ``DIV(a, b)`` for all b.
+    Equal to ``_protected_div(1.0, x)`` -- same epsilon threshold (1e-10) and
+    same fallback value (1.0).
+
+    ``MUL(a, INV(b))`` therefore equals ``DIV(a, b)`` **only outside the guarded
+    regime**.  When ``|b| <= 1e-10`` the two disagree: ``DIV(a, b)`` returns
+    ``1.0`` while ``MUL(a, INV(b))`` returns ``a * 1.0 = a``, and these coincide
+    only for ``a == 1``.  No multiplicative guard can make them agree, since the
+    ``DIV`` fallback discards ``a`` and the ``MUL`` form cannot.
+
+    This matters for the commutative decomposition of ticket T16, which rewrites
+    ``Div(a, b)`` as ``Mul(a, Inv(b))`` at the adapter boundary.  It does **not**
+    affect any reported number: fitness is computed by the host on the host's own
+    representation, and the runners cache ``canon_hash -> fitness`` without ever
+    calling ``evaluate_dag``.  Both hosts use unguarded division anyway, so both
+    IsalSR forms already differ from the host inside the guard.
     """
     if abs(x) > 1e-10:
         return 1.0 / x

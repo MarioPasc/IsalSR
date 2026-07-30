@@ -21,8 +21,13 @@ if _vendor_dir not in sys.path:
 
 from DAG_search.comp_graph import CompGraph  # noqa: E402
 
-from isalsr.core.labeled_dag import LabeledDAG
-from isalsr.core.node_types import NodeType
+from experiments.models.commutative_encoding import (  # noqa: E402
+    emit_binary,
+    extra_node_budget,
+    new_unary_cache,
+)
+from isalsr.core.labeled_dag import LabeledDAG  # noqa: E402
+from isalsr.core.node_types import NodeType  # noqa: E402
 
 # ======================================================================
 # Operation mapping: UDFS -> IsalSR
@@ -53,6 +58,12 @@ UDFS_OP_TO_ISALSR: dict[str, NodeType] = {
 # "first add_edge = first operand" convention.
 REVERSED_OPS = frozenset({"sub_r", "div_r"})
 
+# UDFS ops the commutative decomposition rewrites (T16). Both orientations of
+# each appear, because UDFS's search always samples every op in
+# ``config.NODE_ARITY`` -- the YAML ``operator_set`` key does not restrict it
+# (``vendor/DAG_search/dag_search.py:1226-1227``).
+UDFS_DECOMPOSABLE_OPS: frozenset[str] = frozenset({"sub_l", "sub_r", "div_l", "div_r"})
+
 ISALSR_TO_UDFS_OP: dict[NodeType, str] = {
     NodeType.ADD: "+",
     NodeType.MUL: "*",
@@ -77,6 +88,9 @@ def compgraph_to_labeled_dag(
     cg: CompGraph,
     const_values: Any = None,
     ledger: Any | None = None,
+    *,
+    decompose: bool = True,
+    share_unary: bool | None = None,
 ) -> LabeledDAG:
     """Convert a UDFS CompGraph to an IsalSR LabeledDAG.
 
@@ -85,6 +99,9 @@ def compgraph_to_labeled_dag(
     - Constant nodes [m, m+k) → CONST nodes
     - Identity nodes ('=') → collapsed (mapped to their child)
     - sub_r/div_r → reversed operand order
+    - Commutative decomposition (T16): all four of sub_l/sub_r/div_l/div_r are
+      emitted as ``Add(a, Neg(b))`` / ``Mul(a, Inv(b))`` **after** the orientation
+      is resolved, so the label carries no operand order.
     - Edge direction: UDFS children → node matches IsalSR source → target
 
     Args:
@@ -93,6 +110,12 @@ def compgraph_to_labeled_dag(
         ledger: Optional FallbackLedger for instrumentation.  When provided,
             ``record_pre`` is called immediately before ``_normalize_const_edges``
             to measure Round-Trip Fidelity precondition violations.
+        decompose: Set false to reproduce the pre-T16 encoding, in which
+            sub_l/sub_r map to ``NodeType.SUB`` and div_l/div_r to
+            ``NodeType.DIV``. Used only for A/B measurement and legacy tests.
+        share_unary: Override the module default for reusing a ``Neg``/``Inv``
+            node when the same operand is wrapped more than once. ``None`` uses
+            ``commutative_encoding.SHARE_DECOMPOSED_UNARY``.
 
     Returns:
         IsalSR LabeledDAG.
@@ -100,7 +123,15 @@ def compgraph_to_labeled_dag(
     m = cg.inp_dim
     k = cg.n_consts
 
-    dag = LabeledDAG(max_nodes=len(cg.node_dict) + 10)
+    # Decomposition adds one Neg/Inv node per sub_*/div_* node, and add_node
+    # raises at the cap, so the capacity estimate must cover them.
+    n_decomposable = sum(
+        1 for _children, op in cg.node_dict.values() if op in UDFS_DECOMPOSABLE_OPS
+    )
+    dag = LabeledDAG(
+        max_nodes=len(cg.node_dict) + extra_node_budget(n_decomposable, decompose) + 10
+    )
+    unary_cache = new_unary_cache(share_unary)
 
     # udfs_id -> isalsr_id (or None if collapsed)
     node_map: dict[int, int] = {}
@@ -137,18 +168,35 @@ def compgraph_to_labeled_dag(
             raise ValueError(f"Unsupported UDFS operation: {op!r}")
 
         node_type = UDFS_OP_TO_ISALSR[op]
-        isalsr_id = dag.add_node(node_type)
-        node_map[udfs_id] = isalsr_id
 
-        # Determine child order
+        # Determine child order. sub_r(a,b) = b - a and div_r(a,b) = b / a, so
+        # reversing here makes ordered_children[0] the *numerator* / minuend in
+        # every case, which is what both the SUB/DIV encoding and the
+        # decomposition below assume.
         ordered_children = list(children)
         if op in REVERSED_OPS:
             ordered_children = list(reversed(ordered_children))
 
-        # Add edges: child → new node (preserving operand order)
-        for child_udfs in ordered_children:
-            child_isalsr = _resolve(node_map, child_udfs)
-            dag.add_edge(child_isalsr, isalsr_id)
+        resolved = [_resolve(node_map, child_udfs) for child_udfs in ordered_children]
+
+        if decompose and op in UDFS_DECOMPOSABLE_OPS and len(resolved) == 2:
+            # emit_binary returns the id of the resulting ADD/MUL, which is what
+            # downstream consumers of this node must read.
+            isalsr_id = emit_binary(
+                dag,
+                node_type,
+                resolved[0],
+                resolved[1],
+                decompose=True,
+                unary_cache=unary_cache,
+            )
+        else:
+            isalsr_id = dag.add_node(node_type)
+            # Add edges: child → new node (preserving operand order)
+            for child_isalsr in resolved:
+                dag.add_edge(child_isalsr, isalsr_id)
+
+        node_map[udfs_id] = isalsr_id
 
     # Measure RTF precondition BEFORE repair (violated_pre counts orphan CONSTs).
     if ledger is not None:

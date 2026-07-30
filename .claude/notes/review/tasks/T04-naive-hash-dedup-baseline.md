@@ -12,6 +12,30 @@
 
 ---
 
+## T16 impact — the hash must serialise **decomposed** DAGs (added 2026-07-30)
+
+T16 moved the adapters to the paper's alphabet: `Sub` and `Div` are rewritten to
+`Add(a, Neg(b))` and `Mul(a, Inv(b))` at the host→`LabeledDAG` boundary, leaving
+`Pow` as the only non-commutative operation.
+
+**Requirement: this arm must hash the same object IsalSR canonicalises.** If the
+naive serialisation is built over undecomposed DAGs while the IsalSR arm
+canonicalises decomposed ones, the comparison answering R1.4 is run on two different
+representations and is meaningless.
+
+**This is satisfied by construction, and there is nothing to do — provided you build
+on the adapters.** The decomposition lives *inside* `agraph_to_labeled_dag` and
+`compgraph_to_labeled_dag`, so every consumer inherits it. Do not construct
+`LabeledDAG`s by any other route for this arm. Verified 2026-07-30: no T04 code
+exists yet, so this is recorded as a constraint on the implementation rather than a
+check already performed.
+
+Note also that `k` grows ~22 % under decomposition, so any fixed-width or
+capacity-bounded serialisation must be sized against the **new** `k` distribution
+(Bingo mean 5.47 → 6.72, p95 11 → 15).
+
+---
+
 ## 1. Why this is its own ticket
 
 R1.4 is the heaviest single request in the round and the one most likely to decide

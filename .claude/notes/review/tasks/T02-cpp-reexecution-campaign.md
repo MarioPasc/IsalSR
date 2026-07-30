@@ -12,6 +12,44 @@
 
 ---
 
+## T16 impact — Wave 1 must run the corrected alphabet (added 2026-07-30)
+
+**This is now a launch blocker, and it is invisible in the logs if you get it wrong.**
+
+T16 found that the adapters emitted `Sub` and `Div` as primitive node types, while
+the paper's Σ_SR (Definition 3.2) has twelve labels and **no `-` and no `/`** —
+subtraction and division are supposed to enter through `x − y = Add(x, Neg(y))` and
+`x / y = Mul(x, Inv(y))`, leaving `Pow` as the only non-commutative operation.
+**61.1 % of production candidates carried the wrong labels.** The fix
+(`experiments/models/commutative_encoding.py`, applied inline inside both adapters)
+is implemented and validated.
+
+**Why it does not change this ticket's budget.** Wave 1 already re-runs IsalSR on all
+of `S50` and Wave 2 on `EXT`, so the corrected alphabet adds **zero** runs. What
+changes is *which code* Wave 1 executes. The IsalSR arm now has **two independent
+reasons** its submitted numbers are void — the C++ engine and the alphabet. The
+`baseline` arm is untouched, because it never invokes the adapter.
+
+**What moves, and therefore what the continuity table (§5) must explain.** `k`
+(+22.9 % Bingo, +22.0 % UDFS), canonical string length (+27 % / +22 %),
+canonicalisation cost (+24.6 % / +10.8 %), ρ, and every k-stratified table. Fitness
+and everything derived from it — R², NRMSE, solution recovery — do **not** move,
+because fitness is computed by the host on the host's own representation and the
+runners cache `canon_hash → fitness` without ever calling `evaluate_dag`.
+
+**Gate G9** in `EXECUTION-PLAN.md` §2 is the check: run
+`experiments/scripts/verify_alphabet_gate.py` against the G7 single task's real
+candidate stream and confirm zero `Sub`/`Div` nodes, zero `-`/`/` characters in any
+canonical string, and `Pow` as the only order-sensitive binary operation. It passed
+locally on all 10 production configs (~130,000 DAGs). Do not accept unit tests as
+evidence here — the production path runs through the orchestrator, the runner, the
+monkey-patched evaluation hook and the deduplicator before a DAG reaches the
+canonicaliser.
+
+Full write-up: `docs/md_files/changes/t16_commutative_decomposition.md`.
+
+---
+
 ## 1. Why this ticket exists and why it is separate from T01
 
 T01 proves the C++ engine computes the same canonical strings. This ticket spends

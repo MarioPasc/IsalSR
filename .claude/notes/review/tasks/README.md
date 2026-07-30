@@ -64,19 +64,28 @@ the frozen MANIFEST schema, and checks P1–P3** — see `EXECUTION-PLAN.md` §2
 |---|---|---|---|
 | [T07](T07-theorem-foundation.md) | Complete the formal foundation of Theorem 3.15 | Ezequiel + Mario | **R2.1**, **R1.3** |
 | [T15](T15-d2s-failure-modes.md) | D2S failure modes: the 6 counterexamples + failure rate on real data | Mario + Ezequiel | feeds R1.2, R2.1 |
-| [T16](T16-alphabet-mismatch.md) | Σ_SR as defined vs as implemented: `Sub`/`Div` | Mario + Ezequiel | **R2.3** (reframes it) |
+| [T16](T16-alphabet-mismatch.md) | Σ_SR as defined vs as implemented: `Sub`/`Div` — **IMPLEMENTED + VALIDATED 2026-07-30**; blocks T02 Wave 1 via gate G9 | Mario + Ezequiel | **R2.3** (reframes it), **R2.2** (substance) |
 
-> **T16 opened 2026-07-29** from a T07 finding. The paper's Σ_SR (Def 3.2) has
-> **12 labels and no `-` or `/`** — subtraction and division are supposed to go
-> through the commutative encoding `Add`+`Neg` / `Mul`+`Inv`. The adapters emit
-> `NodeType.SUB`/`DIV` anyway, and **61.1 % of production Bingo candidates
-> contain them**. So the implemented alphabet is 14 labels / 35 tokens against
-> the stated 12 / 31, and Def 3.9(iv) — sound for the declared alphabet — is
-> unsound for the implemented one, falsifying Theorem 3.15's (⇐) direction on a
-> three-node example. **No reported number is wrong; the description is.**
-> Mario's chosen direction is to align the *code* to the paper, which implies a
-> **full re-execution** — so this must be settled **before T02 Wave 1 launches**.
-> Reframes **R2.3** from a presentational item into a specification gap.
+> **T16 opened 2026-07-29** from a T07 finding, **RESOLVED AND IMPLEMENTED
+> 2026-07-30**. The paper's Σ_SR (Def 3.2) has **12 labels and no `-` or `/`** —
+> subtraction and division go through the commutative encoding `Add`+`Neg` /
+> `Mul`+`Inv`, leaving `Pow` as the only non-commutative operation. The adapters
+> emitted `NodeType.SUB`/`DIV` anyway, on **61.1 % of production candidates**, so
+> the implemented alphabet was 14 labels / 35 tokens against the stated 12 / 31.
+> **No reported number was wrong; the description was.**
+>
+> **Fixed by aligning the code to the paper** (Ezequiel's decision, T16 §4):
+> `experiments/models/commutative_encoding.py` decomposes inline inside both
+> adapters. Verified on all 10 production configs over ~130,000 real candidates —
+> zero `Sub`/`Div`, zero `-`/`/` in any canonical string, `Pow` the only
+> order-sensitive binary op. Round-trip and completeness 100 %; reachability
+> invariant at DAG level (`FP=FN=0`); ρ exactly invariant on Bingo and **+1.4 % on
+> UDFS**, because host-native `neg`/`inv` now unify with decomposed ones.
+> **Costs zero extra compute** — Wave 1 already re-ran IsalSR on all of `S50`; only
+> *which code* it runs changed. Gate **G9** in `EXECUTION-PLAN.md` enforces it.
+> Closes the substance of **R2.3** and of **R2.2** (T11 should harmonise onto
+> `{g,i}`). **The disclosure framing for the response letter is still OPEN — see
+> T09.** Write-up: `docs/md_files/changes/t16_commutative_decomposition.md`.
 
 > **T15 opened 2026-07-27** from a T01 finding. `fast_canonical_string` raises on
 > 0.15 % of random DAGs; the exhaustive canonicaliser fails identically, so it is
@@ -120,7 +129,7 @@ Every one of the 15 numbered comments is covered exactly once.
 | R1.4 — no naive hash-dedup baseline | T04 |
 | R1.5 — writing pass | T12 |
 | R2.1 — Lemma A.2 proof terse | T07 |
-| R2.2 — `{g,i}` vs `{−,/}` across documents | T11 |
+| R2.2 — `{g,i}` vs `{−,/}` across documents | T11 (substance resolved by **T16** — the code now genuinely uses `{g,i}`, so harmonise onto it) |
 | R2.3 — Σ_SR vs host operator set | **T16** (reframed 2026-07-29 from a presentational item; T09 defers to it) |
 | R2.4 — "Table 4 of the main document" does not exist | T11 |
 | R2.5 — Feynman counts 20 / 10 / 24 | T09 |
