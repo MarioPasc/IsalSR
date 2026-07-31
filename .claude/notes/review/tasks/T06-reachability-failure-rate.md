@@ -7,8 +7,57 @@
 | Owner | **Mario** (+ Claude Code) |
 | Depends on | T01 (instrument the engine once), T07 (must agree on what the precondition *is*) |
 | Blocks | T09 (a supplementary subsection), T10 |
-| Status | **COMPLETE for the measurement it was opened to make.** AC-0…AC-8 all met; **AC-7 closed 2026-07-29 by T07** (precondition statement confirmed unchanged). The EXECUTION-PLAN §2b instrumentation half is done, so Wave 1 is not gated by this ticket. **One new dependency, 2026-07-30: T16 Branch B.** The DAG-level rates this ticket reports are argued to be *invariant* under the alphabet decomposition and stand as published; only the `k`-stratification needs re-measuring afterwards (new AC-9). **R1.2's response letter answer is being drafted now and may use the DAG-level rates as final.** |
-| Target | 2026-08-24 |
+| Status | **CLOSED.** AC-0…AC-8 met; **AC-7 closed 2026-07-29 by T07**; **AC-9 satisfied 2026-07-30** (T16 invariance measured, not argued). **Not a launch blocker and needs no agent.** The counter re-verification lives in T02 as `EXECUTION-PLAN.md` §4.2 check **B9**; this ticket only supplies its threshold (AC-10, advisory). **R1.2's response letter answer may use the DAG-level rates as final.** |
+| Target | AC-10 threshold to T02 before its Stage B (≈2026-08-18) · `k`-stratification refresh after C2, 2026-09-05 |
+
+---
+
+## ⛔ Amendment 2026-07-31 — terminology remap and one new obligation
+
+`EXECUTION-PLAN.md` was rewritten on 2026-07-31 and is authoritative. **There are no
+waves.** Wherever this ticket says "Wave 1" — including in the historical work-log
+entries below, which are left as written because they are a record of what happened —
+read **Campaign C2**, a single gated launch:
+
+```
+{ baseline , hash , isalsr } × { UDFS , Bingo } × ( D1 ∪ D2 ) × 20 seeds
+    = 8,400 runs, 6 arrays, one campaign root
+```
+
+Two consequences specific to this ticket:
+
+1. **The `k`-stratification refresh now draws on C2's `isalsr` **and** `hash` arms**,
+   over ≈70 problems at 20 seeds — a larger and better-specified population than the
+   old Wave 1 would have given. §7.3's two host rows, currently from single 60 s
+   searches, are refreshed from C2 (the standing note under §7.3 still applies).
+2. **The sampling rate is now a launch-blocking configuration item**, not a deferred
+   one. It is baked into every run and cannot be recovered post-hoc.
+
+### AC-10 (advisory) — supply the threshold for T02's check B9. **Do not spawn an agent for this.**
+
+**This ticket is closed and stays closed.** It is **not** a launch blocker and needs
+no further Picasso work of its own. The one live concern — that T06's instrumentation
+was measured under conditions which have since changed underneath it (the **C++ engine**
+from T01 and the **decomposed alphabet** from T16 both landed afterwards, so a counter
+that was live and cheap in July is not thereby live and cheap on the launch commit) —
+is a **certification** question, not a measurement question. It therefore belongs to
+the pre-flight gate, and it is filed there as **`EXECUTION-PLAN.md` §4.2 check B9**,
+executed by T02 alongside its other micro-jobs.
+
+**The split:**
+
+| Who | What |
+|---|---|
+| **T06** (this ticket, ~15 min of Mario's time, no agent) | State the **pass threshold**: the maximum instrumentation overhead, as a percentage of per-DAG canonicalisation cost, that T10's break-even analysis can absorb. Then read B9's result |
+| **T02** | Run the probe (both hosts, frozen commit, production sampling rate) and report against that threshold. Also re-checked at scale as Stage C criterion **C1.9** on all 140 `isalsr` tasks |
+
+**T06 reopens only if B9 fails.** In that case the remedy is this ticket's: pull the
+counters out of C2 and characterise the violation rates in a separate subsampled run
+instead. A violation *rate* does not need the full campaign; a paired *timing* does.
+
+**What genuinely remains in this ticket** is post-hoc and non-blocking: the
+`k`-stratification refresh from C2's `isalsr` and `hash` arms (§7.3's two host rows,
+currently from single 60 s searches), plus the AC-9 note above. Both wait for results.
 
 ---
 
@@ -33,7 +82,7 @@ counted as violating through `b`. Hence the verdict never flips while the count 
 100 % (UDFS), 0 % (S2D corpus and synthetic), `violated_post = 0`. **AC-9 is
 satisfied.** R1.2's answer may quote them as final.
 
-**Still to redo after Wave 1**: the `k`-stratification only. `k` shifts right by
+**Still to redo after C2**: the `k`-stratification only. `k` shifts right by
 ~22 % (Bingo mean 5.47 → 6.72, p95 11 → 15; UDFS 3.27 → 3.99), so every per-`k`
 figure changes even though the aggregate does not.
 

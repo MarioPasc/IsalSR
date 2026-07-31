@@ -6,9 +6,78 @@
 | Type | Justification + new experiment |
 | Owner | **Mario** (+ Claude Code) for the experiments · **Karl** for the written justification |
 | Depends on | T02 (protocol and infrastructure) |
-| Blocks | T09 (Appendix D tables), T13 (page budget) |
+| Blocks | **Campaign C2 — this ticket gates the launch** · T09 (Appendix D tables), T13 (page budget) |
 | Status | NOT STARTED |
-| Target | problem definitions 2026-08-17 · results 2026-09-08 |
+| Target | **problem definitions 2026-08-17 — this is a hard launch gate, every day late costs ≈7,200 core-hours of headroom** · results 2026-09-03 |
+
+---
+
+## ⛔ Amendment 2026-07-31 — read before doing anything on this ticket
+
+**There is no "Wave 2". D2 launches simultaneously with D1, and this ticket gates
+that launch.**
+
+`EXECUTION-PLAN.md` was rewritten on 2026-07-31 and is authoritative. Campaign C2 is
+a single gated launch over the union of both suites:
+
+```
+{ baseline , hash , isalsr } × { UDFS , Bingo } × ( D1 ∪ D2 ) × 20 seeds
+```
+
+| Was | Is |
+|---|---|
+| Wave 2, `EXT`, 2 arms × 2 methods × ≈20 problems × 30 seeds = 2,400 runs, launches after Wave 1 and must not delay it | **D2 is part of C2**: **3** arms × 2 methods × ≈20 problems × **20 seeds = 2,400 runs**, launched together with D1 |
+| "Wave 2 must not delay Wave 1. If the problem definitions are not ready when the C++ gate passes, Wave 1 launches on S50 alone" | **Superseded. This ticket now delays everything.** The gated-launch decision (§0.4b) was taken deliberately: one commit, one build, one node pool, one alphabet across all 70 problems |
+| 30 seeds | **20 seeds.** §6.3 and the boxed note in §0.4 |
+| CPDT at N = 50 and N ≈ 70 | unchanged, and now the *only* seed-count-sensitive claim you need to think about — see below |
+
+**Why the schedule pressure is real:** `EXECUTION-PLAN.md` §8.2. A gated launch at
+2026-08-20 needs ≈300 concurrent cores to finish by 2026-09-03. Every day this ticket
+slips is ≈7,200 core-hours of headroom the campaign does not get back. If D2 cannot
+be ready, the trade is **"Strogatz only, 14 problems"** (§8.3 item 2) — *not* delaying
+the launch.
+
+**Interaction with §5's statistical hazard, and it cuts your way.** C2 drops from 30
+to 20 seeds, which weakens the *per-problem* supplementary tests, while this ticket
+raises `N` from 50 to ≈70, which strengthens **CPDT**, the primary metric. The
+response letter must present these together, in one paragraph, as a deliberate trade:
+*more problems, fewer seeds per problem, primary metric strengthened, supplementary
+tests weakened, both reported.* Do not let the two changes be announced in separate
+places where a reviewer can read the seed reduction as a concession and the problem
+increase as unrelated. The pre-registration requirement in §5.1 becomes *more*
+important, not less, for exactly this reason.
+
+### 🚫 This ticket does not submit the campaign
+
+**`EXECUTION-PLAN.md` §4.0 SP-0 is binding.** No agent working this ticket submits C2
+or any D2 production array. Everything submitted here is a **probe**: `max_time
+≤ 1,800 s` (30 min), ≤ 60 tasks, **seed 0 only**, output to `~/execs/isalsr/t05_*/`,
+never the campaign root.
+
+**Before trusting any Picasso result from this ticket, establish SP-1…SP-6**
+(`EXECUTION-PLAN.md` §4.0) and report them as a six-row table in the work log:
+provenance; **installation freshness** (site-packages `.so` mtime post-dates the last
+C++ edit; `pip install -e . --force-reinstall --no-deps`, **never**
+`--no-build-isolation`); engine `native` **with the forced-Python negative control**;
+alphabet clean on the probe's own candidate stream; **UDFS and Bingo both**; T06's
+five fallback counters live and finite.
+
+**SP-7 for this ticket** — what a T05 probe must establish, on a ≤30-minute run, on
+**both hosts**, for **every** D2 problem:
+
+1. The dataset **loads on Picasso** — path resolvable from a compute node, not just
+   locally — with the **expected train/test shapes** asserted against the benchmark
+   registry. Per-problem sampling protocols are not typos; do not "fix" them.
+2. A `sympy_expression` ground truth is present, so `solution_recovered` is actually
+   **computable**. This is the historic gap (AC-4) and it is invisible until analysis.
+3. The run completes 30 minutes on both hosts **without crashing**, and produces a
+   `run_log.json` that parses and validates against the full RunLog schema.
+4. The **declared operator set** is what actually ran (check A4b: for a fixed
+   `(method, problem)` the operator set must be identical across all three arms).
+5. No NaN or inf in any regression metric on any D2 problem.
+
+These five are precisely Stage C's criteria C1.1–C1.5 restricted to D2, so passing
+them here is not duplicated work — it de-risks Stage C before 420 tasks depend on it.
 
 ---
 
@@ -79,8 +148,10 @@ quantitative core of the answer to R3.1 and it does not currently exist anywhere
 
 ## 4. Mandatory reading
 
-- `.claude/notes/review/tasks/EXECUTION-PLAN.md` — Wave 2; the certification gate
-  applies here too
+- `.claude/notes/review/tasks/EXECUTION-PLAN.md` — **read first.** §0.4 (campaign
+  shape and the 20-seed decision), §4.0 (SP-0…SP-7 Picasso discipline), §4.3 Stage C
+  (whose criteria C1.1–C1.5 this ticket must satisfy for D2), §6.2–6.3 (CPDT at both
+  N, and the seed trade), §8.3 (the Strogatz-only escape hatch)
 - `.claude/notes/review/source/reviewer-3.md` — the whole file, including the note
   that R3's B2 credits the paper with the *preprint's* intrinsic-property experiments
 - `.claude/notes/review/source/reviewer-1.md` — the opening assessment (protocol endorsement)
@@ -138,18 +209,20 @@ Requirements:
    and a unit-test file mirroring `tests/unit/test_roundoff_benchmarks.py`.
 5. **Configs and launcher** following the `roundoff_launch.sh` pattern. Use the
    `picasso-sbatch` skill. Do **not** reuse `srbench.yaml`.
-6. **Run** as **Wave 2** in `EXECUTION-PLAN.md`: same protocol as T02 (12 h budget,
-   30 seeds, both methods, both arms), launched **into the same campaign root and
-   MANIFEST as Wave 1** so provenance stays single-rooted. Both `baseline` and
-   `isalsr` run here regardless of how the open baseline question in
-   `EXECUTION-PLAN.md` §5 resolves — these problems have no prior data at all.
+6. **Run as part of Campaign C2** — not as a separate wave. D2 is simply the second
+   half of the problem list in all six arrays: same 12 h budget, **20 seeds**, both
+   methods, **all three arms** (`baseline`, `hash`, `isalsr`), one campaign root, one
+   MANIFEST, one commit, one build. The `hash` arm covers these problems here, not in
+   a later campaign.
 
-   **Wave 2 must not delay Wave 1.** If the problem definitions are not ready when
-   the C++ gate passes, Wave 1 launches on S50 alone and Wave 2 follows. Splitting
-   the launch does not split the provenance provided the root, the engine build and
-   the configs are identical; record the split in the MANIFEST.
+   ≈20 problems × 3 arms × 2 methods × 20 seeds = **≈2,400 runs**, ≈28,800 core-hours,
+   inside C2's 100,800.
 
-   The `hash` arm covers these problems in Wave 3 (T04), not here.
+   **This ticket gates the launch** (§0.4b). If D2 is not ready, the campaign does not
+   go out. The escape hatch is scope, not schedule: **Strogatz only, 14 problems**
+   (`EXECUTION-PLAN.md` §8.3 item 2), which preserves the "SRBench ground-truth track
+   is now covered" claim and costs the Feynman-remainder half of the R3.1 answer.
+   Take that trade rather than delaying, and record it in §8.
 7. **Analyse**: full pipeline, CPDT at both N values, and a per-tier breakdown so a
    reader can see the extension did not simply dilute the suite.
 
@@ -165,8 +238,14 @@ Requirements:
   hash recorded in §8.
 - **AC-4.** New benchmark module(s) implemented with unit tests passing; ground-truth
   sympy expressions present so solution recovery is computable for every added problem.
-- **AC-5.** Campaign complete or every missing run accounted for.
-- **AC-6.** CPDT reported at N = 50 and N ≈ 70, per method, per metric.
+- **AC-4b.** SP-1…SP-6 reported as a six-row table for every Picasso probe this
+  ticket ran, and SP-7's five statements established for **every** D2 problem on
+  **both hosts** before the definitions were declared launch-ready.
+- **AC-5.** D2's share of C2 complete (≈2,400 runs) or every missing run accounted
+  for in the status ledger.
+- **AC-6.** CPDT reported at N = 50 and N ≈ 70, per method, per metric — **at 20
+  seeds throughout**. The seed reduction and the `N` increase are presented together
+  as one deliberate trade (see the 2026-07-31 amendment), not in separate places.
 - **AC-7.** Per-tier breakdown produced; the extension's effect on the headline is
   stated without softening, including if it is negative.
 - **AC-8.** Every added problem is documented in the revised Appendix D.1 with
