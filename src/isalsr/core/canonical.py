@@ -340,13 +340,22 @@ def fast_canonical_string(
         )
         mode = "wl_tiebreak" if use_wl_hash else "tuple_only"
 
-    # Resolve backend: None → DEFAULT_BACKEND (cpp if available, python otherwise).
+    # Resolve backend: None → backends.engine(), which applies the documented
+    # resolution order (1. ISALSR_ENGINE env var, 2. DEFAULT_BACKEND).
+    #
+    # Reading DEFAULT_BACKEND directly here was a defect: it bypassed the
+    # ISALSR_ENGINE override, so `ISALSR_ENGINE=python` made engine() and
+    # build_info() report "python" while this function kept dispatching to C++.
+    # That is the exact SP-3 / pre-flight-B2 failure mode -- a negative control
+    # that reports the forced engine while silently running the other one passes
+    # while proving nothing.  Any "check both backends" sweep driven by the env
+    # var rather than an explicit backend= kwarg was testing C++ twice.
     # The C++ path only supports wl_only mode; all other modes fall back to Python.
     from isalsr.core import backends as _backends  # lazy to avoid circular import
 
     resolved_backend: str
     if backend is None:
-        resolved_backend = _backends.DEFAULT_BACKEND
+        resolved_backend = _backends.engine()
     elif backend == "cpp":
         if not _CPP_AVAILABLE:
             raise RuntimeError("backend='cpp' requested but isalsr.core._native is not available.")
