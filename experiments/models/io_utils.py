@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -158,19 +159,33 @@ def ensure_output_structure(
     method: str,
     benchmark: str,
     problem: str,
+    variants: Iterable[str] | None = None,
 ) -> dict[str, Path]:
     """Create the output folder tree per experimental design Section C.6.
 
-    Returns a dict mapping logical names to directory paths.
+    Args:
+        base_dir: Root of the results tree.
+        method: SR method name (e.g. ``"udfs"``, ``"bingo"``).
+        benchmark: Benchmark suite key (e.g. ``"nguyen"``).
+        problem: Problem name (e.g. ``"Nguyen-1"``).
+        variants: Search-variant arms to allocate subdirectories for. The
+            legacy arms ``"baseline"`` and ``"isalsr"`` are always created so
+            that existing result trees keep resolving.
+
+    Returns:
+        A dict mapping ``"problem"`` and each arm name to its directory path.
     """
     problem_slug = problem.lower().replace("-", "_")
     problem_dir = base_dir / method / benchmark / problem_slug
 
-    paths = {
-        "problem": problem_dir,
-        "baseline": problem_dir / "baseline",
-        "isalsr": problem_dir / "isalsr",
-    }
+    arms = ["baseline", "isalsr"]
+    for arm in variants or ():
+        if arm not in arms:
+            arms.append(arm)
+
+    paths = {"problem": problem_dir}
+    for arm in arms:
+        paths[arm] = problem_dir / arm
 
     for p in paths.values():
         p.mkdir(parents=True, exist_ok=True)

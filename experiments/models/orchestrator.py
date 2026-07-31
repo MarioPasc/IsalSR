@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
 import os
@@ -171,13 +172,14 @@ def create_runner(method: str, variant: str, config: dict[str, Any], atlas=None)
 
     Args:
         method: SR method name ("udfs" or "bingo").
-        variant: "baseline" or "isalsr".
+        variant: "baseline", "isalsr" or "hash".
         config: Full YAML config dict.
         atlas: Optional AtlasLookup for O(1) canonical lookup (isalsr only).
+            Ignored by the "hash" arm, whose key is not the canonical hash.
     """
     if method == "udfs":
         from experiments.models.udfs.config import UDFSConfig
-        from experiments.models.udfs.isalsr_runner import IsalSRUDFSRunner
+        from experiments.models.udfs.isalsr_runner import HashUDFSRunner, IsalSRUDFSRunner
         from experiments.models.udfs.runner import UDFSBaselineRunner
 
         cfg = UDFSConfig.from_dict(config.get("udfs", {}))
@@ -185,11 +187,13 @@ def create_runner(method: str, variant: str, config: dict[str, Any], atlas=None)
             return UDFSBaselineRunner(config=cfg)
         elif variant == "isalsr":
             return IsalSRUDFSRunner(config=cfg, atlas=atlas)
+        elif variant == "hash":
+            return HashUDFSRunner(config=cfg, atlas=atlas)
         else:
             raise ValueError(f"Unknown variant: {variant}")
     elif method == "bingo":
         from experiments.models.bingo.config import BingoConfig
-        from experiments.models.bingo.isalsr_runner import IsalSRBingoRunner
+        from experiments.models.bingo.isalsr_runner import HashBingoRunner, IsalSRBingoRunner
         from experiments.models.bingo.runner import BingoBaselineRunner
 
         cfg = BingoConfig.from_dict(config.get("bingo", {}))
@@ -197,6 +201,8 @@ def create_runner(method: str, variant: str, config: dict[str, Any], atlas=None)
             return BingoBaselineRunner(config=cfg)
         elif variant == "isalsr":
             return IsalSRBingoRunner(config=cfg, atlas=atlas)
+        elif variant == "hash":
+            return HashBingoRunner(config=cfg, atlas=atlas)
         else:
             raise ValueError(f"Unknown variant: {variant}")
     else:
@@ -283,10 +289,83 @@ def _resolve_atlas(
     return None
 
 
+def apply_cli_overrides(
+    config: dict[str, Any],
+    max_time: float | None,
+    no_shadow_hash: bool,
+) -> dict[str, Any]:
+    """Apply command-line overrides to the method section of a loaded config.
+
+    Both overrides are optional and inert when unset, so an invocation without
+    them reproduces the YAML exactly. The overrides are written into
+    ``config[method]`` because every runner rebuilds its own dataclass config
+    from that dict inside ``fit`` (``BingoConfig.from_dict`` /
+    ``UDFSConfig.from_dict``), so the value reaches the host's own budget
+    (Bingo's ``evolve_until_convergence(max_time=...)``, UDFS's
+    ``DAGRegressor(max_time=...)``) rather than a wrapper timer. Writing it
+    there also makes the deviation visible in ``metadata.json`` and in each
+    ``run_log.json``'s ``hyperparameters``.
+
+    Args:
+        config: Parsed YAML config. Not mutated; a shallow copy with a fresh
+            method section is returned.
+        max_time: Wall-clock budget in seconds to substitute for the config's
+            ``max_time``, or ``None`` to keep the config value.
+        no_shadow_hash: If ``True``, set ``shadow_hash: false`` in the method
+            section, disabling the fixed-order shadow cardinality counters. If
+            ``False``, the key is left absent so the runner's own default
+            (on for the canonical arm) applies.
+
+    Returns:
+        A new config dict with the overrides applied.
+
+    Raises:
+        KeyError: If ``config["experiment"]["method"]`` is missing.
+    """
+    if max_time is None and not no_shadow_hash:
+        return config
+
+    method = config["experiment"]["method"]
+    section = dict(config.get(method) or {})
+
+    if max_time is not None:
+        log.info("CLI override: %s.max_time = %.1f s (config value overridden)", method, max_time)
+        section["max_time"] = float(max_time)
+    if no_shadow_hash:
+        log.info("CLI override: %s.shadow_hash = False (shadow counters disabled)", method)
+        section["shadow_hash"] = False
+
+    return {**config, method: section}
+
+
+def _positive_float(value: str) -> float:
+    """Parse a strictly positive float for argparse.
+
+    Args:
+        value: Raw command-line token.
+
+    Returns:
+        The parsed value.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is not a positive float.
+    """
+    parsed = float(value)
+    if not parsed > 0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {value}")
+    return parsed
+
+
 def run_experiment(config_path: str, args: argparse.Namespace) -> None:
     """Run the full experiment from a YAML config."""
     with open(config_path) as f:
         config = yaml.safe_load(f)
+
+    config = apply_cli_overrides(
+        config,
+        max_time=getattr(args, "max_time", None),
+        no_shadow_hash=bool(getattr(args, "no_shadow_hash", False)),
+    )
 
     exp = config["experiment"]
     method = exp["method"]
@@ -332,7 +411,9 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
                 _atlas_cache[cache_key] = _resolve_atlas(atlas_dir, bench_name, nv)
             atlas = _atlas_cache[cache_key]
 
-            paths = ensure_output_structure(output_base, method, bench_name, problem_name)
+            paths = ensure_output_structure(
+                output_base, method, bench_name, problem_name, variants=variants
+            )
 
             for seed in seeds:
                 for variant in variants:
@@ -398,6 +479,16 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
                     run_log = translator.to_run_log(raw, metadata)
                     trajectory = translator.to_trajectory(raw)
 
+                    # Shadow fixed-order cardinality estimates, if the arm
+                    # collected them.  Attached here rather than in the
+                    # translator so the two host translators stay identical.
+                    shadow = getattr(runner, "last_shadow", None)
+                    if shadow:
+                        run_log = dataclasses.replace(
+                            run_log,
+                            search_space=dataclasses.replace(run_log.search_space, **shadow),
+                        )
+
                     save_run_log(run_log, sd / "run_log.json")
                     save_trajectory(trajectory, sd / "trajectory.csv")
 
@@ -419,12 +510,24 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
                     agg_rows = aggregate_all_metrics(logs)
                     save_aggregate(agg_rows, paths[variant] / "aggregate.csv")
 
-            if "baseline" in variants and "isalsr" in variants:
-                baseline_logs = load_all_run_logs(paths["baseline"])
-                isalsr_logs = load_all_run_logs(paths["isalsr"])
-                if baseline_logs and isalsr_logs:
-                    paired = compute_paired_stats(baseline_logs, isalsr_logs)
-                    save_paired_stats(paired, paths["problem"] / "paired_stats.json")
+            # Paired contrasts.  (reference, treatment, filename); the
+            # isalsr-vs-baseline contrast keeps the historical filename and is
+            # the only one carried into the across-problem Holm correction.
+            contrasts = (
+                ("baseline", "isalsr", "paired_stats.json"),
+                ("baseline", "hash", "paired_stats_hash_vs_baseline.json"),
+                ("hash", "isalsr", "paired_stats_isalsr_vs_hash.json"),
+            )
+            for ref, treat, fname in contrasts:
+                if ref not in variants or treat not in variants:
+                    continue
+                ref_logs = load_all_run_logs(paths[ref])
+                treat_logs = load_all_run_logs(paths[treat])
+                if not ref_logs or not treat_logs:
+                    continue
+                paired = compute_paired_stats(ref_logs, treat_logs)
+                save_paired_stats(paired, paths["problem"] / fname)
+                if treat == "isalsr" and ref == "baseline":
                     all_paired_stats.append(paired)
 
         # Holm correction across problems
@@ -497,7 +600,12 @@ def _get_ground_truth_vars(bench: dict[str, Any]):
         return None
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build the orchestrator's command-line parser.
+
+    Returns:
+        The configured argument parser.
+    """
     parser = argparse.ArgumentParser(
         description="IsalSR experiment orchestrator",
     )
@@ -524,7 +632,11 @@ def main() -> None:
     parser.add_argument(
         "--variants",
         default="baseline,isalsr",
-        help="Variants to run (e.g., 'baseline,isalsr' or 'baseline')",
+        help=(
+            "Search variants to run, comma-separated. One of 'baseline' "
+            "(no dedup), 'isalsr' (canonical-string dedup) or 'hash' "
+            "(naive fixed-order-serialisation dedup)."
+        ),
     )
     parser.add_argument(
         "--atlas-dir",
@@ -533,7 +645,28 @@ def main() -> None:
         "canonical lookup (isalsr variants only). If not set, "
         "canonicalization is computed online.",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--max-time",
+        type=_positive_float,
+        default=None,
+        help="Override the config's per-run wall-clock budget, in seconds. "
+        "Reaches the host search's own budget (Bingo "
+        "evolve_until_convergence(max_time=...), UDFS DAGRegressor(max_time=...)). "
+        "If not set, the YAML value is used.",
+    )
+    parser.add_argument(
+        "--no-shadow-hash",
+        action="store_true",
+        help="Disable the fixed-order shadow cardinality counters "
+        "(shadow_distinct_* stay unset in run_log.json). If not set, "
+        "shadow counting keeps its per-arm default (on for the isalsr arm).",
+    )
+    return parser
+
+
+def main() -> None:
+    """Parse command-line arguments and run the experiment."""
+    args = build_parser().parse_args()
     run_experiment(args.config, args)
 
 

@@ -24,7 +24,7 @@ class RunMetadata:
     """Metadata for a single experimental run."""
 
     method: str  # e.g., "udfs", "graphdsr"
-    representation: str  # "baseline" or "isalsr"
+    representation: str  # "baseline", "isalsr" or "hash"
     benchmark: str  # e.g., "nguyen", "feynman"
     problem: str  # e.g., "Nguyen-1"
     seed: int
@@ -86,6 +86,15 @@ class SearchSpaceResults:
     max_internal_nodes_seen: int
     theoretical_reduction_bound: float  # k! for max k
     redundancy_rate: float  # 1 - unique/total
+
+    # Shadow distinct-cardinality estimates over the SAME candidate stream,
+    # keyed by a fixed-order serialisation instead of the canonical string.
+    # Populated by the "isalsr" arm when ``shadow_hash`` is enabled; ``None``
+    # for arms that do not run the sketches.  HyperLogLog returns an estimate,
+    # hence float rather than int.
+    shadow_distinct_insertion: float | None = None
+    shadow_distinct_topological: float | None = None
+    shadow_distinct_topological_commutative: float | None = None
 
 
 @dataclass(frozen=True)
