@@ -214,7 +214,7 @@ Agree the definition, then instrument.
 | **P3** | **Data fingerprinting.** Every run must record `sha256` of `(X_train, y_train, X_test, y_test)` | Without it, **C5** cannot prove the three arms saw identical data, and the paired design is unverifiable |
 | **P4** | **Terminal-status record.** Every run must write a status record **even when it fails** (§5.5) | T08's 35-cell shortfall recurs at 8,400-run scale and is again unexplainable |
 | **P5** | **Allocation sizing.** §8.2 — 100,800 core-hours against the freeze needs ≈200–300 concurrent cores. **Policy half MEASURED 2026-07-31 and it passes**: QOS `long_uma` allows `MaxWall = 7 days` and **`cpu = 9000` concurrent cores per user**, with `MaxJobsPU`/`MaxSubmitJobsPU` unset. 300 cores is 3.3 % of the entitlement | The binding constraint is therefore **contention, not policy** — which cannot be read from `sacctmgr` and must be measured. Time the 420-task smoke (Stage C) end to end and divide: that gives the *achieved* concurrency under real queue pressure, and it is the number §8.2 needs |
-| **P6** | 🔴 **Quota headroom (see A13).** FSCRATCH is at 248.4k/250.0k files; HOME is over its space quota with 6 days of grace | C2 hits the hard file quota mid-campaign, and every running task keeps burning wallclock while all its writes fail. **Fix before Stage C, not before launch** |
+| **P6** | 🔴 **Quota headroom (see A13).** Re-read 2026-08-02: FSCRATCH **222.8k / 250.0k** files (was 248.4k on 07-31 — something was cleaned up), HOME **0.43 TB / 0.28 TB soft** with **4 days of grace left** (was 6). So: ≈27k files of FSCRATCH headroom against C2's ≈42,000, and a HOME grace clock that expires ≈2026-08-06 | Two separate failures. **HOME**: when grace expires, writes to HOME are blocked — that is days away and independent of C2. **FSCRATCH**: C2 hits the hard file quota mid-campaign and every running task keeps burning wallclock while all its writes fail. **Re-read live on the day** (`ssh picasso 'quota'`); these numbers move. Fix HOME this week; fix FSCRATCH before Stage C |
 
 ---
 
@@ -302,6 +302,7 @@ thing that ticket contributes, and states it in its own amendment block:
 | **A4b** | **Operator-set policy — decide and record.** C1 used *different* operator sets per tier (`hard`/`cherrypicked` add `sqrt`, Bingo adds `pow`). **Recommendation: freeze D1's per-tier sets exactly as submitted** so continuity with C1 holds, and adopt the hard-tier set for D2, disclosed in Appendix D.2. The invariant that actually matters: **for a fixed `(method, problem)` the operator set is identical across all three arms** | the invariant holds for 70/70 problems; the policy is written into the MANIFEST | `c2_preflight/operator_sets.csv` |
 | **A5** | **Seed declaration.** Seeds 1…20, and confirm they are the *same integers* C1 used, so the continuity table (§7) can restrict C1 to the same 20 seeds and compare like-for-like. Seed 0 is reserved for smoke and must never appear in the campaign | recorded in MANIFEST; `0 ∉ seeds` | MANIFEST |
 | **A6** | **MANIFEST schema frozen** and extended for C2: git commit + tag, native build hash, compiler + flags, config sha256 per `(method, suite)`, operator-set policy, arm list, seed list, alphabet version (`decomposed`), engine, node-constraint string, submission splits. Plus a validator that **fails** on any missing field | validator exits non-zero on a deliberately truncated MANIFEST | `experiments/models/manifest.py` + its test |
+| **A7-BUG** | 🔴 **`engine` is NOT in `metadata.hardware` — found 2026-08-02 in a live T04 probe run_log, where it read `<none>`.** A7 requires `engine` per run and **C1.14** requires asserting `engine == native` on 420/420 smoke tasks; **neither is currently possible from a RunLog.** `collect_hardware_info()` (`experiments/models/hardware_info.py:17-30`) returns only cpu/cpu_count/ram_gb/python_version/platform/os/os_version/conda_env/git_hash/timestamp. Must land with the rest of A7, **before Stage C** | a probe `run_log.json` shows `metadata.hardware.engine == "cpp"` |
 | **A7** | **RunLog schema accepts three arms.** `RunMetadata.representation` currently documents `"baseline" or "isalsr"`. Extend to `"hash"`; extend `hardware` to carry `cpu_model`, `hostname`, `slurm_job_id`, `slurm_array_task_id`, `mem_requested_gb`, `max_rss_gb`, `engine`, `git_commit`, `build_hash`, `config_sha256`, `data_fingerprint` | round-trip `to_dict`/`from_dict` test passes for all three arms | `tests/unit/test_schemas.py` |
 | **A8** | **Analyzer three-arm readiness.** `analyze.py` accepts `--variants baseline,hash,isalsr`; pairwise CPDT with Holm across **three** contrasts and Friedman/Nemenyi over three arms are implemented and unit-tested on synthetic data | a synthetic case with a known answer reproduces it; the Holm correction divides by 3, not 2 | `tests/unit/test_three_arm_stats.py` |
 | **A9** | **T08 code half landed.** NaN can never be marked better in `aggregation.py` (regression test); NaN policy in `statistical_tests.py` explicit, tested, and the reported `N` matches what the code does, per metric | both regression tests green | test output |
@@ -325,6 +326,7 @@ environment activation, compiler-dependent floating point.
 | **B4** | **Equivalence gate re-run on a compute node.** T01 G1 passed on the workstation only. Re-run at reduced scale on Picasso: exhaustive `k = 1..8` + ≥5,000 evolved **decomposed** DAGs, byte-exact C++ vs Python | 0 mismatches, 0 errors, `self_comparison == false`. A workstation pass does **not** certify a different compiler, libstdc++ or CPU |
 | **B5** | **Node-pool census.** A 20-task, 1-minute array recording `lscpu` model + a fixed single-core canonicalisation microbenchmark per task | the empirical distribution of node types reachable from our QOS, with a per-model speed factor |
 | **B6** | **Node-constraint decision.** *Measured 2026-07-31: every node carries its family as a **feature**, so the choice is finer than `intel`/`amd`* — `sd` (52 c, 182 GB, Intel, **avx512**), `sr` (128 c, 439 GB, AMD), `bc` (256 c, 683 GB, AMD, **avx512**), `bl` (128 c, 1855 GB, AMD). Choose one with enough capacity for the concurrency §8.2 needs. If none has it, **do not pin** — mandate CPU-model recording per run (A7) and report arm balance across node types as a measured covariate | either a pinned constraint, or a written argument plus a balance-reporting plan. Never "we assume it was fine" |
+| **B6b-PRE** | ✅ **MEASURED 2026-08-02 by T04 — the build does not work out of the box on Picasso. Read before Stage B.** Three facts, all verified on the login node: **(1) Picasso's system compiler is `g++ (SUSE) 7.5.0`, which cannot compile the portability flag itself** — `cc1plus: error: bad value ('x86-64-v3') for '-march=' switch`, because `x86-64-v3` was introduced in GCC 11. `pip install -e . --force-reinstall --no-deps` **fails outright**. Fix: `module load gcc/11.1.0` (available; the module list tops out there) and export `CXX`/`CC` before building. **(2) The rebuilt `.so` imports and runs with the gcc module UNLOADED**, so no runtime `module load` is needed in workers — verified by importing in a shell without it. **(3) `build_info()` then reports `isa_level = x86-64-v3`, `avx512f = 0`** — AVX2-only, hence portable across `sd`/`sr`/`bc`/`bl`, which is the outcome B6b wants. **(4) The extension installed on Picasso was dated 2026-07-28 while the last C++ commit was 2026-07-30 — SP-2 FAILED.** Anyone launching C2 without an explicit rebuild would have run a **stale engine** against current Python and never seen an error | `module load gcc/11.1.0` present in the build step; `.so` mtime post-dates the last `src/isalsr/core/native/**` commit; `isa_level=x86-64-v3`, `avx512f=0` |
 | **B6b** | 🔴 **AVX-512 portability of the C++ engine.** The login node is a Xeon Gold 6230R — an `sd` machine **with AVX-512** — but `sr` and `bl`, the bulk of the CPU cluster, **do not have it**. An extension built on the login node with `-march=native` emits AVX-512 and dies with **SIGILL** the moment it lands on `sr`/`bl`. Check the build flags in `pyproject.toml`/`CMakeLists.txt`, then run the same import probe on an `sd` node and on an `sr` node | the native module imports and canonicalises correctly on **both** an `avx512` node and a non-`avx512` node. If it does not, either rebuild with a portable baseline (`-march=x86-64-v2`) or pin `--constraint=avx512` — and note that pinning to `avx512` restricts the pool to `sd`+`bc`, which interacts with B6 |
 | **B7** | **`sbatch --test-only` on all six arrays**, with the real `--array`, `--mem`, `--time` and `--constraint` | exit 0 on all six; the reported task count is exactly 1,400 per array (or the A12 chunking equivalent) |
 | **B8** | **Resume and idempotency.** Run one task; re-submit it; then corrupt its `run_log.json` and re-submit again | second run **skips**; the corrupted run is **detected, deleted and re-run**. Both behaviours observed, not assumed |
@@ -354,7 +356,7 @@ Every criterion below is **blocking**. A single violation stops the stage.
 | **C1.8** | `baseline` arm: dedup counters absent or zero and `canonicalization_runtime_s == 0`. Proves the baseline really is un-instrumented and is not silently paying canonicalisation cost | 140 / 140 |
 | **C1.9** | **T06 fallback counters** present and finite on every `isalsr` task, covering all five paths (pre-normalisation violation, post-normalisation violation, 60 s timeout, conversion failure, canonicalisation raised). Report the five rates. This is check **B9** re-run at scale: B9 establishes the counters are alive and affordable on 2 probes, C1.9 confirms it holds across all 70 problems | 140/140 present; the five rates reported; overhead consistent with B9's measurement |
 | **C1.10** | `trajectory.csv` non-empty; `timestamp_s` monotone non-decreasing; `best_r2` monotone non-decreasing; `n_dags_explored` monotone non-decreasing; `n_unique_canonical ≤ n_dags_explored` | 420 / 420 |
-| **C1.11** | **Memory profile.** `sacct` `MaxRSS` per task, tabulated by `(method, arm)`. Bingo+IsalSR historically needed 128 GB from heap fragmentation; the C++ dedup set should reduce that materially — **measure it, do not assume it**. Size production `--mem` at p99 + 50 % headroom | a table, and a production `--mem` per `(method, arm)` derived from it |
+| **C1.11** | **Memory profile.** `MaxRSS` per task, tabulated by `(method, arm)`. Bingo+IsalSR historically needed 128 GB from heap fragmentation; the C++ dedup set should reduce that materially — **measure it, do not assume it**. Size production `--mem` at p99 + 50 % headroom. 🔴 **`sacct -X` returns an EMPTY `MaxRSS`** (verified on Picasso 2026-07-31): memory is accounted on the **`.batch` step**, not the allocation. Use `sacct -j <ID> -n -P -o JobID,MaxRSS \| awk -F'\|' '$1 ~ /\.batch$/'`. A profile built with `-X` comes back **silently blank** — a table of empty cells, no error | a populated table with 420 non-empty `MaxRSS` values, and a production `--mem` per `(method, arm)` derived from it |
 | **C1.12** | **`max_time` is honoured.** Every task terminates at ≈900 s or earlier by convergence; **none** is killed by the SLURM wall limit. A SLURM kill without a `max_time` stop means `max_time` is not reaching `evolve_until_convergence` — the known Bingo defect in `CLAUDE.md` | 0 SLURM time-kills |
 | **C1.13** | **Alphabet assertion on the real candidate stream** of every `isalsr` and `hash` task, not only in unit tests: 0 forbidden labels | 280 / 280 |
 | **C1.14** | **Engine assertion**: every task records `engine == native` | 420 / 420 |
@@ -511,16 +513,20 @@ September is the single most expensive failure mode left.
 
 A single meeting/commit that records:
 
-1. §10.2 fully filled: every check A1–E7 with its evidence artefact, date and result.
+1. §11.2 fully filled: every check A1–E7 with its evidence artefact, date and result.
 2. **Explicit acknowledgement of the T01 AC-6 finding** (§0.3) — that `S` cannot move
    — and the §2 statement of what C2 actually buys. The earlier Wave-1 HOLD is
    superseded by C2 only if §2 is accepted as written.
-3. The **allocation answer** (P5): the concurrency the account can actually sustain,
-   and therefore the projected completion date against the 2026-09-10 freeze.
+3. The **achieved concurrency** measured from Stage C (§8.2), and therefore the
+   projected completion date against the 2026-09-10 freeze — plus, if it falls short,
+   which §8.3 trade is being taken, decided **now** rather than in week three.
 4. The production `--mem` and `--time` per `(method, arm)`, derived from C1.11 and
    D1.2 measurements, not from history.
-5. The node-constraint decision (B6), stated with its evidence.
-6. Signed by Mario. **No agent submits C2.**
+5. The node-constraint decision (B6) and the AVX-512 portability result (B6b), each
+   stated with its evidence.
+6. **Quota headroom** (A13 / P6) confirmed sufficient for ≈42,000 files, re-read live
+   on the day, not from an earlier capture.
+7. Signed by Mario. **No agent submits C2.**
 
 ---
 
@@ -672,8 +678,23 @@ Relaxing completion to the freeze itself (2026-09-10, 504 h) still needs **≈20
 cores**. At 100 sustainable cores C2 takes 42 days and **misses the freeze
 regardless of how correct the code is.**
 
-**This is the single largest risk in the plan and it is not a code risk.** Confirm
-the group allocation and QOS limits **now**, not at launch.
+**The policy half is measured and it passes (2026-07-31).** `sacctmgr` reports that
+`tic_163_uma`/`mpascual` hold `short`, `medium_uma` and `long_uma`; `long_uma` allows
+`MaxWall = 7 days` and **`cpu = 9000` concurrent cores per user**, with `MaxJobsPU` and
+`MaxSubmitJobsPU` unset. The cluster has 334 CPU nodes and `MaxJobCount = 15000`.
+**300 cores is 3.3 % of the entitlement — we are nowhere near a policy ceiling.**
+
+**The binding constraint is therefore contention, and `sacctmgr` cannot tell us that.**
+It has to be measured:
+
+> **Stage C is the measurement.** Time the 420-task smoke end to end and divide:
+> `420 tasks × 0.25 h ÷ wall-clock hours = achieved concurrent cores` under real queue
+> pressure, at exactly C2's `--mem`/`--constraint`/throttle. If the smoke sustains ≥300,
+> C2 fits the 2026-09-03 target. If it sustains 100, invoke §8.3 **before** launching,
+> not after discovering it in week three.
+
+Record the achieved figure in §11.1. Set the array throttle (`%K`) from it — an
+unthrottled 1,400-task array is antisocial and invites manual intervention from support.
 
 ### 8.3 Trade order, if capacity is short — in this order and no other
 
@@ -831,7 +852,11 @@ wrong at cost:
 
 | Date | Item | Decision / finding | Recorded by |
 |---|---|---|---|
-| | | | |
+| 2026-07-31 | A12, SLURM limits | **PASS.** `MaxArraySize = 4096` ≥ 1,401 — 1,400-task arrays need no chunking. `MaxJobCount = 15000`, `MaxSubmitJobsPU` unset | Claude, `scontrol show config` |
+| 2026-07-31 | P5, allocation policy | **PASS.** QOS `long_uma`: `MaxWall = 7 days`, **`cpu = 9000` per user**; `short`/`medium_uma` also held. 300 cores = 3.3 % of entitlement. **Binding constraint is contention, not policy** — measure it from Stage C (§8.2) | Claude, `sacctmgr` |
+| 2026-07-31 | B6b, AVX-512 | **NEW EXPOSURE.** Login node is `sd`/Intel **with avx512**; `sr` and `bl` (180 of 334 CPU nodes) **without**. A `-march=native` build of the C++ engine would SIGILL on `sr`/`bl` as a *fraction* of tasks — looking like flaky nodes, not a build bug. Folded into T01 AC-5 | Claude, `sinfo` |
+| 2026-08-02 | C1.11, `sacct -X` | **DEFECT IN THE PLAN AS WRITTEN, fixed.** `sacct -X` returns an **empty** `MaxRSS`; memory is accounted on the `.batch` step. The Stage C memory profile would have come back silently blank — no error, just empty cells — and Stage C1.11's only purpose is to size production `--mem` | Claude, verified on job 1679902 |
+| 2026-08-02 | Queue state | No IsalSR jobs queued or running. Last IsalSR activity was the G9 alphabet gate, 2026-07-30 (1692435 FAILED 20 s, 1692445 FAILED 14 s, **1692451 COMPLETED 1 m 27 s** — the recorded pass). Cluster load: 3,950 jobs / 43 users / 16,531 CPUs, 503 PD / 3,447 R | Claude, `squeue`/`sacct` |
 
 ### 11.2 Pre-flight sign-off
 
@@ -849,8 +874,8 @@ wrong at cost:
 | A | A9 | T08 code half landed | | | |
 | A | A10 | Failure ledger implemented | | | |
 | A | A11 | Hash-collision bound stated | | | |
-| A | A12 | SLURM array/job limits | | | |
-| A | A13 | Storage projection | | | |
+| A | A12 | SLURM array/job limits | 2026-07-31 | **PASS** — `MaxArraySize=4096` ≥ 1,401; no chunking | `scontrol show config` |
+| A | A13 | 🔴 Storage **and file-count** headroom (see P6) | | | |
 | B | B1 | Environment probe | | | |
 | B | B2 | C++ capability probe + negative control | | | |
 | B | B3 | Alphabet gate on frozen commit | | | |

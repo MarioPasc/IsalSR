@@ -478,6 +478,92 @@ Both are small, but the shadow flag plumbs into the runner constructors, which t
 host-native rework is editing concurrently — so they land *after* that rework, not
 beside it.
 
+### 2026-08-02 — Picasso submission: three blockers found before a single task ran
+
+All three would have silently corrupted the probe, and two of them threaten C2.
+
+**1. SP-1 provenance was structurally impossible.** `rsync` excludes `.git`, so the
+Picasso checkout's `git rev-parse HEAD` reported **`b34cded`** while the synced files
+were **`8814771`**. SP-1 would have stamped a commit unrelated to the code it ran —
+the exact failure it exists to catch. Rewriting the node's git state
+(`fetch` + `reset --hard`) was **rejected as destructive**, correctly. Fix:
+`slurm/t04_probe/make_provenance.py` stamps the local commit *and the sha256 of all 18
+sources a probe depends on* into `.provenance.json`, which travels with the rsync;
+SP-1 verifies the stamp against the bytes on the node. Stronger than a commit id — it
+proves the code running is the code committed, not that a `.git` once pointed
+somewhere. Cleanliness is scoped to the probe's dependency set, because ticket
+markdown is edited in parallel sessions and blocking on it would tempt committing
+another session's half-written work.
+
+**2. 🔴 The C++ extension on Picasso was two days stale — SP-2 FAILED.**
+`.so` dated **2026-07-28 13:43**; last C++ commit `00a717e` **2026-07-30 10:20**.
+Python resolves from the repo and the extension from site-packages, so the probe would
+have run current Python against an old canonicaliser **with no error anywhere**.
+**Anyone launching C2 without an explicit rebuild inherits this.**
+
+**3. 🔴 The rebuild does not work on Picasso out of the box.** `pip install -e .
+--force-reinstall --no-deps` **fails**: Picasso's system compiler is `g++ (SUSE)
+7.5.0`, and `-march=x86-64-v3` — the portable baseline adopted precisely to avoid the
+AVX-512 SIGILL trap — was only introduced in GCC 11:
+
+```
+cc1plus: error: bad value ('x86-64-v3') for '-march=' switch
+```
+
+Fix: `module load gcc/11.1.0` (the highest available) with `CXX`/`CC` exported, then
+rebuild. Verified afterwards: `.so` mtime **2026-08-02 10:06**; it **imports with the
+gcc module unloaded**, so workers need no runtime `module load`; and `build_info()`
+reports `isa_level = x86-64-v3`, `avx512f = 0` — AVX2-only and therefore portable
+across `sd`/`sr`/`bc`/`bl`, which is the outcome pre-flight **B6b** is looking for.
+Recorded there as **B6b-PRE**.
+
+**After the fixes, all six SP checks PASS on Picasso in both engine directions**
+(`ISALSR_ENGINE=python` genuinely dispatches to Python, per the `canonical.py:349`
+fix). `sbatch --test-only` exits 0 on both arrays.
+
+**4. The single-task stage caught a fourth blocker — which is exactly its job.**
+The first bingo task **died after 13 s**, *after* all twelve SP checks had passed on
+the compute node. Cause: `bingo-nasa` imports `mpi4py`, whose ABI-probing meta-path
+finder `dlopen()`s `libmpi` at **import** time and raises `RuntimeError: cannot load
+MPI library` when no MPI module is loaded. It fires before any search begins, so no
+amount of SP checking would have caught it.
+
+The production worker already solves this
+(`slurm/workers/models_experiment_slurm.sh:31–50`); `slurm/t04_probe/worker.sh` was
+written fresh and failed to inherit three things:
+`module load openmpi_gcc/5.0.9_gcc7` (with `_gcc15`/`_gcc14` fallbacks — the wrong
+major version yields *"Please use mpi 5.0.9"*), `LD_LIBRARY_PATH=$CONDA_PREFIX/lib`,
+and **`PYTHONMALLOC=malloc`**. The last matters beyond mere startup: it is what keeps
+Bingo+IsalSR off the OOM killer over 10k+ generations, so **AC-10's memory
+measurement is only meaningful with it set**. Fixed and re-verified: bingo task
+COMPLETED.
+
+*Lesson for T02: do not author a fresh worker for C2. Extend the production one, or
+diff against it line by line — SP-1…SP-6 all passing is not evidence that the job
+will run.*
+
+#### Probe submitted 2026-08-02
+
+| | |
+|---|---|
+| Arrays | **1737666** (bingo, tasks 1–14) · **1737667** (udfs, tasks 15–28) |
+| Shape | 28 tasks, 3 arms × 2 hosts × 4 problems + 4 shadow-OFF cells |
+| Caps | `max_time` 1500 s, **seed 0**, `--constraint=intel`, `~/execs/isalsr/t04_probe/` — every SP-0 limit respected |
+| Provenance | commit `a4206b8`, stamped and hash-verified on the node |
+| Single-task gate | bingo `1737664_1` COMPLETED; `run_log.json` valid, `r2_train = 1.0`, `total_dags = unique_canonical = 80,201`, `canonicalization_runtime_s = 0.0` — confirms **C1.8**, the baseline arm is genuinely un-instrumented |
+| 3-minute watch | 3 COMPLETED · 16 RUNNING · 2 PENDING · **0 failures**, no `ModuleNotFoundError` / `FileNotFoundError` / `oom-kill` / `Traceback` in any log |
+
+**Open on return:** collect the SP-1…SP-6 six-row table per task (AC-2b), the ρ
+comparison across all three arms on both hosts, and `sacct MaxRSS` for the shadow
+ON/OFF pairs (AC-10).
+
+**Defect for T02/A7, found in the probe's own output:** `run_log.json`'s
+`metadata.hardware` has **no `engine` field** — it read `<none>`. Check **A7** requires
+`engine` recorded per run, and **C1.14** requires asserting `engine == native` on
+420/420 smoke tasks. As it stands that assertion cannot be made from a RunLog at all.
+T04 is unaffected (its engine evidence lives in `sp_evidence.json`), but **C2 needs
+this before Stage C.**
+
 ### 2026-07-31 — host-native rework landed, and the red state proves the diagnosis exactly
 
 **Re-verified by the orchestrator in the main tree:** `pytest tests/unit/ -q` →
