@@ -496,8 +496,9 @@ tolerate the raise.
 
 ### 2026-08-02 — second smoke: the Feynman remainder, both hosts, 3 seeds
 
-`III.4.32` and `test_4`, 3 seeds × 2 arms × 2 hosts, `max_time = 40 s`. Bingo exits
-**0** (the ≥3-seed threshold is cleared, so `compute_paired_stats` runs). Verified
+`III.4.32` and `test_4`, 3 seeds × 2 arms × 2 hosts, `max_time = 40 s`. **Both hosts
+exit 0** — the ≥3-seed threshold is cleared, so `compute_paired_stats` runs to
+completion rather than raising. All **24** runs land. Verified
 through `slurm/t05_probe/check_d2.py --verify-runs`, which is the same code the probe
 will run on Picasso — so the checker itself is exercised end-to-end here rather than
 first meeting real output on a compute node:
@@ -517,6 +518,17 @@ SP-7 overall: PASS
 Zero NaN or inf across every regression metric on every run. `ρ > 1` on every
 `isalsr` cell and exactly `1.0` with zero canonicalisation time on every `baseline`
 cell — Stage C's **C1.6** and **C1.8** both hold on D2 locally.
+
+**C1.12 holds too, and it was worth checking.** UDFS looked slow enough to suspect it
+was overrunning its budget, which is the known Bingo defect in `CLAUDE.md`. It is not:
+every UDFS run terminated at **40.1–40.3 s against a 40 s budget**. The wall-clock
+belongs to the orchestrator's between-run work — data generation, ground-truth setup,
+translation — not to the search. Worth knowing when sizing the probe's SLURM
+wallclock, since that per-run overhead is paid 40 times and is invisible in
+`max_time`.
+
+Final tally over both smokes: **32 runs** (8 Strogatz + 24 Feynman remainder), both
+hosts, both arms, `SP-7 overall: PASS`, zero NaN.
 
 ### 2026-08-02 — status of the gated items
 
