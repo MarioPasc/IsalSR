@@ -7,8 +7,8 @@ Extended Feynman (Udrescu & Tegmark, 2020):
     - I.15.10    Relativistic momentum
     - I.30.3     Single-slit diffraction intensity
     - I.37.4     Two-beam interference
-    - II.11.27   Paramagnetism (Langevin)
-    - III.17.37  Lorentzian resonance
+    - II.11.27   Clausius-Mossotti polarisation
+    - III.17.37  Angular distribution beta*(1 + alpha*cos(theta))
 
 GP-hard classics:
     - Pagie-1         (Pagie & Hogeweg, 1997)
@@ -24,8 +24,8 @@ top-level ``n_samples`` / ``train_ratio`` for grid-based problems
 (Pagie-1, Keijzer-6, Vladislavleva-2) whose data size is defined by the
 canonical protocol.
 
-Operator set expansion: Pagie-1 needs x^(-4), I.15.10/I.37.4/III.17.37 need
-sqrt. The matching YAML configs (``experiments/configs/{udfs,bingo}_hard.yaml``)
+Operator set expansion: Pagie-1 needs x^(-4), I.15.10 and I.37.4 need sqrt.
+The matching YAML configs (``experiments/configs/{udfs,bingo}_hard.yaml``)
 include ``sqrt`` and ``pow`` in the operator set.
 """
 
@@ -127,22 +127,24 @@ _FEYNMAN_HARD: list[dict[str, Any]] = [
     ),
     _make_hard(
         "II.11.27",
-        "n0*exp(-mu*B/(kT)) + n0*exp(mu*B/(kT))",
-        _x[0] * sympy.exp(-_x[1] * _x[2] / _x[3]) + _x[0] * sympy.exp(_x[1] * _x[2] / _x[3]),
+        "n*alpha/(1 - n*alpha/3) * epsilon * Ef",
+        _x[0] * _x[1] / (1 - _x[0] * _x[1] / 3) * _x[2] * _x[3],
         _x[:4],
         4,
-        [(1.0, 5.0), (1.0, 5.0), (1.0, 5.0), (1.0, 5.0)],  # n0, mu, B, kT
-        lambda n0, mu, b, kt: n0 * np.exp(-mu * b / kt) + n0 * np.exp(mu * b / kt),
+        # n, alpha, epsilon, Ef -- the database ranges.  n, alpha <= 1 keeps
+        # 1 - n*alpha/3 in [2/3, 1], so the denominator never approaches zero.
+        [(0.0, 1.0), (0.0, 1.0), (1.0, 2.0), (1.0, 2.0)],
+        lambda n, alpha, eps, ef: n * alpha / (1 - n * alpha / 3) * eps * ef,
         {"type": "uniform"},
     ),
     _make_hard(
         "III.17.37",
-        "f0 / sqrt((omega - omega0)^2 + gamma^2/4)",
-        _x[0] / sympy.sqrt((_x[1] - _x[2]) ** 2 + _x[3] ** 2 / 4),
-        _x[:4],
-        4,
-        [(1.0, 5.0), (1.0, 5.0), (1.0, 5.0), (1.0, 5.0)],  # f0, omega, omega0, gamma
-        lambda f0, omega, omega0, gamma: f0 / np.sqrt((omega - omega0) ** 2 + gamma**2 / 4),
+        "beta*(1 + alpha*cos(theta))",
+        _x[0] * (1 + _x[1] * sympy.cos(_x[2])),
+        _x[:3],
+        3,
+        [(1.0, 5.0), (1.0, 5.0), (1.0, 5.0)],  # beta, alpha, theta
+        lambda beta, alpha, theta: beta * (1 + alpha * np.cos(theta)),
         {"type": "uniform"},
     ),
 ]

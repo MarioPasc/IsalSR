@@ -168,22 +168,37 @@ binding constraints are criterion (iv) — complementary coverage, which caps re
 physics-formula coverage — and compute: all 120 AI Feynman equations plus the 250+
 SRBench problems would be ≈45,840 runs, ≈7.6× the submitted campaign.
 
-### 5.3 Five of the existing 24 are mislabelled
+### 5.3 Five of the existing 24 were mislabelled, and have been corrected
 
-Established while building the catalogue, filed against T09, and **not** acted on
-here because changing a target function would break C1↔C2 continuity on that problem:
+Established while building the catalogue and **corrected in the same session**
+(decision: Mario, 2026-08-02). Each of these five carried an AI Feynman id whose
+equation it did not encode. All five now reproduce the database formula to a relative
+error below `10⁻¹²`, verified against an independently lambdified catalogue row:
 
-| Suite id | Target as implemented | AI Feynman database | Nature |
+| Suite id | Was | Now (the database equation) | Nature of the defect |
 |---|---|---|---|
-| I.39.10 | `0.5·p_r·V` | `I.39.1`: `3/2·pr·V` | wrong coefficient and wrong id |
-| I.12.4 | `q1/(4π·r·c)` | `q1/(4π·ε·r²)` | different function (`1/r` vs `1/r²`) |
+| I.39.10 | `0.5·p_r·V` | `1.5·p_r·V` | wrong coefficient |
+| I.12.4 | `q1/(4π·r·c)` | `q1·r/(4π·ε·r³)` | different function (`1/r` vs `1/r²`) |
 | II.3.24 | `p·r/(4π)` | `Pwr/(4π·r²)` | different function (`r` vs `1/r²`) |
-| II.11.27 | `n0·e^(−μB/kT) + n0·e^(μB/kT)` | Clausius–Mossotti polarisation | different equation |
-| III.17.37 | `f0/√((ω−ω0)² + γ²/4)` | `β(1 + α·cos θ)` | different equation |
+| II.11.27 | `n0·e^(−μB/kT) + n0·e^(μB/kT)` | `n·α/(1 − n·α/3)·ε·Ef` | different equation |
+| III.17.37 | `f0/√((ω−ω0)² + γ²/4)` | `β·(1 + α·cos θ)` | different equation |
 
-They remain valid regression problems and every arm regresses the same target on the
-same data, so no reported comparison is affected. What is affected is Appendix D.1,
-which documents each problem by expression and citation. This is T09's to resolve.
+The ids are unchanged; only the targets moved. This is deliberate — the paper has
+already been reviewed under those ids.
+
+Two consequences are recorded here so they are not rediscovered as surprises:
+
+- **`III.17.37` drops from 4 variables to 3** and no longer needs `sqrt`, so it is no
+  longer a hard-tier problem by difficulty. **`II.11.27` is now structurally close to
+  `II.11.28`** in the cherrypicked tier (`1 + n·α/(1 − n·α/3)`), which is in tension
+  with criterion (iv). Both were flagged before the change was made.
+- The bottleneck-type classification of these two
+  (`docs/md_files/changes/bottleneck_type_analysis.md`) was derived from the old
+  targets and no longer applies to them.
+
+**This record is internal.** Nothing about the correction goes into the manuscript or
+the response letter (decision: Mario, 2026-08-02). Full detail:
+`docs/md_files/changes/feynman_definition_corrections.md`.
 
 ### 5.4 Reporting obligations, fixed in advance
 

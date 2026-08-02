@@ -92,17 +92,36 @@ def test_i37_4_canonical_values() -> None:
 
 
 def test_ii11_27_canonical_values() -> None:
+    """Clausius-Mossotti polarisation, ``n*alpha/(1 - n*alpha/3)*epsilon*Ef``.
+
+    Definition corrected 2026-08-02 to match the AI Feynman database; see
+    ``docs/md_files/changes/feynman_definition_corrections.md``.
+    """
     bench = get_benchmark("II.11.27")
-    # n0=1, mu*B/kT = 0 -> 1*exp(0) + 1*exp(0) = 2
-    y = bench["target_fn"](np.array([1.0]), np.array([1.0]), np.array([0.0]), np.array([1.0]))
-    assert np.isclose(y[0], 2.0)
+    # n=alpha=0 -> the whole numerator vanishes.
+    y = bench["target_fn"](np.array([0.0]), np.array([0.0]), np.array([1.5]), np.array([2.0]))
+    assert np.isclose(y[0], 0.0)
+    # n=alpha=1, eps=Ef=1 -> 1/(1 - 1/3) = 3/2
+    y2 = bench["target_fn"](np.array([1.0]), np.array([1.0]), np.array([1.0]), np.array([1.0]))
+    assert np.isclose(y2[0], 1.5)
+    # Linear in epsilon and in Ef.
+    y3 = bench["target_fn"](np.array([1.0]), np.array([1.0]), np.array([2.0]), np.array([2.0]))
+    assert np.isclose(y3[0], 1.5 * 4.0)
 
 
 def test_iii17_37_canonical_values() -> None:
+    """Angular distribution ``beta*(1 + alpha*cos(theta))``.
+
+    Definition corrected 2026-08-02 to match the AI Feynman database; see
+    ``docs/md_files/changes/feynman_definition_corrections.md``.
+    """
     bench = get_benchmark("III.17.37")
-    # f0=1, omega=omega0, gamma=2 -> 1 / sqrt(0 + 1) = 1
-    y = bench["target_fn"](np.array([1.0]), np.array([3.0]), np.array([3.0]), np.array([2.0]))
-    assert np.isclose(y[0], 1.0)
+    # theta = pi/2 -> cos = 0 -> f = beta
+    y = bench["target_fn"](np.array([3.0]), np.array([4.0]), np.array([np.pi / 2]))
+    assert np.isclose(y[0], 3.0)
+    # theta = 0 -> cos = 1 -> f = beta*(1 + alpha)
+    y2 = bench["target_fn"](np.array([2.0]), np.array([4.0]), np.array([0.0]))
+    assert np.isclose(y2[0], 10.0)
 
 
 def test_pagie1_canonical_values() -> None:

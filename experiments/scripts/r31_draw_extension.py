@@ -36,7 +36,6 @@ from benchmarks.datasets.feynman_catalogue import (  # noqa: E402
     classification_table,
     eligible_extension_pool,
 )
-
 from benchmarks.datasets.strogatz import STROGATZ_BENCHMARKS  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")

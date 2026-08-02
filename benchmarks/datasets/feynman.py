@@ -76,24 +76,24 @@ FEYNMAN_BENCHMARKS: list[dict[str, Any]] = [
     ),
     _make_feynman(
         "I.39.10",
-        "0.5 * p_r * V",
+        "1.5 * p_r * V",
         2,
         [(1.0, 5.0), (1.0, 5.0)],
-        lambda p_r, v: 0.5 * p_r * v,
+        lambda p_r, v: 1.5 * p_r * v,
     ),
     _make_feynman(
         "I.12.4",
-        "q1 / (4 * pi * r * c)",
+        "Ef = q1 * r / (4 * pi * epsilon * r^3)",
         3,
-        [(1.0, 5.0), (1.0, 5.0), (1.0, 5.0)],  # q1, r, c (Table 2: q_i, r, c ∈ [1,5])
-        lambda q1, r, c: q1 / (4 * math.pi * r * c),
+        [(1.0, 5.0), (1.0, 5.0), (1.0, 5.0)],  # q1, epsilon, r ∈ [1,5]
+        lambda q1, epsilon, r: q1 * r / (4 * math.pi * epsilon * r**3),
     ),
     _make_feynman(
         "II.3.24",
-        "F_E = p * r / (4 * pi)",
+        "flux = Pwr / (4 * pi * r^2)",
         2,
-        [(1.0, 5.0), (1.0, 5.0)],  # Table 2: p, r ∈ [1,5]
-        lambda p, r: p * r / (4 * math.pi),
+        [(1.0, 5.0), (1.0, 5.0)],  # Pwr, r ∈ [1,5]
+        lambda pwr, r: pwr / (4 * math.pi * r**2),
     ),
     _make_feynman(
         "I.10.7",
