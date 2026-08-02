@@ -34,7 +34,24 @@ SP_KEYS: tuple[tuple[str, str], ...] = (
     ("SP-3_engine", "Engine native, with the forced-Python negative control"),
     ("SP-4_alphabet", "Alphabet — no Sub/Div, no '-'/'/' in any canonical string"),
     ("SP-5_host", "Both hosts — UDFS and Bingo"),
-    ("SP-6_fallback_counters", "T06 fallback counters live and finite"),
+    # NOTE the wording. `sp_probe.sp6_counters` only imports `FallbackLedger` and
+    # lists its attributes; it never reads a live count. That is a strictly
+    # weaker statement than SP-6 as specified in EXECUTION-PLAN §4.0, which wants
+    # the five paths "present and finite in the probe output, at the production
+    # sampling rate". Do not let this row be quoted as the stronger claim -- the
+    # counters do not currently reach any persisted artefact at all (see
+    # `report_live_counters`).
+    ("SP-6_counters", "T06 fallback ledger importable, five paths exposed"),
+)
+
+#: Where a live fallback count would have to appear for C1.9 to be checkable.
+LEDGER_HINTS: tuple[str, ...] = (
+    "fallback",
+    "violat",
+    "timeout",
+    "rais",
+    "conversion",
+    "reach",
 )
 
 METRIC_FIELDS: tuple[str, ...] = ("r2_train", "r2_test", "nrmse_train", "nrmse_test", "mse_test")
@@ -172,6 +189,50 @@ def run_table(root: Path) -> tuple[str, dict[str, Any]]:
     return "\n".join(rows), stats
 
 
+def report_live_counters(root: Path) -> tuple[str, bool, bool]:
+    """Check whether a RunLog can support Stage C's C1.9 and C1.14 at all.
+
+    Both criteria assert on quantities that must be *recorded during a run*:
+    C1.9 wants the five T06 fallback rates present and finite on every `isalsr`
+    task, C1.14 wants ``engine == native`` on every task. If the RunLog does not
+    carry the field, the criterion is not merely failing — it is uncheckable, and
+    for the fallback rates it is unrecoverable, because the population only
+    exists while a search is running.
+
+    Parameters
+    ----------
+    root
+        Probe output root.
+
+    Returns
+    -------
+    tuple
+        Rendered report, whether any live counter was found, whether `engine`
+        was recorded.
+    """
+    logs = sorted(root.rglob("run_log.json"))
+    n_counter, n_engine = 0, 0
+    for path in logs:
+        doc = _load(path)
+        if doc is None:
+            continue
+        flat = json.dumps(doc).lower()
+        if any(h in flat for h in LEDGER_HINTS):
+            n_counter += 1
+        if doc.get("metadata", {}).get("hardware", {}).get("engine"):
+            n_engine += 1
+
+    lines = [
+        "| Stage C criterion | Needs | Present in RunLog | Checkable? |",
+        "|---|---|---|---|",
+        f"| **C1.9** | the five T06 fallback rates | {n_counter}/{len(logs)} | "
+        f"{'yes' if n_counter else '**NO**'} |",
+        f"| **C1.14** | `engine == native` | {n_engine}/{len(logs)} | "
+        f"{'yes' if n_engine else '**NO**'} |",
+    ]
+    return "\n".join(lines), n_counter > 0, n_engine > 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point.
 
@@ -188,10 +249,13 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.root).expanduser()
     sp, sp_ok = sp_table(root)
     runs, stats = run_table(root)
+    gate, has_counters, has_engine = report_live_counters(root)
 
     parts = [
         "## SP-1…SP-6 (AC-4b)\n",
         sp,
+        "\n\n## Stage C readiness — fields that must exist BEFORE launch\n",
+        gate,
         "\n\n## Per-run summary\n",
         runs,
         "\n\n## Aggregate\n",

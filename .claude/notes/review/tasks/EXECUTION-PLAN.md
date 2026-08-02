@@ -195,15 +195,57 @@ re-running 8,400 jobs to recover a counter.
 |---|---|---|
 | **T01** | The engine. Equivalence gate passed, **and re-passed on a Picasso compute node** (pre-flight **B4**) | AC-0..4, 6..9 met. **AC-5 open** — the Picasso benchmark has never been submitted; `slurm/t01_close/` is written and syntax-checked only. AC-3 gate 3 + AC-8 closed on the workstation: 117,798 evolved decomposed DAGs, 0 mismatches, commit `98fd57a` |
 | **T16** | Adapter decomposition in `commutative_encoding.py` + both adapters | **DONE 2026-07-30.** Re-assert on the frozen commit at **B3** |
-| **T04** | The three fixed-order serialisations, the `hash` runner for both methods, the hash-arm counters, and the stream persistence Mode 1 needs. **AC-1 soundness proven on the 14,841-DAG corpus** | NOT STARTED. **Gates the whole launch** (§0.4b) |
+| **T04** | The three fixed-order serialisations, the `hash` runner for both methods, the hash-arm counters, and the stream persistence Mode 1 needs. **AC-1 soundness proven on the 14,841-DAG corpus** | **DONE except the C2 arm itself (2026-08-02).** Probe complete: 28/28 cells, **336/336 SP checks**, SP-3 negative control genuine, **AC-10 PASS** (shadow RSS −0.24 %/−0.14 %, no OOM). Provisional: **UDFS ρ_hash = 1.0000 — zero duplicates — vs IsalSR 1.396–2.243 ⇒ 100 % needs 1-WL; Bingo 4.3 %** (the AC-8 concession). Formal spec + proofs + all numbers: `T04-appendix/naive_hash_baseline.md`. ⚠ **Carry into C2:** `shadow_distinct_host_native` is absent from the probe (landed in `a24d73c`, after probe commit `a4206b8`) — it is the only same-stream measure free of the adapter-renumbering bias, which this probe showed inflates the naive baseline from 0 % to 94.6 % on UDFS. Open ACs (3, 4, 5, and 2's dispersion/k-strata) are **blocked on C2**; AC-7 on `/review-answer` |
 | **T05** | D2 problem definitions, sympy ground truth, unit tests, configs, and the **pre-registered, committed** selection rule (T05 AC-3) | **DONE except the Picasso probe (2026-08-02).** `D2 = 20`: all 14 ODE-Strogatz + 6 AI Feynman drawn by the pre-registered rule. Registry resolves **70/70**; `solution_recovered` computable on **70/70**. Selection rule committed **before** the draw — rule `d95e7d9`, draw `0e4a573`. Configs at 20 seeds, hard-tier operator set. Local smoke green on **both hosts**. Probe harness `slurm/t05_probe/` written, **not submitted** (T04's probe in flight). ⚠ Two knock-ons for this plan: **C1.5 was failing on five *D1* problems** and is now fixed, and **five D1 definitions were corrected**, so §7's C1↔C2 continuity table must **exclude** `I.39.10, I.12.4, II.3.24, II.11.27, III.17.37` — see `docs/md_files/changes/feynman_definition_corrections.md` |
 | **T06** | The **instrumentation half only** (§4.1 counters for the five fallback paths). Not the analysis, not the write-up | done — re-verify it survives the C2 code at **C1.9** |
-| **T08** | The **root-cause half** (§5.1) plus any *runtime* fix it implies. The analyzer-side fixes (NaN-as-winner, NaN policy) are needed for the pre-flight analysis dry-run **E3**, so in practice all of T08's code half must land | root-cause done; code fixes to confirm at **A9** |
+| **T08** | The **root-cause half** (§5.1) plus any *runtime* fix it implies. The analyzer-side fixes (NaN-as-winner, NaN policy) are needed for the pre-flight analysis dry-run **E3**, so in practice all of T08's code half must land | **CODE HALF DONE 2026-08-02.** Root cause established for both NaN cells (expression undefined on the *test* domain — `log` of a negative on Vlad-2's extrapolation grid, `exp` overflow on Korns-12; only test metrics NaN, both runs completed normally) and for **all 45** missing cells (**36 OOM + 9 post-search SymPy hangs, 0 unexplained**). Four defects fixed in `generate_tables.py` + a runtime scoring policy in `metrics.py`; 30 new tests, full suite **6,605 passed**. ⚠ **Two carries into this plan: the 256 GB memory decision (§3.3) and the amended C1.3.** Re-confirm at **A9** |
 | **T02** | §5.3 MANIFEST schema, **frozen**, extended for three arms (**A6**) | to freeze |
 
 **T03 (Gray), T07 (proofs), T09–T13 (manuscript) do not block.** T07 has one
 coupling: T06's definition of a precondition violation must match T07's statement.
 Agree the definition, then instrument.
+
+### 3.3 Memory sizing — decided 2026-08-02 (Mario), from T08's forensics
+
+**Bingo–IsalSR requests 256 GB in C2, not 128 GB. Decided now, not deferred to a
+measurement.**
+
+The evidence, from T08's reconstruction of C1's SLURM logs: **36 of the 45 missing
+cells are `OUT_OF_MEMORY`**, and 29 of the 31 IsalSR ones died at
+`MaxRSS ≈ 127.7 GB` against a 128 GB request — a hard ceiling, hit repeatedly, on
+Vladislavleva-4 (18 cells) and Korns-12 (9 cells). Campaign-wide, **326** `.err`
+files carry an `oom_kill` tail; the orchestrator's resume logic re-ran and
+recovered all but 36. C1's 1,465-vs-1,500 shortfall is what that ceiling looks
+like after the retry loop has hidden most of it.
+
+C2 is larger than C1 (≈70 problems, three arms), so the same ceiling would recur.
+
+| | C1 | C2 |
+|---|---|---|
+| Bingo–IsalSR `--mem` | 128 GB | **256 GB** |
+| Observed `MaxRSS` at failure | 127.7 GB | — |
+
+**Consequences that must be carried, not discovered:**
+
+- **Concurrency.** At 256 GB per task the pool narrows: `sd` (182 GB) cannot host
+  one at all, `sr` (439 GB) hosts 1, `bc` (683 GB) 2, `bl` (1855 GB) 7. §8.2 needs
+  ≈200–300 concurrent cores; re-derive the achieved concurrency from Stage C
+  (§4.3) under this request **before** Stage F signs off, and interact this with
+  the **B6** node-constraint decision — it is now partly made for us.
+- **This does not replace C1.11/D1.2.** Both still run and still size the *other*
+  five `(method, arm)` combinations from measurement. 256 GB is a floor for
+  Bingo–IsalSR set from evidence, not a substitute for measuring; if D1.2 shows
+  12 h `MaxRSS` comfortably under 128 GB **under the C++ dedup set**, the request
+  may be revised *down* before launch, with the measurement recorded.
+- **The failure ledger (P4) is what makes this checkable.** Under P4 an OOM leaves
+  a status row instead of silence, so a recurrence is counted at Stage C rather
+  than inferred from a cell shortfall in September.
+
+**Where it lands.** C1's configs are historical and are **not** edited:
+`slurm/{hard,cherrypicked,roundoff,models}_config.yaml` all carry
+`mem_gb: 128` for the Bingo IsalSR group. When C2's configs are cut, that value
+becomes `256` for Bingo–IsalSR only; the baseline and hash arms keep their
+measured values.
 
 ### 3.2 Engineering checks that are nobody's ticket
 
@@ -348,12 +390,13 @@ Every criterion below is **blocking**. A single violation stops the stage.
 |---|---|---|
 | **C1.1** | Every task exits 0 | 420 / 420 |
 | **C1.2** | Every `run_log.json` exists, parses, and validates against the extended RunLog schema — **every field present, correct type**: `r2_train`, `r2_test`, `nrmse_train`, `nrmse_test`, `mse_test`, `solution_recovered`, `jaccard_index`, `model_complexity`; `wall_clock_total_s`, `wall_clock_search_only_s`, `canonicalization_precomputed_s`, `canonicalization_runtime_s`, `cache_hit_rate`, `cache_hits`, `cache_misses`, `estimated_time_saved_s`, `time_to_r2_099_s`, `time_to_r2_0999_s`, `evaluation_time_s`, `overhead_time_s`; `total_dags_explored`, `unique_canonical_dags`, `empirical_reduction_factor`, `max_internal_nodes_seen`, `theoretical_reduction_bound`, `redundancy_rate`; `symbolic_form`, `isalsr_string`, `canonical_string`, `n_nodes`, `n_edges` | 420 / 420 |
-| **C1.3** | **No NaN and no inf** in any regression metric | 420 / 420. Any NaN is a live T08 defect and blocks Stage D |
+| **C1.3** | **No NaN and no inf** in any regression metric. **Amended 2026-08-02 by T08:** this is now *enforced by the runtime*, not merely hoped for — a run whose expression is undefined on part of the evaluation set is scored `R² = 0` / `NRMSE = 1` and records `regression.n_nonfinite_test_predictions > 0`. A NaN metric is therefore once again an unambiguous defect signal. **Additional criterion:** report the distribution of `n_nonfinite_test_predictions` across all 420 tasks; a non-zero count is a legitimate scientific outcome (extrapolation failure), **not** a blocker, but it must be counted and disclosed | 420 / 420 NaN-free. Any NaN now means the guard itself is broken and blocks Stage D |
 | **C1.4** | Every dataset loaded with the expected train/test shapes, asserted against the benchmark registry (Vlad-7 is 300/1200, Keijzer-6 is 50/120, Pagie-1 is 676/2500 — these are not typos, do not "fix" them) | 70 / 70 problems |
 | **C1.5** | `solution_recovered` is **computable** for every problem, i.e. a `sympy_expression` ground truth exists — the known gap for the D2 additions (T05 AC-4) | 70 / 70 |
 | **C1.6** | `isalsr` arm: `unique_canonical_dags > 0` and `empirical_reduction_factor ≥ 1` on **140/140**; `ρ > 1` on **≥ 90 %**. `ρ < 1` is arithmetically impossible and means a counter is broken. A ρ of exactly 1.0 everywhere means the dedup hook is dead and the entire arm is a null result | see cells |
 | **C1.7** | **Hash-arm sanity:** `ρ_hash ≤ ρ_isalsr` for the same `(method, problem)`. This is **guaranteed** on identical input streams (a fixed-order hash is sound but incomplete) and **strongly expected** live. Report every violation | 140/140 expected; investigate if violations exceed 5 % |
 | **C1.8** | `baseline` arm: dedup counters absent or zero and `canonicalization_runtime_s == 0`. Proves the baseline really is un-instrumented and is not silently paying canonicalisation cost | 140 / 140 |
+| **C1.9-BUG** | 🔴 **THE FIVE FALLBACK RATES ARE NOT IN THE RUNLOG — found 2026-08-02 on a live T05 D2 probe, 0 / 40 runs.** A walk of all 69 keys in a probe `run_log.json` finds no fallback, violation, timeout, conversion or reachability field, and there is no ledger file anywhere in the probe output. **C1.9 is therefore not failing, it is uncheckable.** This is the same class as **A7-BUG** and worse: §3's dividing line is *"anything measured during a run must be in the code before launch"*, and the reachability population **exists only while a search runs**, so unlike `engine` these cannot be recovered post hoc. They are the evidence base for R1.2. Note that **SP-6 passes and does not contradict this** — `slurm/t04_probe/sp_probe.py:189` imports `FallbackLedger` and lists its attributes; it never reads a live count. Must land with A7, **before Stage C**. Owner **T02**; T06 supplies the threshold | a probe `run_log.json` shows the five rates present and finite |
 | **C1.9** | **T06 fallback counters** present and finite on every `isalsr` task, covering all five paths (pre-normalisation violation, post-normalisation violation, 60 s timeout, conversion failure, canonicalisation raised). Report the five rates. This is check **B9** re-run at scale: B9 establishes the counters are alive and affordable on 2 probes, C1.9 confirms it holds across all 70 problems | 140/140 present; the five rates reported; overhead consistent with B9's measurement |
 | **C1.10** | `trajectory.csv` non-empty; `timestamp_s` monotone non-decreasing; `best_r2` monotone non-decreasing; `n_dags_explored` monotone non-decreasing; `n_unique_canonical ≤ n_dags_explored` | 420 / 420 |
 | **C1.11** | **Memory profile.** `MaxRSS` per task, tabulated by `(method, arm)`. Bingo+IsalSR historically needed 128 GB from heap fragmentation; the C++ dedup set should reduce that materially — **measure it, do not assume it**. Size production `--mem` at p99 + 50 % headroom. 🔴 **`sacct -X` returns an EMPTY `MaxRSS`** (verified on Picasso 2026-07-31): memory is accounted on the **`.batch` step**, not the allocation. Use `sacct -j <ID> -n -P -o JobID,MaxRSS \| awk -F'\|' '$1 ~ /\.batch$/'`. A profile built with `-X` comes back **silently blank** — a table of empty cells, no error | a populated table with 420 non-empty `MaxRSS` values, and a production `--mem` per `(method, arm)` derived from it |

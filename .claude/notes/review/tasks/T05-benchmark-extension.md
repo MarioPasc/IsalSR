@@ -7,7 +7,7 @@
 | Owner | **Mario** (+ Claude Code) for the experiments · **Karl** for the written justification |
 | Depends on | T02 (protocol and infrastructure) |
 | Blocks | **Campaign C2 — this ticket gates the launch** · T09 (Appendix D tables), T13 (page budget) |
-| Status | **DEFINITIONS LAUNCH-READY (local). AC-0…AC-3, AC-4, AC-8, AC-9 met; AC-4b partial; AC-5…AC-7 gated on C2.** `D2 = 20` problems: **all 14 ODE-Strogatz** + **6 AI Feynman** drawn by the pre-registered rule (`I.12.2, II.34.29a, II.34.29b, III.19.51, III.4.32, test_4`). Registry resolves **70/70** problems and `solution_recovered` is computable on **70/70** (was 65/70 — five *submitted* problems were failing Stage C's C1.5). **AC-3 ordering is verifiable from git**: rule `d95e7d9`, draw `0e4a573`. Local smoke green on **both hosts**, dedup live (ρ 1.51 UDFS / 1.77 Bingo), zero NaN. Full suite **6591 passed, 5 skipped**. 🔴 **Criterion (ii) excludes only 4 of 120, not "a substantial fraction"** — the R3.1 answer is re-attributed to criterion (iv) + compute. Five D1 definitions corrected (internal record only). **No Picasso probe submitted** — T04's probe is in flight and SP-0 is per-probe; AC-4b's on-cluster half is the one open item before D2 is declared launch-ready. |
+| Status | **D2 IS LAUNCH-READY. AC-0…AC-4, AC-4b, AC-8, AC-9 met; AC-5…AC-7 gated on C2 and cannot be met by this ticket.** `D2 = 20`: **all 14 ODE-Strogatz** + **6 AI Feynman** drawn by the pre-registered rule (`I.12.2, II.34.29a, II.34.29b, III.19.51, III.4.32, test_4`). Registry resolves **70/70**; `solution_recovered` computable on **70/70** (was 65/70 — five *submitted* problems were failing C1.5). **AC-3 ordering verifiable from git**: rule `d95e7d9`, draw `0e4a573`. **Picasso probe 40/40 COMPLETED** (arrays 1741991/1742002 at `fa41e2a`); SP-1…SP-6 + negative control all 40/40 PASS; ρ > 1 on 40/40; zero NaN; memory max 541 MB. Full suite **6591 passed, 5 skipped**. 🔴 **Criterion (ii) excludes only 4 of 120**, so the R3.1 answer is re-attributed to criterion (iv) + compute. 🔴 **The probe found a C2 blocker that is T02's, not T05's: C1.9 and C1.14 are *uncheckable* — the five T06 fallback rates and `engine` never reach the RunLog (0/40 each).** 🔴 **16/20 Bingo cells saturate at a 25-min budget, so the extension may WEAKEN CPDT** — pre-committed to reporting this. Five D1 definitions corrected (internal record only). |
 | Target | **problem definitions 2026-08-17 — this is a hard launch gate, every day late costs ≈7,200 core-hours of headroom** · results 2026-09-03 |
 
 ---
@@ -262,7 +262,7 @@ Requirements:
 | AC-2 | **met** | 130 = 116 + 14 counted from `groundtruth.csv`; black-box track's failing criteria named in §8 |
 | AC-3 | **met** | rule `d95e7d9`, draw `0e4a573`; ordering verifiable from git, seed content-derived |
 | AC-4 | **met** | `strogatz.py` + `feynman_remainder.py`, 433 tests; `sympy_expression` on 20/20 D2 and, after the C1.5 fix, on 70/70 overall |
-| AC-4b | **partial** | SP-7's five statements established **locally** for 20/20 D2 problems on both hosts. **No Picasso probe submitted**, so no SP-1…SP-6 table exists. This is the open item. |
+| AC-4b | **met** | Arrays 1741991/1742002 at `fa41e2a`, **40/40 COMPLETED**. SP-1…SP-6 + SP-3′ all 40/40 PASS as a six-row table; SP-7's five statements established for every D2 problem on both hosts. `T05-appendix/probe_results.md` |
 | AC-5 | **gated** | needs C2 |
 | AC-6 | **gated** | needs C2. The seed/N trade is written as one paragraph in §9.3 already, so the framing obligation is discharged in advance |
 | AC-7 | **gated** | needs C2 |
@@ -545,6 +545,69 @@ Picasso and C2 respectively. Specifically:
   YAML per method, no NaN/inf); the **on-Picasso** half is untouched.
 - **AC-5, AC-6, AC-7** — gated on C2 itself.
 
+### 2026-08-02 — the probe ran: 40/40 COMPLETED, AC-4b closed
+
+Arrays **1741991** (Bingo 1–20) and **1742002** (UDFS 21–40) at commit **`fa41e2a`**,
+seed 0, `max_time = 1500 s`. **40/40 COMPLETED**, zero failures, zero NaN, zero
+SLURM time-kills. SP-1…SP-6 and SP-3′ all **40/40 PASS**; SP-7's five statements
+established for **every** D2 problem on **both** hosts. Full tables:
+`T05-appendix/probe_results.md`; generated artefact:
+`T05-appendix/probe_summary_raw.md`.
+
+ρ > 1 on 40/40 (C1.6). Bingo 1.76–1.81 on 19 of 20; UDFS **2.11** mean on Strogatz
+against 1.36 on the Feynman remainder — UDFS reduces *more* than Bingo on this tier,
+reversing the submitted campaign's ordering. Memory median 393 MB, max 541 MB.
+
+**SP-1 failed the first attempt and that is the most useful thing the probe did.**
+Jobs 1739900/1739901 died in 7 s with four file-hash mismatches. Two real causes:
+the cluster's `.provenance.json` was still T04's (`a4206b8`), and my first `rsync`
+sent the **working tree**, carrying another session's uncommitted `aggregation.py`,
+`metrics.py`, `schemas.py`. Fixed by deploying from a clean detached worktree and
+extending the stamp to 46 files including the 14 vendored `.tsv.gz`. Without SP-1
+this probe returns 40 clean green results from partly-uncommitted code.
+
+Two smaller results worth keeping: the 24 s task is the **resume logic** correctly
+skipping the cell the single-task gate had already completed, which is pre-flight
+check **B8** demonstrated on D2; and the 13–17 KB `.err` files are Python INFO
+logging, not errors (0 matches for `Traceback|Error|FATAL|OOM`).
+
+### 2026-08-02 — 🔴 the probe found a C2 launch blocker that is not T05's
+
+**Stage C's C1.9 and C1.14 are uncheckable, not merely failing.** Neither quantity
+reaches the RunLog: a walk of all 69 keys finds **0/40** runs carrying any of the
+five T06 fallback rates, and **0/40** carrying `metadata.hardware.engine`.
+
+C1.14 is the known `A7-BUG`, now reproduced on a live D2 probe. **C1.9 is new.**
+`EXECUTION-PLAN.md` §3: *"anything measured during a run must be in the code before
+launch… Getting this wrong means re-running 8,400 jobs to recover a counter."* The
+reachability rates exist only while a search runs, so unlike `engine` they cannot be
+recovered afterwards — and they are the evidence base for R1.2.
+
+SP-6 passing does not contradict this. `sp_probe.sp6_counters` imports
+`FallbackLedger` and lists its attributes; it never reads a live count. The probe's
+own summariser now states SP-6 in those weaker terms so the row cannot be quoted as
+the stronger claim, and reports C1.9/C1.14 checkability as its own table.
+
+**Owner: T02** (C1.9 is its check; T06 supplies the threshold). Filed, not fixed
+here. T05 does not claim it is fixed.
+
+### 2026-08-02 — saturation is now measured, and it cuts against us
+
+**16 of 20 Bingo cells reach R² ≥ 0.999 at a 25-minute budget**, against a
+production budget of 12 hours; the local smoke showed `baseline` saturating too. If
+both arms saturate, `δᵢ ≈ 0` and the added problems **weaken** CPDT by contributing
+ties rather than strengthening it.
+
+This is an inference — the probe ran only the `isalsr` arm, so no `δᵢ` exists yet —
+and it is flagged as one. But §5.4 of the pre-registration commits us to reporting
+it, and the extension's defensible claim was always **coverage**, not a smaller
+p-value. The response letter should say so before analysis discovers it.
+
+`Strogatz-vdp2` is degenerate: target `−x/10`, solved by Bingo in 0 s and UDFS in
+7 s, ρ 1.17/1.14, the low outlier on both hosts. It stays — removing a problem after
+seeing its result is exactly the post-hoc selection the pre-registration forbids —
+but Appendix D.1 should name it.
+
 ### 2026-08-02 — the probe harness exists and is one command from going out
 
 `slurm/t05_probe/` — **built, not submitted.** 40 tasks (20 D2 problems × 2 hosts,
@@ -726,10 +789,14 @@ to be raised:
 4. **The seed reduction.** R1 praised "50 problems, 30 seeds". We are returning 70
    problems and 20 seeds. §6.3's arithmetic is sound and the draft states it in one
    paragraph, but this is the change most likely to draw a comment.
-5. **Dilution.** If the 14 Strogatz problems saturate — they are 400-sample published
-   trajectories and the local smoke already reached R² ≈ 0.98 in 45 s — they
-   contribute δᵢ ≈ 0 and *weaken* rather than strengthen CPDT. That is the honest
-   outcome and §5.4 of the rule document pre-commits us to reporting it.
+5. **Dilution — no longer a risk, a measurement.** The probe found **16 of 20 Bingo
+   cells at R² ≥ 0.999 on a 25-minute budget**, against a production budget of 12
+   hours, and the local smoke showed `baseline` saturating too. Saturated problems
+   contribute δᵢ ≈ 0, and ties *weaken* CPDT. The probe ran only the `isalsr` arm so
+   no δᵢ exists yet, but this is the honest reading and §5.4 of the rule document
+   pre-commits us to reporting it. **The extension's defensible claim is coverage,
+   not a smaller p-value** — write the letter that way from the start rather than
+   rewriting it in September.
 6. **Trajectory-data leakage.** SRBench's 75/25 random split of ODE trajectory data
    puts temporally adjacent, nearly identical points on both sides of the split. We
    follow the published protocol, and the leakage is identical across all three arms
