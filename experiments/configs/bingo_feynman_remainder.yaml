@@ -1,0 +1,51 @@
+# Bingo experiment on the AI Feynman remainder (6 problems).
+#
+# The six equations were selected by the pre-registered, outcome-blind rule in
+# docs/md_files/changes/r31_extension_selection.md and drawn by
+# experiments/scripts/r31_draw_extension.py.  The drawn list is
+# docs/md_files/changes/r31_extension_selection_draw.json.  Do not edit the
+# problem set here — it is fixed by that draw, and editing it would void the
+# pre-registration.
+#
+# References:
+#   benchmarks/datasets/feynman_remainder.py
+#   benchmarks/datasets/feynman_catalogue.py
+#
+# Operator set: identical to bingo_hard.yaml / bingo_roundoff.yaml / the
+# strogatz configs (sqrt, pow included).  Per EXECUTION-PLAN.md A4b the D2 tier
+# adopts the hard-tier set; the invariant that matters is that for a fixed
+# (method, problem) the operator set is identical across all three arms.
+#
+# Seeds: 20, per EXECUTION-PLAN.md §0.4a.  Not 30 — read the boxed note in §0.4
+# before changing this.
+
+experiment:
+  name: bingo_feynman_remainder
+  method: bingo
+  n_seeds: 20
+
+benchmarks:
+  feynman_remainder:
+    problems: all
+    train_size: 1000
+    test_size: 250
+
+bingo:
+  population_size: 500
+  stack_size: 32
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  max_generations: 100000
+  max_time: 43200       # 12h algorithm budget (standard).
+  fitness_metric: "lm"
+  convergence_check_frequency: 50
+  snapshot_frequency: 50
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

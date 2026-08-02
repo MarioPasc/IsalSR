@@ -32,6 +32,10 @@ from benchmarks.datasets.cherrypicked import (
 )
 from benchmarks.datasets.feynman import FEYNMAN_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.feynman import generate_data as feynman_generate_data  # noqa: E402
+from benchmarks.datasets.feynman_remainder import FEYNMAN_REMAINDER_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.feynman_remainder import (  # noqa: E402
+    generate_data as feynman_remainder_generate_data,
+)
 from benchmarks.datasets.hard import HARD_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.hard import generate_data as hard_generate_data  # noqa: E402
 from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS  # noqa: E402
@@ -72,7 +76,10 @@ _BENCHMARK_REGISTRY: dict[str, tuple[list[dict[str, Any]], Any]] = {
     "hard": (HARD_BENCHMARKS, hard_generate_data),
     "cherrypicked": (CHERRYPICKED_BENCHMARKS, cherrypicked_generate_data),
     "roundoff": (ROUNDOFF_BENCHMARKS, roundoff_generate_data),
+    # D2, the R3.1 extension (T05): ODE-Strogatz plus the pre-registered
+    # AI Feynman remainder.  See docs/md_files/changes/r31_extension_selection.md
     "strogatz": (STROGATZ_BENCHMARKS, strogatz_generate_data),
+    "feynman_remainder": (FEYNMAN_REMAINDER_BENCHMARKS, feynman_remainder_generate_data),
 }
 
 
@@ -157,6 +164,15 @@ def _generate_benchmark_data(
         n_samples = train_size + test_size
         train_ratio = train_size / n_samples
         return roundoff_generate_data(
+            bench,
+            n_samples=n_samples,
+            train_ratio=train_ratio,
+            seed=seed,
+        )
+    elif bench_name == "feynman_remainder":
+        n_samples = train_size + test_size
+        train_ratio = train_size / n_samples
+        return feynman_remainder_generate_data(
             bench,
             n_samples=n_samples,
             train_ratio=train_ratio,
