@@ -33,6 +33,23 @@ TRACKED_GLOBS = (
     "slurm/t04_probe/*.py",
     "slurm/t04_probe/*.sh",
     "slurm/t04_probe/tasks.txt",
+    # T05 (D2) -- added 2026-08-02.  The T05 probe reuses this stamp and this
+    # sp_probe.py, so without these entries SP-1 would verify T04's file set and
+    # say nothing at all about the D2 definitions the T05 probe exists to test.
+    # The vendored Strogatz data is included deliberately: it is input data that
+    # travels by rsync rather than being generated, so a truncated or partial
+    # transfer is exactly the failure SP-1 should catch.
+    "benchmarks/datasets/strogatz.py",
+    "benchmarks/datasets/feynman_remainder.py",
+    "benchmarks/datasets/feynman_catalogue.py",
+    "benchmarks/datasets/feynman.py",
+    "benchmarks/datasets/hard.py",
+    "benchmarks/datasets/data/strogatz/*.tsv.gz",
+    "experiments/configs/*_strogatz.yaml",
+    "experiments/configs/*_feynman_remainder.yaml",
+    "slurm/t05_probe/*.py",
+    "slurm/t05_probe/*.sh",
+    "slurm/t05_probe/tasks.txt",
 )
 
 
