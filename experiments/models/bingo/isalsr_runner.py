@@ -47,7 +47,11 @@ from experiments.models.bingo.runner import (
 )
 from experiments.models.fallback_ledger import FallbackLedger
 from isalsr.baselines import FixedOrder, HyperLogLog, fixed_order_hash, serialise
-from isalsr.baselines.host_native import HostNativeRecord, host_native_serialise
+from isalsr.baselines.host_native import (
+    HostNativeRecord,
+    host_native_hash,
+    host_native_serialise,
+)
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +84,11 @@ SHADOW_FIELDS: dict[FixedOrder, str] = {
     FixedOrder.TOPOLOGICAL: "shadow_distinct_topological",
     FixedOrder.TOPOLOGICAL_COMMUTATIVE: "shadow_distinct_topological_commutative",
 }
+
+# RunLog field name for the host-native shadow sketch.  Unlike the three above it
+# is keyed on the host's own ``command_array`` rows in the host's own row order,
+# so it is the only shadow counter that is free of the adapter's renumbering.
+SHADOW_HOST_NATIVE_FIELD = "shadow_distinct_host_native"
 
 
 def bingo_host_native_records(agraph: Any) -> list[HostNativeRecord]:
@@ -199,6 +208,16 @@ class _CanonicalDeduplicator:
             if shadow_hash
             else {}
         )
+        # Fourth sketch, keyed on the host's own AGraph instead of the adapter's
+        # LabeledDAG.  Kept out of ``_shadow`` because it consumes a different
+        # object; same precision, same constant memory.
+        self._shadow_host_native: HyperLogLog | None = (
+            HyperLogLog(p=SHADOW_HLL_PRECISION) if shadow_hash else None
+        )
+        # Whether any host object was ever offered to ``record_shadow``.  Call
+        # sites that only have the DAG (unit tests, offline replay) leave the
+        # host-native counter undefined rather than reporting a spurious 0.
+        self._host_native_offered: bool = False
         self.n_shadow_failures: int = 0
         # Historical hash set — used for fitness caching & legacy dedup
         self.canonical_seen: set[int] = set()
@@ -250,14 +269,20 @@ class _CanonicalDeduplicator:
 
         return canonical_string(dag, timeout=self.timeout)
 
-    def record_shadow(self, dag: Any) -> None:
-        """Feed one candidate into every enabled fixed-order cardinality sketch.
+    def record_shadow(self, dag: Any, host: Any = None) -> None:
+        """Feed one candidate into every enabled cardinality sketch.
 
         A serialisation failure is counted and ignored: the shadow counters are
         instrumentation and must never change the arm's search behaviour.
 
         Args:
-            dag: The same ``LabeledDAG`` object the deduplication key sees.
+            dag: The same ``LabeledDAG`` object the deduplication key sees, used
+                by the three adapter-order sketches.
+            host: The originating Bingo ``AGraph``, used by the host-native
+                sketch.  The host object is required because avoiding the
+                adapter is the whole point of that counter; it is never
+                re-derived from *dag*.  When ``None``, the host-native sketch is
+                left untouched and stays unreported.
         """
         if not self._shadow:
             return
@@ -266,10 +291,25 @@ class _CanonicalDeduplicator:
                 sketch.add(fixed_order_hash(dag, order))
             except Exception:  # noqa: BLE001
                 self.n_shadow_failures += 1
+        if host is None or self._shadow_host_native is None:
+            return
+        self._host_native_offered = True
+        try:
+            self._shadow_host_native.add(host_native_hash(bingo_host_native_records(host)))
+        except Exception:  # noqa: BLE001
+            self.n_shadow_failures += 1
 
     def shadow_counts(self) -> dict[str, float]:
-        """Return the shadow distinct-cardinality estimates by RunLog field name."""
-        return {SHADOW_FIELDS[order]: sketch.count() for order, sketch in self._shadow.items()}
+        """Return the shadow distinct-cardinality estimates by RunLog field name.
+
+        The host-native entry is present only if at least one host object was
+        offered to :meth:`record_shadow`; otherwise the counter has no defined
+        value and the RunLog field stays ``None``.
+        """
+        counts = {SHADOW_FIELDS[order]: sketch.count() for order, sketch in self._shadow.items()}
+        if self._shadow_host_native is not None and self._host_native_offered:
+            counts[SHADOW_HOST_NATIVE_FIELD] = self._shadow_host_native.count()
+        return counts
 
 
 class IsalSREvaluation(Evaluation):
@@ -468,9 +508,11 @@ class IsalSREvaluation(Evaluation):
                 _ep_bingo.ACTIVE_PROBE.record_bingo(dag, indv)
 
             # Shadow cardinality sketches — fed from the SAME LabeledDAG the
-            # deduplication key sees, so the two streams are identical.  Sits
-            # outside every timer: this is instrumentation, not arm cost.
-            self.dedup.record_shadow(dag)
+            # deduplication key sees, so the two streams are identical.  The
+            # AGraph goes with it: the host-native sketch must see the host's
+            # own rows, not the adapter's renumbering.  Sits outside every
+            # timer: this is instrumentation, not arm cost.
+            self.dedup.record_shadow(dag, indv)
 
             # Resolve canonical hash: atlas fast-path or online fallback
             t0 = time.perf_counter()

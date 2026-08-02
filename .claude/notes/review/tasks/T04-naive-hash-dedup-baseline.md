@@ -557,6 +557,61 @@ will run.*
 comparison across all three arms on both hosts, and `sacct MaxRSS` for the shadow
 ON/OFF pairs (AC-10).
 
+### 2026-08-02 — `shadow_distinct_host_native` landed: **the C2 blocker is closed**
+
+The `isalsr` arm now records a fourth `HyperLogLog(p=16)` sketch keyed on the
+**host-native** serialisation, fed the host object (`indv` / `cgraph`) at the existing
+`record_shadow` call site. Production therefore measures ρ against the baseline the
+paper actually claims, not against the adapter's own normalisation.
+
+Verified by the orchestrator: all four `shadow_distinct_*` fields present on
+`SearchSpaceResults`; `mypy` clean (55 files); `ruff` clean.
+
+| | total | unique_canon | insertion | topological | topo_comm | **host_native** |
+|---|---|---|---|---|---|---|
+| Bingo | 30,560 | 17,306 | 17,566.3 | 17,469.6 | 17,373.0 | **18,295.9** |
+| UDFS | 2,294 | 1,135 | 1,712.2 | 1,280.4 | 1,238.6 | **2,294.7** |
+
+`serialisation failures = 0` on both; `--no-shadow-hash` → all four `None`.
+
+**These cross-validate the independent Mode-1-in-miniature measurements**, from a
+completely separate code path:
+
+| | ρ_exact from shadow counter | ρ_exact measured independently |
+|---|---|---|
+| UDFS | 2,294 / 2,294.7 = **1.000** | **1.0222** |
+| Bingo | 30,560 / 18,295.9 = **1.671** | **1.7013** |
+
+Different problems and configurations, so agreement to a few percent is the expected
+outcome. UDFS's host-native count landing *on* the candidate total is the sharpest
+statement of the result: **a naive fixed-order hash merges essentially nothing on
+UDFS.**
+
+**Two defects found, neither fixed, both worth acting on.**
+
+1. 🔴 **`record_shadow`'s bare `except Exception` silently converts an import error
+   into a counter of zero.** This was not theoretical: mid-implementation a formatter
+   stripped the `host_native_hash` import while it was momentarily unused, and every
+   single record was swallowed — 12/12 failures with the counter reading `0.0` and no
+   error anywhere. It was caught only because the new test asserts
+   `n_shadow_failures == 0`. **The same trap covers the three adapter-order sketches**,
+   where an import regression would silently produce a plausible-looking zero. The
+   handler should catch `HostNativeSerialisationError` specifically and let
+   `NameError`/`ImportError` propagate.
+2. `shadow_counts()` emits `shadow_distinct_host_native` **only if at least one host
+   object was offered** to `record_shadow`. Forced by
+   `tests/unit/test_hash_arm.py::test_shadow_counters_track_all_three_orders`, which
+   asserts `set(counts) == {the three adapter fields}` while calling `record_shadow(dag)`
+   with no host. Production call sites always pass the host, so the field is always
+   populated there — but the conditional shape is fragile and that test should be
+   updated to expect four fields.
+
+**Baseline-count correction.** The brief quoted a regression baseline of "5,003 passed"
+for `tests/unit/`; that figure was **unit + property combined**. Measured directly:
+`tests/unit/` = 4,987 pre-existing (now 4,999 with 12 new), `tests/property/` = 16
+separately. The implementer flagged the mismatch rather than quietly matching the
+number, which is the right call — no regression exists.
+
 **Defect for T02/A7, found in the probe's own output:** `run_log.json`'s
 `metadata.hardware` has **no `engine` field** — it read `<none>`. Check **A7** requires
 `engine` recorded per run, and **C1.14** requires asserting `engine == native` on

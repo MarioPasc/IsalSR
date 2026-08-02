@@ -96,6 +96,15 @@ class SearchSpaceResults:
     shadow_distinct_topological: float | None = None
     shadow_distinct_topological_commutative: float | None = None
 
+    # Distinct cardinality of the SAME stream keyed by the HOST's own structure
+    # in the host's own node order (isalsr.baselines.host_native), i.e. with no
+    # adapter renumbering at all.  The three fields above key on the adapter's
+    # output, whose VAR/CONST/topological layout is itself a partial canonical
+    # form, so they understate the redundancy IsalSR removes; this field is the
+    # baseline the reduction factor rho must be measured against.  ``None`` when
+    # the arm never saw a host object (the sketches were fed a bare DAG).
+    shadow_distinct_host_native: float | None = None
+
 
 @dataclass(frozen=True)
 class BestExpression:
