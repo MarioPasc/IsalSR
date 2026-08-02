@@ -45,16 +45,46 @@ def _run(cmd: list[str]) -> str:
 
 
 def sp1_provenance(repo: Path) -> dict[str, Any]:
-    """SP-1: the commit on the node is the commit that was synced."""
-    head = _run(["git", "-C", str(repo), "rev-parse", "HEAD"])
-    described = _run(["git", "-C", str(repo), "describe", "--tags", "--always", "--dirty"])
-    status = _run(["git", "-C", str(repo), "status", "--porcelain"])
+    """SP-1: the code on this node is the commit that was synced.
+
+    The node's ``.git`` is deliberately NOT synced (rsync excludes it, and
+    rewriting a remote checkout's git state is destructive), so
+    ``git rev-parse HEAD`` on the node reports whatever that checkout was last
+    left at -- stale, and therefore worse than useless for provenance.
+
+    Instead the sync writes ``.provenance.json`` from the *local* clean tree and
+    this check verifies it against the files actually present, by hashing the
+    sources that matter.  That is a stronger guarantee than a commit id: it
+    proves the bytes on the node are the bytes that were committed, rather than
+    proving a `.git` directory once pointed somewhere.
+    """
+    stamp_path = repo / ".provenance.json"
+    if not stamp_path.exists():
+        return {
+            "pass": False,
+            "error": f"no provenance stamp at {stamp_path}; sync did not write one",
+        }
+    stamp = json.loads(stamp_path.read_text())
+
+    mismatches: list[str] = []
+    for rel, expected in stamp.get("file_sha256", {}).items():
+        f = repo / rel
+        if not f.exists():
+            mismatches.append(f"{rel}: MISSING")
+            continue
+        actual = __import__("hashlib").sha256(f.read_bytes()).hexdigest()
+        if actual != expected:
+            mismatches.append(f"{rel}: {actual[:12]} != {expected[:12]}")
+
+    node_head = _run(["git", "-C", str(repo), "rev-parse", "HEAD"])
     return {
-        "head": head,
-        "describe": described,
-        "tree_clean": status == "",
-        "dirty_files": [line for line in status.splitlines() if line][:20],
-        "pass": bool(head) and head != "<error>" and not described.endswith("-dirty"),
+        "synced_commit": stamp.get("head"),
+        "synced_describe": stamp.get("describe"),
+        "synced_tree_clean": stamp.get("tree_clean"),
+        "node_git_head_ignored": node_head,
+        "files_verified": len(stamp.get("file_sha256", {})),
+        "mismatches": mismatches[:10],
+        "pass": (bool(stamp.get("head")) and stamp.get("tree_clean") is True and not mismatches),
     }
 
 

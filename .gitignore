@@ -219,3 +219,4 @@ cmake_install.cmake
 install_manifest.txt
 *.egg-info/
 dist/
+.provenance.json
