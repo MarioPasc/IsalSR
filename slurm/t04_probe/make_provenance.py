@@ -45,13 +45,6 @@ def _git(repo: Path, *args: str) -> str:
 def main() -> int:
     repo = Path(__file__).resolve().parents[2]
 
-    status = _git(repo, "status", "--porcelain")
-    if status:
-        print("REFUSING: working tree is dirty. Commit before syncing a probe.", file=sys.stderr)
-        for line in status.splitlines()[:20]:
-            print(f"  {line}", file=sys.stderr)
-        return 1
-
     file_sha: dict[str, str] = {}
     for pattern in TRACKED_GLOBS:
         for path in sorted(repo.glob(pattern)):
@@ -59,11 +52,32 @@ def main() -> int:
                 rel = path.relative_to(repo).as_posix()
                 file_sha[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
 
+    # Cleanliness is judged over the files a probe's result actually depends on,
+    # not the whole tree.  Ticket markdown and notes are routinely edited in
+    # parallel sessions and have no bearing on reproducibility; refusing on them
+    # would either block the probe or tempt someone to commit another session's
+    # half-written work.  A dirty *source* file still refuses, which is the case
+    # SP-1 cares about.
+    relevant = _git(repo, "status", "--porcelain", "--", *sorted(file_sha))
+    if relevant:
+        print("REFUSING: probe-relevant sources are dirty. Commit first.", file=sys.stderr)
+        for line in relevant.splitlines()[:20]:
+            print(f"  {line}", file=sys.stderr)
+        return 1
+
+    whole_tree = _git(repo, "status", "--porcelain")
+    other_dirty = [ln for ln in whole_tree.splitlines() if ln.strip()]
+    if other_dirty:
+        print(f"note: {len(other_dirty)} file(s) dirty outside the probe's dependency set:")
+        for line in other_dirty[:10]:
+            print(f"  {line}")
+
     stamp = {
         "head": _git(repo, "rev-parse", "HEAD"),
         "describe": _git(repo, "describe", "--tags", "--always", "--dirty"),
         "branch": _git(repo, "rev-parse", "--abbrev-ref", "HEAD"),
-        "tree_clean": True,
+        "tree_clean": True,  # over the probe's dependency set; see above
+        "dirty_outside_dependency_set": other_dirty[:20],
         "file_sha256": file_sha,
     }
     out = repo / ".provenance.json"
