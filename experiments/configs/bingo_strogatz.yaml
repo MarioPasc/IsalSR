@@ -1,0 +1,53 @@
+# Bingo experiment on the ODE-Strogatz benchmarks (14 problems).
+#
+# These are SRBench's ground-truth track minus AI Feynman: the 14 two-state
+# dynamic models of La Cava, Danai & Spector (2016), redistributed in PMLB.
+# Added under T05 to answer reviewer comment R3.1.
+#
+# References:
+#   docs/md_files/changes/r31_extension_selection.md   (pre-registered rule)
+#   benchmarks/datasets/strogatz.py
+#   benchmarks/datasets/data/strogatz/PROVENANCE.md
+#
+# Operator set: identical to bingo_hard.yaml / bingo_roundoff.yaml (sqrt, pow
+# included).  Per EXECUTION-PLAN.md A4b the D2 tier adopts the hard-tier set;
+# the invariant that matters is that for a fixed (method, problem) the operator
+# set is identical across the baseline, hash and isalsr arms.
+#
+# Seeds: 20, per EXECUTION-PLAN.md §0.4a.  Not 30 — read the boxed note in §0.4
+# before changing this.
+#
+# train/test: the Strogatz datasets are PUBLISHED FIXED data (400 rows each),
+# not generated.  300/100 is SRBench's 75/25 split; the per-problem `sampling`
+# overrides in strogatz.py pin these sizes and the seed selects the split.
+
+experiment:
+  name: bingo_strogatz
+  method: bingo
+  n_seeds: 20
+
+benchmarks:
+  strogatz:
+    problems: all
+    train_size: 300
+    test_size: 100
+
+bingo:
+  population_size: 500
+  stack_size: 32
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  max_generations: 100000
+  max_time: 43200       # 12h algorithm budget (standard).
+  fitness_metric: "lm"
+  convergence_check_frequency: 50
+  snapshot_frequency: 50
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

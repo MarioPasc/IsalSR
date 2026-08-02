@@ -38,6 +38,8 @@ from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.nguyen import generate_data as nguyen_generate_data  # noqa: E402
 from benchmarks.datasets.roundoff import ROUNDOFF_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.roundoff import generate_data as roundoff_generate_data  # noqa: E402
+from benchmarks.datasets.strogatz import STROGATZ_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.strogatz import generate_data as strogatz_generate_data  # noqa: E402
 from experiments.models.analyzer.aggregation import (  # noqa: E402
     aggregate_all_metrics,
     apply_holm_correction,
@@ -70,6 +72,7 @@ _BENCHMARK_REGISTRY: dict[str, tuple[list[dict[str, Any]], Any]] = {
     "hard": (HARD_BENCHMARKS, hard_generate_data),
     "cherrypicked": (CHERRYPICKED_BENCHMARKS, cherrypicked_generate_data),
     "roundoff": (ROUNDOFF_BENCHMARKS, roundoff_generate_data),
+    "strogatz": (STROGATZ_BENCHMARKS, strogatz_generate_data),
 }
 
 
@@ -154,6 +157,18 @@ def _generate_benchmark_data(
         n_samples = train_size + test_size
         train_ratio = train_size / n_samples
         return roundoff_generate_data(
+            bench,
+            n_samples=n_samples,
+            train_ratio=train_ratio,
+            seed=seed,
+        )
+    elif bench_name == "strogatz":
+        # Published fixed datasets (PMLB / ODE-Strogatz): the per-problem
+        # ``sampling`` overrides pin 300/100 and the seed selects the split,
+        # so ``train_size``/``test_size`` from the YAML are advisory only.
+        n_samples = train_size + test_size
+        train_ratio = train_size / n_samples
+        return strogatz_generate_data(
             bench,
             n_samples=n_samples,
             train_ratio=train_ratio,
