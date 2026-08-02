@@ -65,6 +65,17 @@ for m in miniconda/3 miniconda3 Miniconda3 anaconda3 Anaconda3; do
 done
 [ "$module_loaded" -eq 0 ] && echo "[env] No conda module; assuming conda in PATH."
 
+# MPI 5.0.9 -- REQUIRED by bingo-nasa via mpi4py on Picasso, and the reason the
+# first probe attempt died in 13 s: mpi4py's ABI-probing import hook dlopen()s
+# libmpi at import time and raises "cannot load MPI library" when it is absent.
+# The failure is in mpi4py's meta-path finder, so it fires on Bingo's *import*,
+# long before any search starts.  Loading the wrong major version instead yields
+# "Please use mpi 5.0.9".  Mirrors slurm/workers/models_experiment_slurm.sh:31-35,
+# which this worker should have inherited from the outset.
+for mod in openmpi_gcc/5.0.9_gcc7 openmpi_gcc/5.0.9_gcc15 openmpi_gcc/5.0.9_gcc14; do
+    module load "$mod" 2>/dev/null && { echo "[env] loaded $mod"; break; }
+done
+
 if command -v conda >/dev/null 2>&1; then
     source "$(conda info --base)/etc/profile.d/conda.sh" || true
     conda activate "${CONDA_ENV_NAME}" 2>/dev/null || source activate "${CONDA_ENV_NAME}"
@@ -72,11 +83,23 @@ else
     source activate "${CONDA_ENV_NAME}"
 fi
 
+# conda-installed openmpi lives here; without it mpi4py finds the module's libmpi
+# but not its conda-side dependencies.
+CONDA_PREFIX="${CONDA_PREFIX:-$(conda info --base)/envs/${CONDA_ENV_NAME}}"
+export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
 cd "${REPO_DIR}"
 export PYTHONPATH="${REPO_DIR}/src:${REPO_DIR}:${PYTHONPATH:-}"
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
+
+# Bypass CPython's pymalloc arena allocator in favour of glibc malloc.  pymalloc
+# fragments the heap over 10k+ generations (256 KB arenas pinned by surviving
+# objects); glibc malloc mmaps large allocations and returns them cleanly on
+# free.  This is what keeps Bingo+IsalSR off the OOM killer, and AC-10's memory
+# measurement is only meaningful with the production setting in place.
+export PYTHONMALLOC=malloc
 
 PY="$(command -v python)"
 OUT_DIR="${T04_OUT}/${METHOD}_${VARIANT}_${PROBLEM}_shadow-${SHADOW}"
