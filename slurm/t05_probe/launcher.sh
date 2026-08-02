@@ -67,11 +67,19 @@ submit() {
 }
 
 # ---- Per-host submission ---------------------------------------------------
-# --mem differs by host, so the two hosts go as separate arrays.  Bingo+IsalSR
-# historically needed 128 G from heap fragmentation; the C++ dedup set should
-# cut that sharply.  These figures mirror the T04 probe, which is the closest
-# measured precedent; read MaxRSS from sacct afterwards and resize, remembering
-# that `sacct -X` returns an EMPTY MaxRSS -- memory is on the .batch step.
+# --mem differs by host, so the two hosts go as separate arrays.
+#
+# SIZED FROM MEASUREMENT, 2026-08-02.  The single-task gate (jobs 1740406 /
+# 1740407, both COMPLETED) used **361 MB** on Bingo and **545 MB** on UDFS, read
+# from the `.batch` step -- `sacct -X` returns an EMPTY MaxRSS, so a profile
+# built with -X comes back silently blank.  The first draft asked for 48 G and
+# 16 G, inherited from the T04 probe; at 48 G only three tasks fit on a 182 GB
+# Intel node, so a 10-wide throttle would have spread over four nodes for no
+# reason.  8 G / 4 G is still 15-20x the measured peak.
+#
+# The measurement is n=1 problem per host, so the headroom is deliberately far
+# wider than the usual p99 + 50 %: Bingo's dedup set on the 400-sample Strogatz
+# problems will grow faster per second than on I.12.2's 1000 samples.
 submit_host() {
     local host="$1" first="$2" last="$3" mem="$4"
     local range="${first}-${last}"
@@ -112,8 +120,8 @@ echo ""
 # tasks.txt rows 1-20 are bingo, 21-40 are udfs (comments/blanks stripped by the
 # worker before indexing).  Regenerate with make_tasks.py if D2 ever changes --
 # and if it does, re-check these boundaries.
-submit_host bingo  1 20 "48G"
-submit_host udfs  21 40 "16G"
+submit_host bingo  1 20 "8G"
+submit_host udfs  21 40 "4G"
 
 echo ""
 echo "After the array:"
