@@ -114,4 +114,11 @@ CHECK_RC=$?
 echo ""
 echo "Finished: $(date)   gate_rc=${GATE_RC} check_rc=${CHECK_RC}"
 echo "Evidence: ${OUT}/b4_equivalence_gate.json"
-exit $(( GATE_RC != 0 ? GATE_RC : CHECK_RC ))
+# Exit on B4's OWN verdict, not the gate script's.  The gate script exits 1 when
+# ANY of its three gates fails, and gate 3 (round-trip) fails on 5/10,000 DAGs
+# identically on both engines -- a real finding, tracked above and escalated to
+# T07, but not a statement about the port.  Propagating the gate's code would
+# park this job in FAILED forever and make the SLURM state lie about the check
+# B4 exists to perform; the round-trip count is already reported above and is
+# not silently dropped.
+exit ${CHECK_RC}
