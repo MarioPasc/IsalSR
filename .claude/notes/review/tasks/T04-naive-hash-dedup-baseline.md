@@ -7,7 +7,7 @@
 | Owner | **Mario** (+ Claude Code) |
 | Depends on | T01 (engine), T02 (campaign infrastructure) |
 | Blocks | **Campaign C2 — this ticket gates the launch** · T09 (tables), T13 (page budget) |
-| Status | **IN PROGRESS — launch-gate code complete, probe not yet submitted.** **AC-1 met** (0 soundness violations / 14,841 DAGs × 3 orders × both backends). Arm keys on the **host-native** representation on both hosts; 4,987 tests green, mypy/ruff clean, smokes exit 0. Orchestrator carries `--max-time` / `--no-shadow-hash`. Probe scripts written (`slurm/t04_probe/`), SP harness verified locally with a **real** SP-3 negative control. **Headline, provisional: UDFS 92.4 % of duplicates require 1-WL (ρ 1.0222→1.4029); Bingo 6.5 % (ρ 1.7013→1.7890).** Both §2 predictions confirmed, Bingo concession included. **C2 blocker CLOSED** — `shadow_distinct_host_native` records on both hosts. **Probe RUNNING on Picasso** (arrays 1737666/1737667, 28 tasks, seed 0, commit `a4206b8`); single-task gate passed, 0 failures at last check. AC-2b/AC-3/AC-5/AC-10 open pending probe results |
+| Status | **IMPLEMENTATION COMPLETE AND C2-READY (2026-08-02). Blocked on C2 for the numbers.** Everything remaining is campaign execution, analysis, or the response letter — **no further implementation is implied**. Readiness assessment: `T04-appendix/c2_launch_readiness.md`. Last code gap (`shadow_distinct_host_native` shipped untested in `a24d73c`) closed the same day: 6 new tests, both hosts, incl. a failure tripwire; unit suite **6,146 passed, 0 failed**. **Cannot be closed:** AC-3, AC-5, AC-7 unmet, AC-2/AC-4 partial. AC-3/AC-4/AC-5 are blocked on campaign C2 (itself gated by T05); AC-7 on the `/review-answer` pass. **Met:** AC-0, AC-1, AC-2b, AC-6, AC-8, AC-10. **Probe COMPLETE** (2026-08-02, arrays 1737666/1737667 + retry 1737714, commit `a4206b8`, seed 0): 28/28 cells with validating `run_log.json`, **336/336 SP checks pass**, SP-3 negative control genuine (`cpp_actually_invoked` false under `ISALSR_ENGINE=python`). **AC-10 PASS** — shadow counters cost −0.24 %/−0.14 % RSS, no OOM. **Headline, provisional: UDFS naive hash finds ρ=1.0000 — literally zero duplicates — against IsalSR 1.396–2.243, so 100 % of the reduction requires 1-WL; Bingo naive hash recovers 42–44 % of 45 %, so only 4.3 % requires 1-WL (the concession, AC-8).** Full specification, proofs and results: **`T04-appendix/naive_hash_baseline.md`** |
 | Target | **implementation 2026-08-17 — this is a hard launch gate, every day late costs ≈7,200 core-hours of headroom** · results 2026-09-03 |
 
 ---
@@ -1205,6 +1205,167 @@ dispatches to C++; `ISALSR_ENGINE=python` now genuinely does not.
 
 **Regression:** `pytest tests/unit/ tests/property/ -q` → **4,946 passed, 5 skipped**;
 `ruff` clean; `mypy src/isalsr/` → Success, 54 files.
+
+---
+
+### 2026-08-02 — Picasso probe complete; formal appendix written; ticket assessed NOT closeable
+
+**Full write-up: `T04-appendix/naive_hash_baseline.md`** — formal definition of the
+serialisation and its soundness proof, the incompleteness counter-example, the
+design rationale, the test protocol, and every measured number. This entry is the
+summary only.
+
+**Probe.** Arrays `1737666`/`1737667` (28 tasks) + retry `1737714`, commit
+`a4206b8`, seed 0, `max_time` 1500 s, `--constraint=intel`. **28/28 cells produced
+a validating `run_log.json`.** 336/336 SP checks pass across 56 evidence files.
+SP-3's negative control is genuine: `cpp_actually_invoked` is `true` on all 28
+normal runs and **`false`** on all 28 forced-Python runs, with
+`reported_matches_observed` true in both — the `canonical.py:349` fix confirmed on
+Picasso. Build: gcc 11.1.0, `x86-64-v3`, AVX2 on, AVX-512 off.
+
+**Headline (provisional — one seed, four problems, 25-minute budgets).**
+
+| Host | ρ_hash | ρ_isalsr | share of detectable redundancy needing 1-WL |
+|---|---|---|---|
+| UDFS | **1.0000** (all four problems) | 1.396 – 2.243 | **100 %** |
+| Bingo | 1.716 – 1.772 | 1.766 – 1.825 | **4.3 %** |
+
+UDFS's naive hash finds **exactly zero** duplicates — it enumerates systematically
+and never re-emits an identical `CompGraph`. Confirmed independently by the hash
+arm's `r2_test` matching baseline to the digit in all four UDFS cells. Bingo is the
+concession required by AC-8 and is recorded without softening: a plain host-native
+hash recovers nearly all of Bingo's redundancy, because a stochastic GP re-derives
+byte-identical `command_array`s.
+
+**AC-10 PASS.** Shadow ON/OFF `MaxRSS` deltas: Bingo Pagie-1 **−0.24 %**, UDFS
+Pagie-1 **−0.14 %**, UDFS Nguyen-1 +4.9 %. Two of three negative ⇒ the positive is
+allocator noise; four HLL(p=16) sketches total 256 KB and cannot explain 20 MB. No
+OOM, no growth with stream length. The Bingo/Nguyen-1 pair is unusable — both tasks
+finished inside SLURM's accounting interval (28 s / 21 s).
+
+**Methodological finding — the object you serialise decides the answer.** The
+adapter-order shadow sketches say a fixed-order serialisation captures **94.6 %** of
+UDFS's reduction; the host-native arm, same host and problems, says **0 %**. The
+whole difference is the adapters' renumbering, which pre-canonicalises the DAG
+before the "naive" hash sees it. This reproduces the 2026-07-30 retraction from two
+independent measurements inside a single probe. Any reported fixed-order ρ must
+state which representation it was computed on.
+
+**Gap carried to C2.** `shadow_distinct_host_native` is **absent from this probe**:
+it landed in `a24d73c`, after the probe was submitted at `a4206b8`, where
+`record_shadow` still took no host argument. Provenance, not defect — but the
+same-stream host-native comparison is unverified on Picasso and must be present in C2.
+
+**Unrelated defect found and fixed.** Task 7 was killed 20 min 33 s *after* its
+search finished cleanly, hung on two unbounded SymPy calls in
+`translator.to_run_log()`. `run_log.json` is written after that step, so the run
+left no artefact. Re-running the identical cell on the identical unbounded code
+completed in 24:49 — **the pathology is stochastic**, because Bingo stops on wall
+clock and the final individual varies with node speed. Since the arms change the
+search trajectory, the losses are not arm-neutral: a bias risk, not just an
+availability risk. Fixed by bounding both calls at 300 s and returning `None`
+(undetermined, excluded) instead of a fabricated `False`/`0.0`. Metric preservation
+proven — 20 pinned values byte-identical. Dropping the per-node `simplify` was
+measured and **rejected**: it changes published Jaccard values (Pythagorean
+0.1429→0.0; cancelling rational 0.2222→0.1). Counter-example pinned as a regression
+test in `tests/unit/test_analyzer_metrics.py`.
+
+**Closure assessment — the ticket does NOT close.**
+
+| Unmet | Blocked on |
+|---|---|
+| AC-3 (hash arm of C2, ≈2,800 runs @ 20 seeds) | campaign C2, gated by T05 |
+| AC-4 (partial: costs measured, `S` for all three arms missing) | C2 |
+| AC-5 (three-arm stats + critical-difference diagram) | C2 |
+| AC-7 (paper states sound-but-incomplete) | `/review-answer` pass |
+| AC-2 (partial: dispersion and k-stratification missing) | C2 |
+
+Met: AC-0, AC-1, AC-2b, AC-6, AC-8, AC-10. What *is* settled is the engineering
+question the probe existed to answer — the arm runs correctly on Picasso, on both
+hosts, under the C++ engine and the decomposed alphabet, at no memory risk.
+
+### 2026-08-02 (later) — C2 readiness answered; last code gap closed
+
+**Question put by Mario:** is the hash implementation ready for the C2 submission,
+and is everything left only further testing or writing the reviewer answer?
+
+**Answer: yes, now.** One gap was found while checking, and closed the same day.
+Assessment: `T04-appendix/c2_launch_readiness.md`.
+
+**The gap.** `shadow_distinct_host_native` — the only same-stream measurement free
+of the adapter-renumbering bias — had **never executed anywhere**: zero references
+in `tests/unit/test_hash_arm.py`, and it landed in `a24d73c` *after* the probe was
+submitted at `a4206b8`, where `record_shadow` still took no `host` argument. Not a
+testing gap: if it had misbehaved silently across ≈2,800 runs, the same-stream half
+of the R1.4 answer would have been unusable and C2 would need re-running.
+
+**Closed.** Six tests, parametrised over both hosts:
+
+| Test | Pins |
+|---|---|
+| `test_host_native_shadow_records_distinct_hosts` | field present, non-null, within 5 % of truth, `n_shadow_failures == 0` |
+| `test_host_native_shadow_absent_when_no_host_offered` | DAG-only call sites leave it **undefined, not 0** |
+| `test_host_native_shadow_failure_is_counted_not_silent` | broken extractor raises `n_shadow_failures` — the signal Stage C depends on |
+
+Stubs implement each host's documented record contract and are driven through the
+**real** extractors, with op codes drawn from the modules' own arity sets so they
+cannot drift. Result: `test_hash_arm.py` **28 passed**; full unit suite **6,146
+passed, 5 skipped, 0 failed**; ruff + format clean.
+
+Coverage now: the extractors are proven against *real* hosts by the probe (the
+`hash` arm keys on them, 28/28 cells); the shadow plumbing around them is proven by
+unit test. Residual gap is only that the two have never run *together* on Picasso —
+now a confirmation step, not a blocker. **Action for C2:** enable the counter in the
+`slurm/t05_probe/` submission; assert `n_shadow_failures == 0` and a non-null
+`shadow_distinct_host_native` in Stage C.
+
+**Two corrections to earlier entries.**
+
+- The open item claiming `test_shadow_counters_track_all_three_orders` "should
+  expect four fields" was **wrong**: it calls `record_shadow(dag)` with no host, so
+  three fields is correct under the `_host_native_offered` guard. Closed as invalid.
+- The new tests initially passed with `Any` unimported — `from __future__ import
+  annotations` defers evaluation, so `F821` surfaced only under `ruff`. Lint is
+  load-bearing in this file, not cosmetic.
+
+### 2026-08-02 (later still) — T05 agent's report; one correction to mine, one fix taken
+
+**Correction to the entry above — my "untested" finding was half wrong.** I
+claimed `shadow_distinct_host_native` shipped with no unit test. It did not:
+`tests/unit/test_shadow_host_native.py` was committed in `a24d73c`, the same
+commit that added the feature. The claim came from grepping
+`tests/unit/test_hash_arm.py` alone and generalising from one file. The
+*Picasso* half was correct — it had never run there, since `a4206b8` predates
+`a24d73c`. Consequence: **the launch gate was never actually open**, and three of
+the six tests I added were duplicate coverage. They have been trimmed to the one
+case the dedicated file does not cover.
+
+**Confirmation step closed, verified independently.** The T05 agent reports the
+T05 probe carried the counters (`worker.sh` never passes `--no-shadow-hash`).
+Checked directly against Picasso rather than accepted: **40/40 T05 run logs carry
+all four shadow fields, present, finite and > 0**, both hosts, 20 problems; zero
+serialisation failures on the 38 tasks that ran a search (the other 2 are
+resume-skipped I.12.2 cells whose run logs came from the single-task gate).
+
+**Their correction was right, and is now fixed.** `n_shadow_failures` was tracked
+then only logged at INFO to stderr — verified absent from `SearchSpaceResults`
+and both translators, so `assert n_shadow_failures == 0` was not checkable from a
+RunLog. Across 420 Stage-C tasks that is 420 greps, contingent on log retention
+and on the line staying at INFO.
+
+Added `n_shadow_failures: int | None = None` to `SearchSpaceResults`; both
+runners' `shadow_counts()` now emit it. It persists via the orchestrator's
+existing splat (`orchestrator.py:516`), so **no translator edits were required** —
+which mattered: `bingo/translator.py` and `udfs/translator.py` are both being
+edited by the T08 session. `schemas.py` is contended too, but T08's edits are in
+`RegressionResults` and this one is in `SearchSpaceResults`; T08's
+`n_nonfinite_test_predictions` verified intact afterwards. Emitted only when the
+sketches ran, so a shadow-off run leaves it `None` rather than claiming zero
+failures for work it never did.
+
+Two pre-existing exact-key assertions needed updating (`test_hash_arm.py`,
+`test_shadow_host_native.py`). **Stage C can now assert `n_shadow_failures == 0`
+as a field read.**
 
 ---
 
