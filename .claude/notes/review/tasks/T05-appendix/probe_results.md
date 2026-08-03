@@ -147,6 +147,60 @@ not T05's to fix, and T05 does not claim it is fixed.
 
 ---
 
+## B.4b T04's shadow-hash confirmation — already satisfied by this probe
+
+T04 asked for one confirmation before ≈2,800 runs depend on it: *"enable the counter
+in the pending `slurm/t05_probe/` submission so the sketch and extractors are seen
+running together on Picasso once"*, and *"assert `n_shadow_failures == 0` at
+Stage C"*.
+
+**The request was written against a pending probe; the probe has since run, and it
+already carried the counters.** `slurm/t05_probe/worker.sh` never passes
+`--no-shadow-hash`, so shadow hashing was live by default on every task. Measured
+over the completed arrays:
+
+| Quantity | Result |
+|---|---|
+| `shadow_distinct_insertion` | present, finite, > 0 on **40/40** |
+| `shadow_distinct_topological` | present, finite, > 0 on **40/40** |
+| `shadow_distinct_topological_commutative` | present, finite, > 0 on **40/40** |
+| `shadow_distinct_host_native` | present, finite, > 0 on **40/40** |
+| `serialisation failures` | **0** on **38/38** tasks that ran a search (19 Bingo, 19 UDFS) |
+
+So the sketch and the three extractors have now been seen running together, on
+Picasso, on both hosts, across 20 problems — which is exactly the plumbing T04
+identified as untested.
+
+**Why 38 and not 40, checked rather than assumed.** The two tasks without the line
+are `1741991_1` and `1742002_21` — the `I.12.2` cells the single-task gate had
+already completed. Both show zero search invocations in their logs: the orchestrator's
+resume logic skipped them. Their `run_log.json` files come from the gate, which is why
+RunLog coverage is 40/40 while log coverage is 38/38. No cell is missing a
+measurement.
+
+### 🔴 But T04's Stage C assertion is not yet checkable from a RunLog
+
+`n_shadow_failures` is tracked (`experiments/models/bingo/isalsr_runner.py:221`,
+incremented at `:293` and `:300`) and then **only logged**
+(`:773`, INFO level, to stderr). A full key walk of a probe `run_log.json` finds no
+`shadow_fail`, `n_shadow`, `serialis` or `failure` field. The number above was
+recovered by grepping 40 `.err` files.
+
+This is the same class as `C1.9-BUG` and `A7-BUG`, but **materially less severe**:
+the four shadow *cardinalities* — the measurement T04 actually needs — **are**
+persisted, and the failure count is recoverable from logs while they exist. It is
+still fragile: it depends on stderr surviving, on log retention, and on the line
+staying at INFO, and asserting it across 420 Stage C tasks means grepping 420 files
+rather than reading a field.
+
+**Recommendation (T04's or T02's call, not T05's):** add `n_shadow_failures` to the
+`search_space` block beside the four shadow fields. It is already computed; this is a
+one-field change that turns T04's proposed Stage C assertion into a real check.
+**Not done here** — `experiments/models/schemas.py` is currently being edited by the
+T08 session, and a second writer in that file is how a wrong number gets in.
+
+---
+
 ## B.5 Reproducing this
 
 ```bash

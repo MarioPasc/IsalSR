@@ -571,6 +571,34 @@ skipping the cell the single-task gate had already completed, which is pre-fligh
 check **B8** demonstrated on D2; and the 13–17 KB `.err` files are Python INFO
 logging, not errors (0 matches for `Traceback|Error|FATAL|OOM`).
 
+### 2026-08-02 — T04's shadow-hash confirmation, satisfied by this probe
+
+T04 asked that the shadow counters be enabled in "the pending `slurm/t05_probe/`
+submission" so the sketch and the three extractors are seen running together on
+Picasso once before ≈2,800 runs depend on it. **That request predates the probe
+running, and the probe already carried them** — `worker.sh` never passes
+`--no-shadow-hash`.
+
+All four shadow cardinalities present, finite and > 0 on **40/40** runs, both hosts,
+20 problems. `serialisation failures = 0` on **38/38** tasks that ran a search
+(19 Bingo, 19 UDFS). The two without the line are `1741991_1` / `1742002_21`, the
+`I.12.2` cells the gate had already completed — zero search invocations, resume logic
+skipped them; their run_logs come from the gate, which is why RunLog coverage is
+40/40 while log coverage is 38/38.
+
+🔴 **But T04's proposed Stage C assertion is not yet checkable from a RunLog.**
+`n_shadow_failures` is tracked (`bingo/isalsr_runner.py:221,293,300`) and then only
+**logged** (`:773`, INFO, stderr); no `shadow_fail`/`n_shadow`/`serialis`/`failure`
+key exists anywhere in a run_log. The zero above was recovered by grepping 40 `.err`
+files. Less severe than `C1.9-BUG` — the four cardinalities T04 actually needs *are*
+persisted, and this is recoverable while logs live — but asserting it across 420
+Stage C tasks means grepping 420 files rather than reading a field.
+
+**Recommendation, filed not done:** add `n_shadow_failures` to `search_space` beside
+the four shadow fields. Already computed; one field. Not done here because
+`experiments/models/schemas.py` is being edited by the T08 session and a second
+writer in that file is how a wrong number gets in. **T04's or T02's call.**
+
 ### 2026-08-02 — 🔴 the probe found a C2 launch blocker that is not T05's
 
 **Stage C's C1.9 and C1.14 are uncheckable, not merely failing.** Neither quantity
