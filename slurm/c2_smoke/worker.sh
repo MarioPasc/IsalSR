@@ -96,8 +96,15 @@ echo "Problem:     ${PROBLEM_NAME}"
 echo "Seed:        ${SEED}"
 echo "Config:      ${CONFIG}"
 echo "Results:     ${RESULTS_DIR}"
+# SP-1 from the compute node: report HEAD, which is the thing that matters and
+# is a pure read.  Deliberately NOT `--dirty`: rsync rewrites mtimes, so git's
+# index looks stale and `describe --dirty` appends "-dirty" on content that is
+# byte-identical to HEAD.  Clearing that would need `git update-index --refresh`,
+# which WRITES .git/index -- and 1,260 concurrent array tasks writing one shared
+# index is a far worse problem than the cosmetic suffix.  Tree cleanliness is
+# asserted once, from the login node, by deploy.sh before submission.
 echo "SP-1 commit: $(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || echo n/a)"
-echo "SP-1 descr:  $(git -C "${REPO_DIR}" describe --tags --always --dirty 2>/dev/null || echo n/a)"
+echo "SP-1 tag:    $(git -C "${REPO_DIR}" describe --tags --always 2>/dev/null || echo n/a)"
 "${PYTHON}" - <<'PROV'
 import datetime, os, sys
 try:
