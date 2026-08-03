@@ -53,9 +53,18 @@ class RegressionResults:
     nrmse_train: float
     nrmse_test: float
     mse_test: float
-    solution_recovered: bool
-    jaccard_index: float
+    # None = undetermined: the SymPy equivalence check exceeded its wall-clock
+    # budget. Excluded from the aggregate rather than scored as a failure, so
+    # the timeout cannot masquerade as "not recovered" / "no overlap".
+    solution_recovered: bool | None
+    jaccard_index: float | None
     model_complexity: int  # number of nodes in expression DAG
+    # Number of test points where the recovered expression evaluates to NaN or
+    # +/-inf. Non-zero means the expression is undefined on part of the test
+    # domain (log of a negative on an extrapolation grid, exp overflow); the
+    # run is then scored R2 = 0 / NRMSE = 1 rather than emitting NaN, so the
+    # failure is countable instead of propagating (T08, R2.7).
+    n_nonfinite_test_predictions: int = 0
 
 
 @dataclass(frozen=True)
@@ -104,6 +113,19 @@ class SearchSpaceResults:
     # baseline the reduction factor rho must be measured against.  ``None`` when
     # the arm never saw a host object (the sketches were fed a bare DAG).
     shadow_distinct_host_native: float | None = None
+
+    # Serialisation failures encountered while feeding the four sketches above.
+    # Persisted because it is the ONLY evidence that those four cardinalities
+    # mean what they say: ``record_shadow`` swallows extractor errors in a bare
+    # ``except`` -- correct, since one bad candidate must not kill a 12 h run --
+    # so a broken extractor yields plausible-but-low counts with nothing else
+    # marking them as junk.  This has fired for real: a formatter once stripped
+    # the ``host_native_hash`` import and every record was swallowed while the
+    # counter read 0.0.  Before this field existed the only evidence lived in an
+    # INFO log line, so verifying a campaign meant grepping one stderr file per
+    # task and depended on log retention and on the line staying at INFO.
+    # ``None`` = shadow hashing was off for this run, so the question does not apply.
+    n_shadow_failures: int | None = None
 
 
 @dataclass(frozen=True)

@@ -73,6 +73,19 @@ def _sanitize_values(values: np.ndarray, metric_name: str) -> np.ndarray:
 # Metric extractors
 # ======================================================================
 
+
+def _nan_if_none(value: bool | float | None) -> float:
+    """Map an undetermined metric to NaN so nan-aware statistics exclude it.
+
+    ``solution_recovered`` and ``jaccard_index`` return None when their SymPy
+    equivalence check exceeded its budget (see ``metrics.SYMPY_TIMEOUT_S``).
+    Every aggregate below uses ``np.nanmean``/``nanstd``/``nanmedian``, so NaN
+    is already this module's "excluded" convention -- an undetermined seed
+    shrinks N instead of being counted as a failed recovery.
+    """
+    return float("nan") if value is None else float(value)
+
+
 # Maps metric names to functions that extract the value from a RunLog.
 METRIC_EXTRACTORS: dict[str, Callable[[RunLog], float]] = {
     "r2_test": lambda rl: rl.regression.r2_test,
@@ -80,7 +93,7 @@ METRIC_EXTRACTORS: dict[str, Callable[[RunLog], float]] = {
     "nrmse_test": lambda rl: rl.regression.nrmse_test,
     "nrmse_train": lambda rl: rl.regression.nrmse_train,
     "mse_test": lambda rl: rl.regression.mse_test,
-    "jaccard_index": lambda rl: rl.regression.jaccard_index,
+    "jaccard_index": lambda rl: _nan_if_none(rl.regression.jaccard_index),
     "model_complexity": lambda rl: float(rl.regression.model_complexity),
     "wall_clock_total_s": lambda rl: rl.time.wall_clock_total_s,
     "wall_clock_search_only_s": lambda rl: rl.time.wall_clock_search_only_s,
@@ -88,7 +101,7 @@ METRIC_EXTRACTORS: dict[str, Callable[[RunLog], float]] = {
     "unique_canonical_dags": lambda rl: float(rl.search_space.unique_canonical_dags),
     "empirical_reduction_factor": lambda rl: rl.search_space.empirical_reduction_factor,
     "redundancy_rate": lambda rl: rl.search_space.redundancy_rate,
-    "solution_recovered": lambda rl: float(rl.regression.solution_recovered),
+    "solution_recovered": lambda rl: _nan_if_none(rl.regression.solution_recovered),
 }
 
 
