@@ -213,10 +213,17 @@ def create_runner(method: str, variant: str, config: dict[str, Any], atlas=None)
 
     Args:
         method: SR method name ("udfs" or "bingo").
-        variant: "baseline", "isalsr" or "hash".
+        variant: "baseline", "isalsr", "hash" or "nodedup".
         config: Full YAML config dict.
         atlas: Optional AtlasLookup for O(1) canonical lookup (isalsr only).
             Ignored by the "hash" arm, whose key is not the canonical hash.
+
+    Notes:
+        The "nodedup" arm is the C3 control: the IsalSR runner with its
+        duplicate suppression disabled. The wrapper, the adapter conversion and
+        the canonicalisation all still run, so any difference from "baseline"
+        measures the wrapper's own perturbation of the search rather than the
+        effect of deduplication.
     """
     if method == "udfs":
         from experiments.models.udfs.config import UDFSConfig
@@ -228,6 +235,8 @@ def create_runner(method: str, variant: str, config: dict[str, Any], atlas=None)
             return UDFSBaselineRunner(config=cfg)
         elif variant == "isalsr":
             return IsalSRUDFSRunner(config=cfg, atlas=atlas)
+        elif variant == "nodedup":
+            return IsalSRUDFSRunner(config=cfg, atlas=atlas, dedup_enabled=False)
         elif variant == "hash":
             return HashUDFSRunner(config=cfg, atlas=atlas)
         else:
@@ -242,6 +251,8 @@ def create_runner(method: str, variant: str, config: dict[str, Any], atlas=None)
             return BingoBaselineRunner(config=cfg)
         elif variant == "isalsr":
             return IsalSRBingoRunner(config=cfg, atlas=atlas)
+        elif variant == "nodedup":
+            return IsalSRBingoRunner(config=cfg, atlas=atlas, dedup_enabled=False)
         elif variant == "hash":
             return HashBingoRunner(config=cfg, atlas=atlas)
         else:
@@ -860,7 +871,9 @@ def _configure_ledger(args: argparse.Namespace, variants: list[str]) -> None:
         "no",
         "NO",
     )
-    dedup_arms = [v for v in variants if v in ("isalsr", "hash")]
+    # "nodedup" suppresses nothing but still converts and canonicalises every
+    # candidate, so it produces the same ledger evidence and needs the same flag.
+    dedup_arms = [v for v in variants if v in ("isalsr", "hash", "nodedup")]
     if dedup_arms and not enabled:
         log.warning(
             "T06 fallback ledger is DISABLED for arm(s) %s. The five "
@@ -988,8 +1001,9 @@ def build_parser() -> argparse.ArgumentParser:
         default="baseline,isalsr",
         help=(
             "Search variants to run, comma-separated. One of 'baseline' "
-            "(no dedup), 'isalsr' (canonical-string dedup) or 'hash' "
-            "(naive fixed-order-serialisation dedup)."
+            "(no wrapper), 'isalsr' (canonical-string dedup), 'hash' "
+            "(naive fixed-order-serialisation dedup) or 'nodedup' (C3 control: "
+            "wrapper and canonicalisation installed, suppression disabled)."
         ),
     )
     parser.add_argument(

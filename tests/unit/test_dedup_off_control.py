@@ -82,7 +82,7 @@ def test_udfs_suppression_flag_controls_host_calls(
     dedup_enabled: bool, expected_host_calls: int
 ) -> None:
     """Dedup off routes every candidate to the host; dedup on routes 3 of 6."""
-    pytest.importorskip("DAG_search.comp_graph")
+    pytest.importorskip("experiments.models.udfs.isalsr_runner")
     from experiments.models.udfs.isalsr_runner import _CanonicalDeduplicator
 
     calls: list[Any] = []
@@ -104,7 +104,7 @@ def test_udfs_suppression_flag_controls_host_calls(
 
 def test_udfs_dedup_off_still_reports_reduction_factor() -> None:
     """rho = n_total / n_unique stays > 1 with suppression disabled."""
-    pytest.importorskip("DAG_search.comp_graph")
+    pytest.importorskip("experiments.models.udfs.isalsr_runner")
     from experiments.models.udfs.isalsr_runner import _CanonicalDeduplicator
 
     def _original(cgraph, x, loss_fkt, opt_mode="grid_zoom", loss_thresh=None):  # noqa: ANN001,ANN202,N803

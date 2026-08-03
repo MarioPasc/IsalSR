@@ -104,10 +104,27 @@ if [[ "${METHOD}" == "bingo" ]]; then
 else
     B3_PAIRS="udfs_nguyen:Nguyen-1 udfs_hard:Keijzer-6"
 fi
+# verify_alphabet_gate.py has NO max_time handling -- it runs whatever the YAML
+# says, and every production config says 43,200 s. Pointed at a production
+# config it therefore runs for 12 h and the job dies on the SLURM wall with the
+# gate half-finished. (Observed: jobs 1751916/1751917, cancelled at 14 min.)
+# The pre-existing slurm/alphabet_gate/worker.sh solves this by rewriting the
+# YAML; do the same, into a scratch copy, so the production configs are untouched.
+B3_TMP="${OUT}/b3_configs"
+mkdir -p "${B3_TMP}"
 for PAIR in ${B3_PAIRS}; do
     CFG_NAME="${PAIR%%:*}"; PROB="${PAIR##*:}"
+    "${PYTHON}" - "experiments/configs/${CFG_NAME}.yaml" "${B3_TMP}/${CFG_NAME}.yaml" <<'PY'
+import sys, yaml
+src, dst = sys.argv[1], sys.argv[2]
+cfg = yaml.safe_load(open(src))
+for section in cfg.values():
+    if isinstance(section, dict) and "max_time" in section:
+        section["max_time"] = 120
+yaml.safe_dump(cfg, open(dst, "w"))
+PY
     "${PYTHON}" experiments/scripts/verify_alphabet_gate.py \
-        --config "experiments/configs/${CFG_NAME}.yaml" \
+        --config "${B3_TMP}/${CFG_NAME}.yaml" \
         --problems "${PROB}" --seeds 0 \
         --output-dir "${OUT}/b3_scratch/${CFG_NAME}" \
         --json-out "${OUT}/b3_alphabet_gate_${CFG_NAME}.json"

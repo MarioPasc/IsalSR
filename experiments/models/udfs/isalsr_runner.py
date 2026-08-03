@@ -129,10 +129,17 @@ class _CanonicalDeduplicator:
         ledger: FallbackLedger | None = None,
         key_mode: str = "canonical",
         shadow_hash: bool = False,
+        dedup_enabled: bool = True,
     ):
         if key_mode not in KEY_MODES:
             raise ValueError(f"Unknown key_mode: {key_mode!r} (expected one of {KEY_MODES})")
         self.use_fast_canonical = use_fast_canonical
+        # Suppression switch for the C3 control arm.  When False the wrapper is
+        # still installed, the conversion and the canonicalisation still run and
+        # every counter still counts, but no candidate is ever answered from
+        # ``canonical_seen`` -- the host evaluates all of them.  This isolates
+        # "the wrapper perturbs the search" from "dedup changes the search".
+        self.dedup_enabled = dedup_enabled
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
         self.ledger: FallbackLedger | None = ledger
@@ -380,15 +387,20 @@ class _CanonicalDeduplicator:
                 self._maybe_snapshot()
                 return result
 
-            if canon_hash in self.canonical_seen:
+            is_duplicate = canon_hash in self.canonical_seen
+            if is_duplicate and self.dedup_enabled:
                 self.n_skipped += 1
                 n_consts = cgraph.n_consts
                 dummy_consts = np.zeros(n_consts) if n_consts > 0 else np.array([])
                 self._maybe_snapshot()
                 return dummy_consts, np.inf
 
-            self.canonical_seen.add(canon_hash)
-            self.n_unique += 1
+            # Counters are unconditional: with suppression off the arm still
+            # reports rho = n_total / n_unique, which is then a measurement of
+            # the redundancy the host produced without acting on it.
+            if not is_duplicate:
+                self.canonical_seen.add(canon_hash)
+                self.n_unique += 1
             result = self._original_evaluate(
                 cgraph,
                 X,
@@ -417,12 +429,27 @@ def _patched_evaluate(deduplicator: _CanonicalDeduplicator):
 
 
 class IsalSRUDFSRunner(ModelRunner):
-    """Runs UDFS with IsalSR canonical deduplication."""
+    """Runs UDFS with IsalSR canonical deduplication.
+
+    Args:
+        config: UDFS configuration; a default one is built when omitted.
+        atlas: Optional ``AtlasLookup`` for O(1) canonical lookup. Ignored
+            unless ``KEY_MODE`` is ``"canonical"``.
+        dedup_enabled: When ``False``, the wrapper and the canonicalisation stay
+            installed but no candidate is suppressed -- the ``nodedup`` control
+            arm of check C3. The reported ``variant`` changes accordingly, so the
+            run lands in its own output directory.
+    """
 
     #: Deduplication key mode; overridden by the "hash" arm subclass.
     KEY_MODE: str = "canonical"
 
-    def __init__(self, config: UDFSConfig | None = None, atlas: Any = None):
+    def __init__(
+        self,
+        config: UDFSConfig | None = None,
+        atlas: Any = None,
+        dedup_enabled: bool = True,
+    ):
         # UDFS takes no operator set from the configuration: its search
         # enumerates the vendored node table, so that table is what has to be
         # encodable.  Checked here rather than assumed, because an operator
@@ -434,6 +461,7 @@ class IsalSRUDFSRunner(ModelRunner):
         # The atlas maps DAGs to CANONICAL hashes, so it is only sound for the
         # canonical arm.  The hash arm must compute its own key every time.
         self._atlas = atlas if self.KEY_MODE == "canonical" else None
+        self._dedup_enabled = dedup_enabled
         self.last_shadow: dict[str, float] = {}
 
     @property
@@ -442,7 +470,7 @@ class IsalSRUDFSRunner(ModelRunner):
 
     @property
     def variant(self) -> str:
-        return "isalsr"
+        return "isalsr" if self._dedup_enabled else "nodedup"
 
     def fit(
         self,
@@ -476,6 +504,7 @@ class IsalSRUDFSRunner(ModelRunner):
             ledger=ledger,
             key_mode=self.KEY_MODE,
             shadow_hash=shadow_hash,
+            dedup_enabled=self._dedup_enabled,
         )
 
         with _patched_evaluate(dedup), warnings.catch_warnings():

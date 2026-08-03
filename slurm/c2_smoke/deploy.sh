@@ -90,21 +90,6 @@ RC=\$?
 echo \"  PIP_EXIT=\$RC\"
 [ \$RC -eq 0 ] || { tail -25 /tmp/isalsr_build.log; exit \$RC; }
 module purge 2>/dev/null || true
-python - <<PY
-import os, datetime, subprocess
-from isalsr.core import _native, backends
-so = _native.__file__
-mt = datetime.datetime.fromtimestamp(os.path.getmtime(so))
-last = subprocess.run(["git","log","-1","--format=%ct","--","src/isalsr/core/native"],
-                      capture_output=True, text=True).stdout.strip()
-print("  so:        ", so)
-print("  so_mtime:  ", mt)
-print("  engine:    ", backends.engine())
-print("  build:     ", backends.build_info())
-assert "site-packages" in so, "SP-2: .so is not in site-packages"
-if last:
-    assert os.path.getmtime(so) > float(last), "SP-2: .so is OLDER than the last C++ commit"
-print("  SP-2 OK: artefact post-dates the last native commit and imports with modules purged.")
-PY
+python slurm/c2_smoke/verify_build.py
 '"
 echo "Deploy complete."

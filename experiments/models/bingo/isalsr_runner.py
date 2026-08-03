@@ -193,10 +193,16 @@ class _CanonicalDeduplicator:
         ledger: FallbackLedger | None = None,
         key_mode: str = "canonical",
         shadow_hash: bool = False,
+        dedup_enabled: bool = True,
     ):
         if key_mode not in KEY_MODES:
             raise ValueError(f"Unknown key_mode: {key_mode!r} (expected one of {KEY_MODES})")
         self.use_fast_canonical = use_fast_canonical
+        # Suppression switch for the C3 control arm.  When False the evaluation
+        # subclass is still installed, the conversion and the canonicalisation
+        # still run and every counter still counts, but no individual is ever
+        # penalised or answered from a cache -- the host evaluates all of them.
+        self.dedup_enabled = dedup_enabled
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
         self.ledger: FallbackLedger | None = ledger
@@ -348,7 +354,10 @@ class IsalSREvaluation(Evaluation):
         self.dedup = dedup
         self._snapshot_freq = snapshot_freq
         self._t0 = t0
-        self._enforce_dedup = enforce_dedup
+        # Population-level enforcement rejects duplicates AND answers repeats
+        # from ``fitness_cache``; both are suppression, so a disabled
+        # deduplicator neutralises the flag rather than merely bypassing it.
+        self._enforce_dedup = enforce_dedup and dedup.dedup_enabled
         self._use_age_penalty = use_age_penalty
         self._call_count = 0
         self._best_fitness = float("inf")
@@ -610,15 +619,20 @@ class IsalSREvaluation(Evaluation):
                     self._best_fitness = indv.fitness
             else:
                 # --- Legacy dedup: historical hash rejection ---
-                if canon_hash in self.dedup.canonical_seen:
+                is_duplicate = canon_hash in self.dedup.canonical_seen
+                if is_duplicate and self.dedup.dedup_enabled:
                     self.dedup.n_skipped += 1
                     indv.fitness = np.inf
                     if self._use_age_penalty:
                         indv.genetic_age = _DUPLICATE_AGE_PENALTY
                     continue
 
-                self.dedup.canonical_seen.add(canon_hash)
-                self.dedup.n_unique += 1
+                # Counters are unconditional: with suppression off the arm still
+                # reports rho = n_total / n_unique, which is then a measurement
+                # of the redundancy the host produced without acting on it.
+                if not is_duplicate:
+                    self.dedup.canonical_seen.add(canon_hash)
+                    self.dedup.n_unique += 1
                 if not indv.fit_set:
                     indv.fitness = self.fitness_function(indv)
                 if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
@@ -650,16 +664,32 @@ def purge_penalized(population: list) -> list:
 
 
 class IsalSRBingoRunner(ModelRunner):
-    """Runs Bingo with IsalSR canonical deduplication."""
+    """Runs Bingo with IsalSR canonical deduplication.
+
+    Args:
+        config: Bingo configuration; a default one is built when omitted.
+        atlas: Optional ``AtlasLookup`` for O(1) canonical lookup. Ignored
+            unless ``KEY_MODE`` is ``"canonical"``.
+        dedup_enabled: When ``False``, the evaluation subclass and the
+            canonicalisation stay installed but no individual is suppressed --
+            the ``nodedup`` control arm of check C3. The reported ``variant``
+            changes accordingly, so the run lands in its own output directory.
+    """
 
     #: Deduplication key mode; overridden by the "hash" arm subclass.
     KEY_MODE: str = "canonical"
 
-    def __init__(self, config: BingoConfig | None = None, atlas: Any = None):
+    def __init__(
+        self,
+        config: BingoConfig | None = None,
+        atlas: Any = None,
+        dedup_enabled: bool = True,
+    ):
         self._config = config or BingoConfig()
         # The atlas maps DAGs to CANONICAL hashes, so it is only sound for the
         # canonical arm.  The hash arm must compute its own key every time.
         self._atlas = atlas if self.KEY_MODE == "canonical" else None
+        self._dedup_enabled = dedup_enabled
         self.last_shadow: dict[str, float] = {}
 
     @property
@@ -668,7 +698,7 @@ class IsalSRBingoRunner(ModelRunner):
 
     @property
     def variant(self) -> str:
-        return "isalsr"
+        return "isalsr" if self._dedup_enabled else "nodedup"
 
     def fit(
         self,
@@ -697,6 +727,7 @@ class IsalSRBingoRunner(ModelRunner):
             ledger=ledger,
             key_mode=self.KEY_MODE,
             shadow_hash=shadow_hash,
+            dedup_enabled=self._dedup_enabled,
         )
 
         t0 = time.perf_counter()
