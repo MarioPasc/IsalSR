@@ -37,10 +37,16 @@ LOCAL_DESC="$(git describe --tags --always --dirty)"
 echo "Local  HEAD: ${LOCAL_HEAD}  (${LOCAL_DESC})"
 
 echo "Syncing to ${REMOTE}:${REPO_REMOTE} ..."
+# `.claude/settings.local.json` is per-machine Claude Code state, untracked by
+# git. Deploying it leaves the remote tree permanently "dirty" and would force
+# SP-1 to be relaxed to tolerate untracked files -- which is exactly the
+# weakening that lets a real stale deployment through. Excluding it instead
+# keeps SP-1 strict.
 rsync -az --delete \
     --exclude '__pycache__' --exclude '*.egg-info' --exclude 'results' \
     --exclude '.hypothesis' --exclude 'build' --exclude '.mypy_cache' \
     --exclude '.pytest_cache' --exclude '.ruff_cache' \
+    --exclude '.claude/settings.local.json' \
     ./ "${REMOTE}:${REPO_REMOTE}/"
 echo "Sync done (including .git, so remote provenance is real)."
 
