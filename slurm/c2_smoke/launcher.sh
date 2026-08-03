@@ -58,11 +58,15 @@ SUITES=(nguyen feynman hard cherrypicked roundoff feynman_remainder strogatz)
 # the full 12 h budget) as what sizes production memory.  Values below are
 # >4x any plausible 900 s peak and are re-checked against the one-task probe
 # before the wave goes out.
+# Overridable, because the first 42-task probe measured a peak MaxRSS of 343 MB
+# across every arm -- 50-140x below these requests. Over-requesting is not free:
+# SLURM cannot pack tasks, which throttles exactly the achieved-concurrency
+# figure §8.2 needs from this stage. Set from measurement, not from history.
 mem_for() {
     case "$1:$2" in
-        bingo:isalsr)  echo 48 ;;
-        bingo:*)       echo 32 ;;
-        udfs:*)        echo 16 ;;
+        bingo:isalsr)  echo "${C2_MEM_BINGO_ISALSR:-48}" ;;
+        bingo:*)       echo "${C2_MEM_BINGO:-32}" ;;
+        udfs:*)        echo "${C2_MEM_UDFS:-16}" ;;
     esac
 }
 

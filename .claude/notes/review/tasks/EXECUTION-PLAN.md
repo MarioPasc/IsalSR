@@ -959,30 +959,30 @@ wrong at cost:
 
 | Stage | # | Check | Date | Result | Evidence artefact |
 |---|---|---|---|---|---|
-| A | A1 | Commit frozen (`campaign/c2`) | | | |
-| A | A2 | pytest / ruff / mypy clean | | | |
-| A | A3 | Backend parity, `.so` freshness | | | |
-| A | A4 | Config equivalence across arms | | | |
+| A | A1 | Commit frozen (`campaign/c2`) | 2026-08-03 | **OPEN, deliberately.** The tag must sit on the commit C2 will run, and the code is not final (C3 unimplemented, `n_seeds` stale in 10 configs). Stage C runs on recorded commits instead (`53a1c1c` → `5f282cc`) | — |
+| A | A2 | pytest / ruff / mypy clean | 2026-08-03 | **PASS with one scoped caveat.** `pytest tests/` **6,818 passed, 5 skipped**; `mypy --strict src/isalsr/` clean (55 files); `ruff` clean on `src/` and `tests/`. `experiments/models/` carries **444** violations (N806 `X_train`-style names, E501) — **identical at HEAD**, so entirely pre-existing and none introduced | raw output |
+| A | A3 | Backend parity, `.so` freshness | 2026-08-03 | **PASS.** 2,000 random DAGs, **0 backend mismatches, 0 errors**; `.so` mtime post-dates the last native commit at the site-packages path; `isa_level=x86-64-v3`, `avx512f=0` | local + `verify_build.py` |
+| A | A4 | Config equivalence across arms | 2026-08-03 | **PASS + finding.** No arm block overrides a host-search hyperparameter; the top-level `isalsr:` block holds only canonicaliser settings. 🔴 **10 configs still declare `n_seeds: 30`** — fix before C2 | `c2_preflight/config_diff.md` |
 | A | A4b | Operator-set policy decided (uniform per method) | 2026-08-03 | **Decided.** Configs updated; containment guard landed. Still to do at sign-off: dump `operator_sets.csv`, record the policy **and the 22-problem continuity exclusion** in the MANIFEST | `c2_preflight/operator_sets.csv` |
-| A | A5 | Seed set declared (1…20, ⊂ C1) | | | |
-| A | A6 | MANIFEST schema frozen + validator | | | |
+| A | A5 | Seed set declared (1…20, ⊂ C1) | 2026-08-03 | **PASS.** Campaign 1…20 (`0 ∉ seeds`); Stage C uses 0/101/102, disjoint from both the campaign set and the 21…30 top-up range; renders as `seed_00`/`seed_101`/`seed_102` | `c2_preflight/seed_declaration.md` |
+| A | A6 | MANIFEST schema frozen + validator | | **OPEN.** `experiments/models/manifest.py` still does not exist. Blocks the campaign, not Stage C | |
 | A | A7 | RunLog accepts three arms | | | |
 | A | A8 | Analyzer three-arm readiness | | | |
 | A | A9 | T08 code half landed | | | |
 | A | A10 | Failure ledger implemented | | | |
-| A | A11 | Hash-collision bound stated | | | |
+| A | A11 | Hash-collision bound stated | 2026-08-03 | **PASS, pending one input.** `n²/2⁶⁵ = 2.7×10⁻⁶` per run at `n = 10⁷`; `≈1.5×10⁻²` expected across 5,600 dedup-bearing runs. The bound is **quadratic in n** and was stated at an *assumed* `n`; re-evaluate against Stage C's measured `max(total_dags_explored)` | `c2_preflight/collision_bound.md` |
 | A | A12 | SLURM array/job limits | 2026-07-31 | **PASS** — `MaxArraySize=4096` ≥ 1,401; no chunking | `scontrol show config` |
-| A | A13 | 🔴 Storage **and file-count** headroom (see P6) | | | |
-| B | B1 | Environment probe | | | |
-| B | B2 | C++ capability probe + negative control | | | |
-| B | B3 | Alphabet gate on frozen commit | | | |
-| B | B4 | Equivalence gate on a compute node | | | |
-| B | B5 | Node-pool census | | | |
-| B | B6 | Node-constraint decision | | | |
-| B | B6b | AVX-512 portability of the C++ engine | | | |
-| B | B7 | `sbatch --test-only`, all six arrays | | | |
-| B | B8 | Resume / idempotency | | | |
-| B | B9 | T06 counter re-verification (threshold from T06) | | | |
+| A | A13 | 🔴 Storage **and file-count** headroom (see P6) | 2026-08-03 | 🔴 **Stage C PASS, campaign FAIL.** FSCRATCH 222.8k/250.0k soft: Stage C needs ≈7.9k and fits; C2 needs ≈45k and does not (**27.2k headroom vs the ≥60k criterion**). HOME 0.43/0.28 TB, **2 days grace**, of which **436 GB is `~/execs/vena`** (a different project) | `c2_preflight/storage_projection.md`, `quota_capture.txt` |
+| B | B1 | Environment probe | 2026-08-03 | **PASS.** **70/70** dataset paths resolve with the declared shapes and **70/70** carry a SymPy ground truth, so C1.5's precondition is met *before* Stage C | `stage_b/*/b1_environment.json` |
+| B | B2 | C++ capability probe + negative control | 2026-08-03 | **PASS, genuinely two-sided.** Run 1 `engine=cpp`, `cpp_invoked=True`; run 2 under `ISALSR_ENGINE=python`, `engine=python`, `cpp_invoked=False`. Asserted on **observed dispatch** (spy on `_cpp_ext.fast_canonical_string`), both hosts | `stage_b/*/b2_sp_probe_{cpp,python}.json` |
+| B | B3 | Alphabet gate on frozen commit | 2026-08-03 | **PASS.** 65,631 live Bingo candidates: 0 `SUB`, 0 `DIV`, 0 `-`, 0 `/`; `POW` the only binary; NEG 70,622 / INV 47,821 present ⇒ the T16 decomposition **is** reaching the canonicaliser. **Max k = 37.** ⚠ Under a *bounded* budget Bingo solves Nguyen-1 before any candidate reaches the canonicaliser (`DAGs observed: 0`), so B3's Bingo problems must be structurally hard — Pagie-1 and I.29.16 | `stage_b/*/b3_alphabet_gate_*.json` |
+| B | B4 | Equivalence gate on a compute node | 2026-08-03 | **PASS on cross-engine equivalence** — gate 1 **54,765** comparisons / 0 mismatches, gate 2 10,000 / 0 errors, `self_comparison=false`, gcc 13.2.0 on a Picasso CPU. 🔴 **Gate 3 (round-trip) fails 5/10,000 identically on both engines** — a completeness defect, tracked separately, escalated to T07, **not** a statement about the port | `stage_b/b4/b4_equivalence_gate.json` |
+| B | B5 | Node-pool census | | **Arrives as a by-product of Stage C**: every run records its own `cpu_model` (A7), so the reachable node distribution and the arm balance are computed from the 1,260 run logs rather than from a separate array | |
+| B | B6 | Node-constraint decision | 2026-08-03 | **Stage C: not pinned** (`--constraint=cpu`) — the engine is `x86-64-v3`/`avx512f=0` hence portable, and Stage C produces no number that enters a table, so the wall-clock-homogeneity argument does not apply to it. **The decision for C2 itself remains open** | |
+| B | B6b | AVX-512 portability of the C++ engine | 2026-08-03 | **PASS.** Built with `gcc/13.2.0`; `build_hash = 298fc1188bf1b051` **identical to the local gcc 12.2.0 build**; `isa_level=x86-64-v3`, `avx512f=0`; imports with every module purged ⇒ portable across `sd`/`sr`/`bc`/`bl` | `verify_build.py` output |
+| B | B7 | `sbatch --test-only`, **all 42 arrays** | 2026-08-03 | **PASS.** exit 0 on 42/42, task counts exactly 210 per `(method, arm)`, 1,260 total | launcher `--test-only` |
+| B | B8 | Resume / idempotency | | **Partly exercised, not yet the full protocol.** The orchestrator's resume path (validate `run_log.json`, delete-and-re-run on corruption) is unit-tested and the 42-task probe's cells are skipped by the wave. The deliberate-corruption half is outstanding | |
+| B | B9 | T06 counter re-verification (threshold from T06) | in flight | Paired 240 s runs with and without `--ledger`, both hosts. **C1.9 already confirms liveness on real Picasso cells** (`ledger_enabled=true`, `n_ledger_sampled > 0`, 3/3) | `stage_b/*/b9_overhead.json` |
 | C | C1.1–C1.17 | 1,260-task smoke, all criteria (incl. C1.16 paired-stats path) | | | |
 | C | C2 | Failure ledger emitted | | | |
 | C | C3 | Dedup-off equivalence control | | | |
