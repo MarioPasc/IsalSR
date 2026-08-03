@@ -12,6 +12,59 @@
 
 ---
 
+## ⛔ Amendment 2026-07-31 — AC-5's probe must also settle AVX-512 portability
+
+**New exposure, found by querying the cluster directly. It threatens the C++ port
+specifically, and this ticket's agent is the first to reach Picasso, so it is cheapest
+to settle here.**
+
+Measured on Picasso 2026-07-31 (`sinfo -h -o "%f|%c|%m|%G" | sort -u`):
+
+| Feature set | `--constraint=` | Cores | RealMemory | AVX-512 |
+|---|---|---|---|---|
+| `sd,cal,cpu,intel,avx512` | `sd` / `intel` | 52 | 187,000 MB | **yes** |
+| `sr,cal,cpu,amd` | `sr` | 128 | 450,000 MB | **no** |
+| `bc,cal,cpu,amd,avx512` | `bc` | 256 | 700,000 MB | **yes** |
+| `bl,cal,cpu,amd` | `bl` | 128 | 1,900,000 MB | **no** |
+
+**The login node is a Xeon Gold 6230R — an `sd` machine, with AVX-512.** `sr` and `bl`,
+which are 180 of the 334 CPU nodes, do **not** have it. Any extension built on the login
+node with `-march=native` / `-xHost` emits AVX-512 and dies with **SIGILL ("Illegal
+instruction")** the moment SLURM places it on `sr` or `bl`.
+
+**Why this matters more here than anywhere else.** C1 was pure Python and structurally
+immune. C2's entire IsalSR arm runs a compiled extension, on 5,600 tasks scattered
+across whatever the scheduler picks. The failure would present as a *fraction* of tasks
+dying — looking like flaky nodes or OOM, not like a build problem — and the fraction
+would depend on which family each task landed on. That is the 1,465-cell shortfall
+pattern all over again, from a different cause.
+
+**Fold into the AC-5 submission — it costs two extra tasks:**
+
+1. Read the actual build flags: `pyproject.toml`, `CMakeLists.txt`, any
+   `scikit-build-core` config. Record whether `-march=native` (or `-mavx512*`) is set.
+2. Run the same import-and-canonicalise probe on **`--constraint=sd`** *and* on
+   **`--constraint=sr`**. Both must import `_native`, report `_ENGINE == native`, and
+   produce byte-identical canonical strings.
+3. If `sr` fails: rebuild with a portable baseline (`-march=x86-64-v2`, or `-mavx2` at
+   most) and re-probe. Pinning `--constraint=avx512` is the fallback, **but note it
+   restricts C2 to `sd` + `bc` only** — which collides with the node-constraint decision
+   in `EXECUTION-PLAN.md` B6 and with the concurrency C2 needs (§8.2).
+4. **Report the AC-5 benchmark numbers per family, not pooled.** `sd` is Intel at
+   2.1 GHz, `sr`/`bc` are AMD at 2.6/2.25 GHz. A single pooled figure hides a ~25 %
+   single-core spread and is the wrong number for T10's cost analysis.
+
+Filed as `EXECUTION-PLAN.md` §4.2 check **B6b**. Settling it in Round 1 rather than at
+T02's Stage B saves a week if it turns out to be real.
+
+**Everything else about C2 that this ticket should know:** there are no waves; the
+campaign is a single gated launch of `{baseline, hash, isalsr} × {UDFS, Bingo} ×
+(D1 ∪ D2) × 20 seeds`. **`EXECUTION-PLAN.md` §4.0 SP-0 is binding — this ticket submits
+probes only** (`max_time ≤ 1,800 s`, ≤ 60 tasks, seed 0, output to
+`~/execs/isalsr/t01_*/`), and reports SP-1…SP-6 as a six-row table in §7.
+
+---
+
 ## 0. What remains — read this first (rewritten 2026-07-30, late)
 
 > **Superseded by the day's work. Read this box, not the text below it.**

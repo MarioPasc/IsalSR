@@ -15,6 +15,7 @@ import numpy as np
 import sympy
 
 from experiments.models.analyzer.metrics import (
+    count_nonfinite_predictions,
     jaccard_index,
     mse,
     nrmse,
@@ -66,6 +67,7 @@ class BingoTranslator(ResultTranslator):
         nrmse_train = nrmse(self._y_train, r.y_pred_train)
         nrmse_test = nrmse(self._y_test, r.y_pred_test)
         mse_test = mse(self._y_test, r.y_pred_test)
+        n_nonfinite_test = count_nonfinite_predictions(r.y_pred_test)
 
         # Solution recovery
         sol_rec = False
@@ -91,6 +93,7 @@ class BingoTranslator(ResultTranslator):
             solution_recovered=sol_rec,
             jaccard_index=jac_idx,
             model_complexity=complexity,
+            n_nonfinite_test_predictions=n_nonfinite_test,
         )
 
         # Time-to-threshold: conservative upper bound from final R²

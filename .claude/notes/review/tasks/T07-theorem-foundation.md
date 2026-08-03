@@ -9,6 +9,7 @@
 | Blocks | T03 phase 3, T06, T13 |
 | Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis. The **T16 alphabet fork is RESOLVED (2026-07-30, Branch B — the code aligns to the paper)**, so `𝓝 = {Pow}` and Definition 3.9(iv), Rule 1's prose and Definition 3.2 all stand as submitted: **D-2 and D-3 evaporate and §7bis.3 is now empty of work.** What remains for Ezequiel is §7bis.2 alone: the five Lemma 3.14/A.2 gaps plus a sixth, the Theorem 3.13 domain mismatch. All of it is alphabet-independent and none of it is blocked. Remaining for Mario: AC-9 (page cost → T13) and AC-10 (§8). |
 | Target | 2026-08-24 |
+| Proof patch | **Ezequiel's AC-1…AC-4 patch received 2026-08-02 and REVIEWED — do not integrate as-is.** Four blocking items (B1 `fcs:=fcs∘𝒩` contradicts code + the R1.3 answer + D-1; B2 Step 3's CDLL-timing claim false, 4-node counterexample; B3 per-position non-emptiness false; B4 sixth gap untouched, Thm 3.13's domain). Review: `T07-appendix/ezequiel_patch_review_2026-08-02.md`. Nothing pushed to Overleaf. |
 
 ---
 
@@ -891,6 +892,138 @@ not pip's. I reported two "successful" rebuilds that had not happened. It was
 caught only because the D-1 check ran against **both** backends and they
 disagreed — `cpp` reproducing the old strings while `python` raised. Use
 `--force-reinstall --no-deps` and always verify the `.so` mtime.
+
+### 2026-08-02 — Ezequiel's proof patch reviewed. Not integrated; four blocking items.
+
+Ezequiel sent a Claude-generated patch for AC-1…AC-4 (`results/T07_Ezequiel/`:
+`methodology_T07.tex`, `supplementary_T07.tex`, `response_to_reviewers_T07.tex`,
+plus two PDFs) and asked whether it is coherent with the rest of the revision
+before he integrates it into Overleaf. Read-only `git fetch` confirms he has
+**not** pushed it: the only new remote commit, `8807b45` (2026-07-31), has an
+empty diff against `79157c4`.
+
+**Verdict: do not integrate as-is.** The five-step proof skeleton is right and it
+discharges gap 2 visibly — the false *"exactly the same candidate pool as D2S"*
+sentence is named and replaced by the inclusion `𝒞_j ⊆ 𝒟_j`, which is the core of
+what R2.1 asked for. Four items block, four should be fixed. Full write-up with
+counterexamples and proposed repairs:
+`T07-appendix/ezequiel_patch_review_2026-08-02.md`.
+
+| # | Item | Kind |
+|---|---|---|
+| B0 | Inserting the new definition before Def 3.8 renumbers everything after it — his own PDF has Thm **3.14**/Lem **3.15**/Thm **3.16** where the reviewers wrote 3.13/3.14/3.15. 8 literal `3.13` + 9 literal `3.15` in the response letter, no `\ref`s | **mechanical, high blast radius** |
+| B1 | Patch defines `fcs_D := fcs_{𝒩(D)}` in the Fast Canonical String definition, Thm 3.15/A.3, and keeps `D ← 𝒩(D)` in Table 3 | **coherence** |
+| B2 | Step 3's claim *"`σ(c)[0]` is already in the CDLL by the time `c` first becomes a candidate"* is false | **proof defect** |
+| B3 | *"`𝒞_j ≠ ∅` whenever an out-neighbour of the tentative position is uninserted"* is false; Step 4 cites a statement Step 3 never proved | **proof defect** |
+| B4 | The sixth gap (Thm 3.13 stated on `D = S2D(w,m)` and concluding about `D2S(D,x₁)`) is untouched, so Lemma A.2's final inference is unlicensed | **proof gap** |
+
+**B1 is the one that matters most for coordination, and it is a missed hand-over,
+not a disagreement.** AC-6 was discharged on 2026-07-29 by *removing* `𝒩` from the
+canonicaliser, and restating on `𝒩(D)` was refuted the same day by D-1. The patch
+re-proposes exactly the refuted route. Re-verified today, both engines:
+`fast_canonical_string` raises `RuntimeError: no valid operation found` on an
+in-degree-0 `Const`; `canonical.py` mentions `normalize_const_creation` only in the
+three comments explaining why it is not called. The patch would therefore ship a
+manuscript that describes code we do not have — the exact failure mode Ezequiel
+made his own deciding argument in T16.
+
+It also contradicts the R1.3 answer sitting in the same letter unchanged
+(`:493–497`: `𝒩` acts "at the interface between a host solver and the
+representation"; "Table 3 … now states the precondition explicitly in place of the
+undefined call"), and the patch's own R1.3 `\changeref` still promises that
+replacement while `supplementary_T07.tex` keeps the call.
+
+**B2, minimal counterexample, verified in code.** `V = {x₁, x₂, Sin(a), Pow(p)}`,
+`E = {x₁→a, a→p, x₂→p}`, `σ(p) = (a, x₂)`, `fcs = Vsnv^PnC`. A free-choice run may
+put the pointer on `x₂` first: `p ∈ 𝒟_j` there while `σ(p)[0] = a` is uninserted.
+This is verbatim the informal argument at `methodology.tex:761–766` that §3.1 gap 3
+required to be moved into the lemma **and made rigorous**; it was moved, not
+repaired. Fix is an induction on a topological order: Rule 1 **defers** `c`, never
+strands it.
+
+**B4 is nearly free to fix**: Appendix A's existing proof of 3.13 never uses
+`D = S2D(w,m)` nor the greedy choice, so it already establishes *"`D ≅ S2D(w,m)`
+for every `w ∈ 𝒲(D)`"* over labeled DAGs satisfying reachability. Restate the
+theorem to match its own proof and Lemma A.2's last line goes through.
+
+**Also checked, and no change needed** — recorded so it is not re-raised: the
+`k = 0` scope worry at the head of this ticket is not a live defect. `fcs` does
+return `''` for both `m = 1` and `m = 2`, but Theorem 3.15 quantifies both DAGs
+over one shared `m` and Definition 3.9(iii) forces equal `m`, so the pair is not a
+counterexample.
+
+**Ezequiel's own three criticisms are correct** (verbosity; justifying theorems
+with experiments; the appendix talking about a previous version of a proof) —
+with one asymmetry worth telling him: both the test evidence and the "the old
+sentence was false" admission belong in the **response letter**, which should keep
+them. It is the **article** that must not narrate its own review history.
+
+**GAP 2 IS REVERSED — the ticket has been wrong about this since it was
+written.** Found while drafting the manuscript edits. **D2S already applies
+Rule 1's exact predicate**: `dag_to_string._find_new_out_neighbor:338–341` is the
+same test as `canonical.py:647–649`/`:725–727`, same `BINARY_OPS` scope (bug fix
+B9 / Critical Invariant 8). So Rule 1 does **not** restrict the D2S pool — §3.1
+gap 2's *"Rule 1 removes candidates … the proof's central claim is false as
+written"* is itself wrong, and so is Ezequiel's Step 2 and the R2.1 letter
+paragraph conceding it. The submitted sentence *"exactly the same candidate pool
+as D2S"* is **true of the algorithms**.
+
+The real defect is one level down: **Definition 3.5 and the D2S pseudocode
+describe the procedure without its first-operand restriction**, so `𝒲(D)` is too
+large and **Theorem 3.13 is false under that reading**. Verified: for
+`D = x₁^x₂`, `w = NV^Nc` places every node and every edge of `D` (hence
+`w ∈ 𝒲(D)` as Definition 3.5 is written) yet `S2D(w,2) = x₂^x₁` and
+`is_isomorphic → False`. Stating the restriction in Definition 3.5 makes the pool
+identity derivable **and** is what makes the widening of Theorem 3.13 to
+`w ∈ 𝒲(D)` sound — without it the widening cannot be done at all.
+
+**Proposal for where `𝒩` belongs, sent back with the review (§5 of the appendix
+doc).** Ezequiel is right that it must be formalised somewhere — it does run,
+before canonicalisation. The decisive fact, found while answering him: **the
+operation that ran in every reported experiment is not
+`LabeledDAG.normalize_const_creation`** but the adapters' `_normalize_const_edges`
+(`bingo/adapter.py:212–216`, `udfs/adapter.py:216–224`, byte-identical), which
+anchors every in-degree-0 `Const` to node 0 unconditionally — no least-index
+search, no acyclicity test. `grep -rn normalize_const_creation experiments/models/`
+returns **nothing**; the general routine is used only by measurement scripts.
+
+Three consequences: the interface form makes **no node-index-ordered decision**, so
+it is isomorphism-equivariant by inspection and **D-1 does not touch it**; the two
+forms coincide on the interface class, so **no reported number depends on which one
+the paper defines**; and the code's soundness silently rests on "no `Var` is an edge
+target" — `_normalize_const_edges` discards `add_edge`'s return value, the same
+pattern that caused the T15 orphaning bug.
+
+Proposed: **Definition (`𝒩` adds `x₁→c` to every in-degree-0 `Const`) + Lemma (on
+host DAGs where every in-degree-0 node is `Var`/`Const` and no `Var` is an edge
+target: `𝒩(D)` acyclic; satisfies Thm 3.13's hypothesis; `𝒩` equivariant with
+`𝒩(D₁) ≅ 𝒩(D₂) ⟺ D₁ ≅ D₂`; evaluation-preserving) + Corollary
+(`fcs_{𝒩(D₁)} = fcs_{𝒩(D₂)} ⟺ D₁ ≅ D₂` on host output)**, all placed **after
+Theorem 3.15** so nothing renumbers. Theorems 3.13/3.14/3.15 stay exactly as
+submitted and `fcs` stays a pure function of `D`. The corollary is the statement the
+deduplication experiments actually rely on and which the paper has never made — it
+is currently justified only empirically (0 disagreements / 123,240 permutation tests
+on 15,530 Bingo DAGs, `frac_in_c2 = 1.0000`). Proof sketches for all four lemma
+clauses are in §5.2 of the appendix doc; each is 3–4 lines.
+
+**Small code-hardening item this raises (Mario's, not blocking the paper):** assert
+`add_edge`'s return value in both adapters' `_normalize_const_edges`, so the
+dependency on hypothesis (b) fails loudly instead of silently.
+
+**Edited `.tex` files produced for Ezequiel to review** (his originals preserved
+under `results/T07_Ezequiel/original_ezequiel/`). Our changes are marked in
+**red** over his blue; `[MPG 2026-08-02 — …]` brackets explain each removal and
+must be stripped before integration. All three documents compile clean with no
+undefined references, and the rebuilt PDF confirms the numbering is restored:
+Theorem **3.13** / Lemma **3.14** / Theorem **3.15** as the reviewers cite them,
+with the new Definition **3.16**, Lemma **3.17** and Corollary **3.18** after
+Theorem 3.15. Per-file ledger: `results/T07_Ezequiel/CHANGES_MPG.md`; patches
+`diff_MPG_*.patch`; PDFs `*_MPG.pdf`.
+
+Status of the ticket is unchanged: Mario's half stays complete, AC-1…AC-4 stay
+open with Ezequiel. Nothing was pushed to Overleaf and no file under the Overleaf
+checkout was edited. A Spanish draft email covering all issues plus the proposal
+is §6 of the appendix doc.
 
 ---
 

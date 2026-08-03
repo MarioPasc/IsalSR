@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import sys
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -60,44 +62,62 @@ def _load_paired_metrics(
         }}
     """
     bench_dir = results_dir / method / benchmark
-    data: dict[str, dict[str, list[float]]] = {}
+    data: dict[str, dict[str, dict[int, float]]] = {}
     if not bench_dir.exists():
         return data
+
+    def _clip01(x: float) -> float:
+        """Clip R^2 to [0, 1], preserving NaN.
+
+        ``min(max(nan, 0.0), 1.0)`` returns NaN in Python -- the clip is a no-op
+        on a missing observation rather than mapping it to a bound. Made
+        explicit here because the implicit behaviour hid the defect.
+        """
+        return float("nan") if not math.isfinite(x) else min(max(x, 0.0), 1.0)
 
     for prob_dir in sorted(bench_dir.iterdir()):
         if not prob_dir.is_dir():
             continue
-        d: dict[str, list[float]] = defaultdict(list)
+        d: dict[str, dict[int, float]] = defaultdict(dict)
 
         for variant, prefix in [("baseline", "bl"), ("isalsr", "is")]:
             vdir = prob_dir / variant
             if not vdir.exists():
                 continue
             for rl in load_all_run_logs(vdir):
-                r2t = min(max(rl.regression.r2_test, 0.0), 1.0)
-                r2tr = min(max(rl.regression.r2_train, 0.0), 1.0)
-                d[f"{prefix}_r2_test"].append(r2t)
-                d[f"{prefix}_r2_train"].append(r2tr)
-                d[f"{prefix}_nrmse_test"].append(rl.regression.nrmse_test)
-                d[f"{prefix}_wall"].append(rl.time.wall_clock_total_s)
-                d[f"{prefix}_search"].append(rl.time.wall_clock_search_only_s)
-                d[f"{prefix}_complexity"].append(float(rl.regression.model_complexity))
-                d[f"{prefix}_solution"].append(1.0 if rl.regression.solution_recovered else 0.0)
+                # Key every metric by seed: pairing is by seed number, never by
+                # list position. A campaign with missing cells has unequal and
+                # non-aligned seed sets across the two arms (T08 / R2.7).
+                s = rl.metadata.seed
+                rec = rl.regression
+                d[f"{prefix}_r2_test"][s] = _clip01(rec.r2_test)
+                d[f"{prefix}_r2_train"][s] = _clip01(rec.r2_train)
+                d[f"{prefix}_nrmse_test"][s] = rec.nrmse_test
+                d[f"{prefix}_wall"][s] = rl.time.wall_clock_total_s
+                d[f"{prefix}_search"][s] = rl.time.wall_clock_search_only_s
+                d[f"{prefix}_complexity"][s] = float(rec.model_complexity)
+                # solution_recovered is None when the SymPy equivalence check
+                # exceeded its budget: undetermined, not "not recovered".
+                d[f"{prefix}_solution"][s] = (
+                    float("nan")
+                    if rec.solution_recovered is None
+                    else float(rec.solution_recovered)
+                )
 
                 if variant == "isalsr":
                     ss = rl.search_space
                     t = rl.time
-                    d["is_rf"].append(ss.empirical_reduction_factor)
-                    d["is_redundancy"].append(ss.redundancy_rate)
+                    d["is_rf"][s] = ss.empirical_reduction_factor
+                    d["is_redundancy"][s] = ss.redundancy_rate
                     w = t.wall_clock_total_s
                     n = ss.total_dags_explored
                     if w > 0:
-                        d["is_overhead_pct"].append(t.overhead_time_s / w * 100)
+                        d["is_overhead_pct"][s] = t.overhead_time_s / w * 100
                     if n > 0:
-                        d["is_per_dag_ms"].append(t.canonicalization_runtime_s / n * 1000)
-                        d["is_eval_ms"].append(t.evaluation_time_s / n * 1000)
-                    d["is_canon_ms"].append(t.canonicalization_runtime_s)
-                    d["is_max_k"].append(float(ss.max_internal_nodes_seen))
+                        d["is_per_dag_ms"][s] = t.canonicalization_runtime_s / n * 1000
+                        d["is_eval_ms"][s] = t.evaluation_time_s / n * 1000
+                    d["is_canon_ms"][s] = t.canonicalization_runtime_s
+                    d["is_max_k"][s] = float(ss.max_internal_nodes_seen)
 
         if d:
             data[prob_dir.name] = dict(d)
@@ -105,13 +125,60 @@ def _load_paired_metrics(
     return data
 
 
-def _paired_test(bl: list[float], is_: list[float]) -> tuple[float, float]:
-    """Run paired test (t-test or Wilcoxon) and return (cohens_d, p_value)."""
-    bl_a, is_a = np.array(bl), np.array(is_)
-    n = min(len(bl_a), len(is_a))
-    if n < 3:
-        return 0.0, 1.0
-    bl_a, is_a = bl_a[:n], is_a[:n]
+def _nanmean(values: Sequence[float]) -> float:
+    """Mean over the finite entries, or NaN if there are none.
+
+    A NaN or inf metric is a *missing observation* -- an expression that is
+    well-defined on the training domain but undefined on part of the test
+    domain (``log`` of a negative argument, ``exp`` overflow). Excluding it
+    shrinks the effective seed count; it must never propagate into the cell,
+    and it must never be silently replaced by 0.0, which would count an
+    undefined result as a total failure.
+
+    This is the same convention ``analyzer/aggregation.py`` applies via
+    ``np.nanmean``. The two pipelines must agree.
+    """
+    arr = np.asarray(list(values), dtype=float)
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return float("nan")
+    return float(finite.mean())
+
+
+def _pair_by_seed(
+    bl: Mapping[int, float],
+    is_: Mapping[int, float],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Align two per-seed metric maps into paired arrays.
+
+    Pairing is by **seed number**, never by list position: a campaign with a
+    missing cell has unequal, non-aligned seed sets, and truncating both lists
+    to ``min(len(a), len(b))`` pairs different seeds with each other from the
+    first gap onwards. Pairs where either side is non-finite are dropped
+    (pairwise deletion), which is the policy reported in the manuscript.
+
+    Returns:
+        (baseline_values, isalsr_values), index-aligned and finite.
+    """
+    common = sorted(set(bl) & set(is_))
+    b = np.array([bl[s] for s in common], dtype=float)
+    i = np.array([is_[s] for s in common], dtype=float)
+    keep = np.isfinite(b) & np.isfinite(i)
+    return b[keep], i[keep]
+
+
+def _paired_test(
+    bl: Mapping[int, float],
+    is_: Mapping[int, float],
+) -> tuple[float, float]:
+    """Run paired test (t-test or Wilcoxon) and return (cohens_d, p_value).
+
+    Returns ``(nan, nan)`` when fewer than three seeds are paired. Returning
+    ``(0.0, 1.0)`` there would be indistinguishable from a genuine null result.
+    """
+    bl_a, is_a = _pair_by_seed(bl, is_)
+    if len(bl_a) < 3:
+        return float("nan"), float("nan")
     diff = is_a - bl_a
     sd = np.std(diff, ddof=1)
     d = float(np.mean(diff) / sd) if sd > 1e-10 else 0.0
@@ -128,16 +195,17 @@ def _paired_test(bl: list[float], is_: list[float]) -> tuple[float, float]:
 
 
 def _cohens_d_with_ci(
-    bl: list[float],
-    is_: list[float],
+    bl: Mapping[int, float],
+    is_: Mapping[int, float],
     n_boot: int = 10000,
     seed: int = 42,
 ) -> tuple[float, float, float]:
-    """Compute Cohen's d (paired) with bootstrap 95% CI."""
-    n = min(len(bl), len(is_))
+    """Compute Cohen's d (paired) with bootstrap 95% CI, pairing by seed."""
+    bl_a, is_a = _pair_by_seed(bl, is_)
+    n = len(bl_a)
     if n < 3:
-        return 0.0, 0.0, 0.0
-    diff = np.array(is_[:n]) - np.array(bl[:n])
+        return float("nan"), float("nan"), float("nan")
+    diff = is_a - bl_a
     sd = np.std(diff, ddof=1)
     d = float(np.mean(diff) / sd) if sd > 1e-10 else 0.0
 
@@ -283,24 +351,24 @@ def generate_table1(
                 if not d.get("bl_r2_test") or not d.get("is_r2_test"):
                     continue
                 n_prob += 1
-                bl_r2s.append(float(np.nanmean(d["bl_r2_test"])))
-                is_r2s.append(float(np.nanmean(d["is_r2_test"])))
+                bl_r2s.append(_nanmean(d["bl_r2_test"].values()))
+                is_r2s.append(_nanmean(d["is_r2_test"].values()))
                 _, p = _paired_test(d["bl_r2_test"], d["is_r2_test"])
                 p_values.append(p)
 
                 if d.get("is_rf"):
-                    all_rf.extend(d["is_rf"])
+                    all_rf.extend(d["is_rf"].values())
                 if d.get("is_redundancy"):
-                    all_rr.extend(d["is_redundancy"])
+                    all_rr.extend(d["is_redundancy"].values())
                 if d.get("is_overhead_pct"):
-                    all_oh.extend(d["is_overhead_pct"])
+                    all_oh.extend(d["is_overhead_pct"].values())
                 if d.get("is_per_dag_ms"):
-                    all_canon_ms.extend(d["is_per_dag_ms"])
+                    all_canon_ms.extend(d["is_per_dag_ms"].values())
                 if d.get("is_eval_ms"):
-                    all_eval_ms.extend(d["is_eval_ms"])
+                    all_eval_ms.extend(d["is_eval_ms"].values())
                 if d.get("bl_search") and d.get("is_search"):
-                    bl_s = np.mean(d["bl_search"])
-                    is_s = np.mean(d["is_search"])
+                    bl_s = _nanmean(d["bl_search"].values())
+                    is_s = _nanmean(d["is_search"].values())
                     if is_s > 0:
                         speedups.append(bl_s / is_s)
 
@@ -317,15 +385,15 @@ def generate_table1(
                 cpdt_p = float("nan")
                 cpdt_d = float("nan")
 
-            rf_mean = np.mean(all_rf) if all_rf else 1.0
-            rf_std = np.std(all_rf, ddof=1) if len(all_rf) > 1 else 0.0
-            rr_mean = np.mean(all_rr) * 100 if all_rr else 0.0
-            oh_mean = np.mean(all_oh) if all_oh else 0.0
-            s_mean = np.mean(speedups) if speedups else 1.0
+            rf_mean = _nanmean(all_rf) if all_rf else 1.0
+            rf_std = float(np.nanstd(all_rf, ddof=1)) if len(all_rf) > 1 else 0.0
+            rr_mean = _nanmean(all_rr) * 100 if all_rr else 0.0
+            oh_mean = _nanmean(all_oh) if all_oh else 0.0
+            s_mean = _nanmean(speedups) if speedups else 1.0
             bl_r2_mean = float(np.nanmean(bl_r2s)) if bl_r2s else 0.0
             is_r2_mean = float(np.nanmean(is_r2s)) if is_r2s else 0.0
-            canon_mean = np.mean(all_canon_ms) if all_canon_ms else 0.0
-            eval_mean = np.mean(all_eval_ms) if all_eval_ms else 0.0
+            canon_mean = _nanmean(all_canon_ms) if all_canon_ms else 0.0
+            eval_mean = _nanmean(all_eval_ms) if all_eval_ms else 0.0
             ratio = canon_mean / eval_mean if eval_mean > 0 else float("inf")
             ratio_str = f"{ratio:.1f}" if ratio < 100 else f"{ratio:.0f}"
 
@@ -413,8 +481,8 @@ def generate_table2(
                 d = data[prob]
                 if not d.get("bl_r2_test") or not d.get("is_r2_test"):
                     continue
-                bl_mean = np.mean(d["bl_r2_test"])
-                is_mean = np.mean(d["is_r2_test"])
+                bl_mean = _nanmean(d["bl_r2_test"].values())
+                is_mean = _nanmean(d["is_r2_test"].values())
                 cohens_d, p_raw = _paired_test(d["bl_r2_test"], d["is_r2_test"])
                 prob_stats.append((prob, bl_mean, is_mean, cohens_d, p_raw))
 
@@ -521,11 +589,15 @@ def generate_table_k_range(
         for prob, d in data.items():
             if not d.get("is_max_k") or not d.get("is_overhead_pct"):
                 continue
-            for mk, oh, pd in zip(
-                d.get("is_max_k", []),
-                d.get("is_overhead_pct", []),
-                d.get("is_per_dag_ms", []),
-            ):
+            # Align the three series by seed. is_overhead_pct and is_per_dag_ms
+            # are only recorded when their denominators are positive, so the
+            # three maps can have different seed sets; zipping them positionally
+            # would pair one seed's k with another seed's cost.
+            mk_by_seed = d.get("is_max_k", {})
+            oh_by_seed = d.get("is_overhead_pct", {})
+            pd_by_seed = d.get("is_per_dag_ms", {})
+            for s in sorted(set(mk_by_seed) & set(oh_by_seed) & set(pd_by_seed)):
+                mk, oh, pd = mk_by_seed[s], oh_by_seed[s], pd_by_seed[s]
                 if np.isfinite(mk) and np.isfinite(oh) and np.isfinite(pd):
                     k_data.append((int(mk), oh, pd))
 
@@ -553,8 +625,8 @@ def generate_table_k_range(
             ohs, pds = zip(*subset)
             tex += (
                 f"    $[{lo}, {hi})$ & {len(subset)} "
-                f"& ${np.mean(ohs):.1f}\\%$ "
-                f"& ${np.mean(pds):.3f}$ \\\\\n"
+                f"& ${_nanmean(ohs):.1f}\\%$ "
+                f"& ${_nanmean(pds):.3f}$ \\\\\n"
             )
     tex += "\\bottomrule\n\\end{tabular}\n\\end{table}\n"
 
@@ -579,8 +651,29 @@ def _fmt_bold_underline(
     Compares formatted strings to avoid spurious bold/underline when both
     values display identically (e.g., both "0.0000" despite fp noise).
 
+    A non-finite value is a **missing observation, not a value that wins**.
+    Both ``bl > is`` and ``is > bl`` are ``False`` when either side is NaN, so
+    an unguarded comparison falls through to the "IsalSR is better" branch and
+    typesets the NaN bold -- which is how the submitted appendix marked a real
+    ``R^2 = 0.9385`` as worse than a missing observation (T08 / R2.7).
+    Missing cells are rendered as an em dash and carry no mark; the surviving
+    finite value takes the bold.
+
     Returns LaTeX strings for (bl_formatted, is_formatted).
     """
+    bl_ok = math.isfinite(bl_val)
+    is_ok = math.isfinite(is_val)
+
+    # Both missing: nothing to compare, nothing to mark.
+    if not bl_ok and not is_ok:
+        return "$\\dagger$", "$\\dagger$"
+
+    # Exactly one missing: the finite side wins by default, never the NaN.
+    if not is_ok:
+        return f"$\\mathbf{{{bl_val:{fmt}}}}$", "$\\dagger$"
+    if not bl_ok:
+        return "$\\dagger$", f"$\\mathbf{{{is_val:{fmt}}}}$"
+
     bl_str = f"{bl_val:{fmt}}"
     is_str = f"{is_val:{fmt}}"
 
@@ -630,7 +723,7 @@ def generate_table_supplementary(
             prob_stats: list[
                 tuple[
                     str,  # problem name
-                    dict[str, list[float]],  # raw data
+                    dict[str, dict[int, float]],  # per-seed data
                     float,  # raw p-value
                 ]
             ] = []
@@ -641,11 +734,17 @@ def generate_table_supplementary(
                 _, p_raw = _paired_test(d["bl_r2_test"], d["is_r2_test"])
                 prob_stats.append((prob, d, p_raw))
 
-            raw_ps = [s[2] for s in prob_stats]
-            adjusted = _holm_bonferroni(raw_ps) if raw_ps else []
+            # Holm is applied over the problems that yielded a defined p only.
+            # A problem with too few paired seeds must not enter the family and
+            # must not be silently assigned p = 1.
+            testable = [i for i, s in enumerate(prob_stats) if math.isfinite(s[2])]
+            adj_by_index: dict[int, float] = {}
+            if testable:
+                adj_vals = _holm_bonferroni([prob_stats[i][2] for i in testable])
+                adj_by_index = dict(zip(testable, adj_vals))
 
             for i, (prob, d, _) in enumerate(prob_stats):
-                p_adj = adjusted[i] if i < len(adjusted) else 1.0
+                p_adj = adj_by_index.get(i, float("nan"))
 
                 # Midrule between benchmarks
                 if benchmark != prev_bench and all_rows:
@@ -656,55 +755,75 @@ def generate_table_supplementary(
 
                 label = _PROBLEM_LABELS.get(prob, prob)
 
-                # R² test
-                bl_r2 = np.mean(d["bl_r2_test"])
-                is_r2 = np.mean(d["is_r2_test"])
+                # R² test. Pairwise deletion: a seed whose expression is
+                # undefined on part of the test domain is a missing
+                # observation, excluded from the mean rather than propagated
+                # through it (T08 / R2.7).
+                bl_r2 = _nanmean(d["bl_r2_test"].values())
+                is_r2 = _nanmean(d["is_r2_test"].values())
                 bl_r2_f, is_r2_f = _fmt_bold_underline(bl_r2, is_r2, ".4f", higher_is_better=True)
 
                 # NRMSE test
-                bl_nrmse = np.mean(d.get("bl_nrmse_test", [0.0]))
-                is_nrmse = np.mean(d.get("is_nrmse_test", [0.0]))
+                bl_nrmse = _nanmean(d.get("bl_nrmse_test", {}).values())
+                is_nrmse = _nanmean(d.get("is_nrmse_test", {}).values())
                 bl_nrmse_f, is_nrmse_f = _fmt_bold_underline(
                     bl_nrmse, is_nrmse, ".4f", higher_is_better=False
                 )
 
                 # Cohen's d with bootstrap CI
                 cd, ci_lo, ci_hi = _cohens_d_with_ci(d["bl_r2_test"], d["is_r2_test"])
-                d_str = f"${cd:+.2f}$\\,[${ci_lo:+.2f}$, ${ci_hi:+.2f}$]"
+                if math.isfinite(cd):
+                    d_str = f"${cd:+.2f}$\\,[${ci_lo:+.2f}$, ${ci_hi:+.2f}$]"
+                else:
+                    d_str = "$\\dagger$"
+
+                # Effective paired seed count, after pairwise deletion. Reported
+                # per row because it is not uniformly S for every problem.
+                n_paired = len(_pair_by_seed(d["bl_r2_test"], d["is_r2_test"])[0])
 
                 # p-value with significance stars
-                sig = ""
-                if p_adj < 0.001:
-                    sig = "$^{***}$"
-                elif p_adj < 0.01:
-                    sig = "$^{**}$"
-                elif p_adj < 0.05:
-                    sig = "$^{*}$"
-                if p_adj < 0.001:
-                    p_str = f"$<$0.001{sig}"
+                if not math.isfinite(p_adj):
+                    p_str = "$\\dagger$"
                 else:
-                    p_str = f"${p_adj:.3f}${sig}"
+                    sig = ""
+                    if p_adj < 0.001:
+                        sig = "$^{***}$"
+                    elif p_adj < 0.01:
+                        sig = "$^{**}$"
+                    elif p_adj < 0.05:
+                        sig = "$^{*}$"
+                    if p_adj < 0.001:
+                        p_str = f"$<$0.001{sig}"
+                    else:
+                        p_str = f"${p_adj:.3f}${sig}"
 
                 # Reduction factor
-                rf_mean = np.mean(d.get("is_rf", [1.0]))
-                rf_std = np.std(d["is_rf"], ddof=1) if len(d.get("is_rf", [])) > 1 else 0.0
+                rf_vals = list(d.get("is_rf", {}).values()) or [1.0]
+                rf_mean = _nanmean(rf_vals)
+                rf_std = float(np.nanstd(rf_vals, ddof=1)) if len(rf_vals) > 1 else 0.0
                 rf_str = f"${rf_mean:.2f} \\pm {rf_std:.2f}$"
 
                 # Redundancy rate
-                rr = np.mean(d.get("is_redundancy", [0.0])) * 100
+                rr = _nanmean(d.get("is_redundancy", {}).values() or [0.0]) * 100
                 rr_str = f"${rr:.1f}\\%$"
 
                 # Wall-clock time (bold lower = better)
-                bl_t = np.mean(d.get("bl_wall", [0.0]))
-                is_t = np.mean(d.get("is_wall", [0.0]))
+                bl_t = _nanmean(d.get("bl_wall", {}).values() or [0.0])
+                is_t = _nanmean(d.get("is_wall", {}).values() or [0.0])
                 bl_t_f, is_t_f = _fmt_bold_underline(bl_t, is_t, ".1f", higher_is_better=False)
 
                 # Overhead
-                oh = np.mean(d.get("is_overhead_pct", [0.0]))
+                oh = _nanmean(d.get("is_overhead_pct", {}).values() or [0.0])
                 oh_str = f"${oh:.1f}\\%$"
 
+                # Where the effective paired seed count falls short of the
+                # campaign's nominal S, annotate the row rather than let it
+                # imply a full complement (T08 / R2.7).
+                nominal_s = max(len(d["bl_r2_test"]), len(d["is_r2_test"]))
+                row_label = label if n_paired >= nominal_s else f"{label}$^{{[{n_paired}]}}$"
+
                 all_rows.append(
-                    f"    {label:<8} "
+                    f"    {row_label:<8} "
                     f"& {bl_r2_f} & {is_r2_f} "
                     f"& {bl_nrmse_f} & {is_nrmse_f} "
                     f"& {d_str} & {p_str} "
@@ -757,7 +876,15 @@ def generate_table_supplementary(
             f"($^{{*}}p<0.05$, $^{{**}}p<0.01$, $^{{***}}p<0.001$). "
             f"$\\rho$: empirical reduction factor. "
             f"\\textbf{{Bold}}: better of BL/IS. "
-            f"\\underline{{Underline}}: worse of BL/IS.}}\n"
+            f"\\underline{{Underline}}: worse of BL/IS. "
+            f"All statistics use pairwise deletion: a seed is included only if "
+            f"both arms produced a finite value for it. "
+            f"A superscript $[n]$ on a problem name gives the effective number "
+            f"of paired seeds where it is below the nominal count, either "
+            f"because a run did not complete or because the recovered "
+            f"expression is undefined on part of the test domain. "
+            f"$\\dagger$ marks a quantity that is undefined because too few "
+            f"seeds remain; it is never a value that wins a comparison.}}\n"
             f"\\label{{tab:supplementary_{method}}}\n"
             "\\begin{tabular}{@{}l "
             "rr "  # R² test BL/IS
