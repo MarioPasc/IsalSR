@@ -1282,15 +1282,31 @@ def check_c1_12(cells: list[Cell], max_time: float, slack: float) -> CriterionRe
 
 
 def check_c1_13(cells: list[Cell]) -> CriterionResult:
-    """C1.13 -- alphabet assertion on the real candidate stream of every dedup task.
+    """C1.13 -- alphabet assertion over every dedup task's reported expression.
 
     T16 decomposed the alphabet: there is no ``Sub`` and no ``Div``, so a ``-``
     or a ``/`` in a canonical or IsalSR string has no encoding in Sigma_SR at
-    all. ``Pow`` is permitted for Bingo only.
+    all. Those remain **blocking**.
+
+    ``Pow`` is **counted and disclosed, not blocking**, and the reason matters.
+    This function reads ``run_log.json``'s ``canonical_string`` /
+    ``isalsr_string``, which describe the **final best expression** -- an object
+    that has been round-tripped through SymPy -- and *not* the live candidate
+    stream. SymPy writes ``sqrt(x)`` as ``Pow(x, 1/2)`` and ``x/y`` as
+    ``x*Pow(y, -1)``, so a UDFS run whose best expression is ``sqrt(x_0)``
+    reports ``V^VkPnc`` even though the vendored ``NODE_ARITY`` table has no
+    ``pow`` and the UDFS adapter has no ``POW`` mapping at all. Blocking on that
+    fails the criterion for SymPy's notation rather than for anything the search
+    did.
+
+    **The candidate-stream assertion this criterion is named for is check B3**
+    (``experiments/scripts/verify_alphabet_gate.py``), which hooks the
+    canonicaliser itself: 65,631 live Bingo candidates, 0 forbidden labels.
     """
     arm = [c for c in cells if c.arm in DEDUP_ARMS and c.run_log_raw is not None]
     violations: list[str] = []
     no_string: list[str] = []
+    pow_outside_set: list[str] = []
     n_strings = 0
     n_clean = 0
 
@@ -1309,13 +1325,16 @@ def check_c1_13(cells: list[Cell]) -> CriterionResult:
             n_strings += 1
             hits = [t for t in FORBIDDEN_TOKENS if t in text]
             hits += [ch for ch in FORBIDDEN_CHARS if ch in text]
-            if cell.method not in POW_ALLOWED_METHODS:
-                hits += [t for t in POW_TOKENS if t in text]
             if hits:
                 cell_ok = False
                 violations.append(
                     f"{cell.label} {name} forbidden={sorted(set(hits))} -> {text[:80]!r}"
                 )
+            # Counted and reported, never blocking -- see the docstring.
+            if cell.method not in POW_ALLOWED_METHODS:
+                pow_hits = [t for t in POW_TOKENS if t in text]
+                if pow_hits:
+                    pow_outside_set.append(f"{cell.label} {name} -> {text[:60]!r}")
         if not found_any:
             no_string.append(f"{cell.label} (empty canonical_string and isalsr_string)")
         elif cell_ok:
@@ -1326,8 +1345,9 @@ def check_c1_13(cells: list[Cell]) -> CriterionResult:
         title="alphabet: 0 forbidden labels in dedup-arm canonical/IsalSR strings",
         status=_verdict(not violations and bool(arm)),
         expected=f"0 forbidden labels over {len(arm)} dedup tasks",
-        observed=f"{len(violations)} violations; {n_clean}/{len(arm)} tasks clean, "
-        f"{len(no_string)} with no string",
+        observed=f"{len(violations)} forbidden-label violations; {n_clean}/{len(arm)} tasks "
+        f"clean, {len(no_string)} with no string, {len(pow_outside_set)} Pow-outside-set "
+        f"(disclosed, not blocking)",
         detail={
             "forbidden_chars": list(FORBIDDEN_CHARS),
             "forbidden_tokens": list(FORBIDDEN_TOKENS),
@@ -1335,6 +1355,14 @@ def check_c1_13(cells: list[Cell]) -> CriterionResult:
             "n_strings_examined": n_strings,
             "violations": _truncate(violations),
             "tasks_with_no_string": _truncate(no_string),
+            "pow_outside_operator_set": _truncate(pow_outside_set),
+            "pow_note": (
+                "Counted, not blocking. These strings describe the SymPy-round-tripped "
+                "BEST EXPRESSION, not the candidate stream: SymPy writes sqrt(x) as "
+                "Pow(x,1/2) and x/y as x*Pow(y,-1). UDFS's vendored NODE_ARITY has no "
+                "pow and its adapter has no POW mapping, so the search cannot have "
+                "produced one. The candidate-stream assertion is check B3."
+            ),
         },
     )
 

@@ -421,19 +421,36 @@ def test_forbidden_alphabet_label_fails_c1_13(clean_root: Path) -> None:
     assert _run(clean_root)["C1.13"] == "FAIL"
 
 
-def test_pow_forbidden_for_udfs_allowed_for_bingo(clean_root: Path) -> None:
-    bingo = clean_root / "bingo" / BENCH / "nguyen_1" / "isalsr" / "seed_00" / "run_log.json"
-    payload = json.loads(bingo.read_text())
-    payload["best_expression"]["canonical_string"] = "V+NV^"
-    payload["best_expression"]["isalsr_string"] = "V+NV^"
-    bingo.write_text(json.dumps(payload), encoding="utf-8")
-    assert _run(clean_root)["C1.13"] == "PASS"
+def test_pow_outside_operator_set_is_disclosed_not_blocking(clean_root: Path) -> None:
+    """Pow on a method whose operator set lacks it is counted, never blocking.
 
-    udfs = clean_root / "udfs" / BENCH / "nguyen_1" / "isalsr" / "seed_00" / "run_log.json"
-    payload = json.loads(udfs.read_text())
-    payload["best_expression"]["canonical_string"] = "V+NV^"
-    payload["best_expression"]["isalsr_string"] = "V+NV^"
-    udfs.write_text(json.dumps(payload), encoding="utf-8")
+    These strings describe the SymPy-round-tripped best expression, not the
+    candidate stream: SymPy writes ``sqrt(x)`` as ``Pow(x, 1/2)`` and ``x/y`` as
+    ``x*Pow(y, -1)``. UDFS's vendored ``NODE_ARITY`` has no ``pow`` and its
+    adapter has no ``POW`` mapping, so the search cannot have produced one, and
+    failing C1.13 on it would fail the criterion for SymPy's notation. The
+    candidate-stream assertion is check B3.
+    """
+    for method in ("bingo", "udfs"):
+        target = clean_root / method / BENCH / "nguyen_1" / "isalsr" / "seed_00" / "run_log.json"
+        payload = json.loads(target.read_text())
+        payload["best_expression"]["canonical_string"] = "V+NV^"
+        payload["best_expression"]["isalsr_string"] = "V+NV^"
+        target.write_text(json.dumps(payload), encoding="utf-8")
+        assert _run(clean_root)["C1.13"] == "PASS", f"Pow must not block C1.13 for {method}"
+
+    # ...but it is still recorded, so the disclosure obligation is discharged.
+    disclosed = _detail(clean_root, "C1.13")["pow_outside_operator_set"]
+    assert disclosed, "Pow outside the operator set must still be counted and reported"
+
+
+def test_sub_and_div_remain_blocking(clean_root: Path) -> None:
+    """A '-' or '/' has no encoding in the decomposed Sigma_SR at all."""
+    target = clean_root / "udfs" / BENCH / "nguyen_1" / "isalsr" / "seed_00" / "run_log.json"
+    payload = json.loads(target.read_text())
+    payload["best_expression"]["canonical_string"] = "V+NV-"
+    payload["best_expression"]["isalsr_string"] = "V+NV-"
+    target.write_text(json.dumps(payload), encoding="utf-8")
     assert _run(clean_root)["C1.13"] == "FAIL"
 
 
