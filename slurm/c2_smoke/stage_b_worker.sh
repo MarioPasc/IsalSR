@@ -120,6 +120,14 @@ fi
 # YAML; do the same, into a scratch copy, so the production configs are untouched.
 B3_TMP="${OUT}/b3_configs"
 mkdir -p "${B3_TMP}"
+# The gate runs a real search through the orchestrator, whose resume logic skips
+# any cell that already has a valid run_log.json. On a re-run the previous
+# attempt's output is still there, so nothing executes, no candidate reaches the
+# canonicaliser, and the gate reports "DAGs observed: 0" -- at which point
+# no_forbidden_labels passes over an EMPTY stream. The gate catches that
+# (observed_dags_nonzero fails), but a vacuous pass is exactly what must never
+# be possible here, so clear the scratch tree instead of relying on the guard.
+rm -rf "${OUT}/b3_scratch"
 for PAIR in ${B3_PAIRS}; do
     CFG_NAME="${PAIR%%:*}"; PROB="${PAIR##*:}"
     "${PYTHON}" - "experiments/configs/${CFG_NAME}.yaml" "${B3_TMP}/${CFG_NAME}.yaml" <<'PY'
