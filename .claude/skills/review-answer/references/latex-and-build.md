@@ -89,6 +89,27 @@ pdftoppm -f <page> -l <page> -png -r 85 response_to_reviewers.pdf /tmp/page
 # note: pdftoppm zero-pads multi-page output, e.g. /tmp/page-04.png
 ```
 
+### The annotated manuscript, when the answer also edits the paper
+
+Manuscript edits go into `reviews/internal_copy_reviewed_article/`, wrapped in
+`{\color{blue}…}`; `article/` stays clean. See the Paths section of `SKILL.md`
+for the full convention. Its gate needs **three** passes, since the paper carries
+numbered environments whose `\ref`s take an extra round to settle:
+
+```bash
+cd .../reviews/internal_copy_reviewed_article/paper
+for i in 1 2 3; do pdflatex -interaction=nonstopmode main.tex > /dev/null 2>&1; done
+grep -c "^! " main.log                     # must be 0
+grep -c "Reference.*undefined" main.log    # must be 0
+grep -c "color{red}" methodology.tex       # must be 0 after integrating a patch
+pdftotext main.pdf - | grep -oE "(Theorem|Lemma|Definition|Corollary) [0-9]+\.[0-9]+" \
+  | sort -u -V                             # numbering the reviewers cite must survive
+# repeat in ../supplementary on supplementary.tex
+```
+
+`main.log` is the file to grep, not a redirected `/tmp/tex.log`: the paper's
+build is multi-file and the interesting errors surface through `\input`.
+
 ## 5. Figure generators
 
 Live in `experiments/scripts/generate_fig_<topic>.py`, take `--output <path>`,

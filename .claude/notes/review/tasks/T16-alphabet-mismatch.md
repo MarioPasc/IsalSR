@@ -7,7 +7,7 @@
 | Owner | **Mario** (implementation, validation, re-run) · **Ezequiel** (decision — **taken**, see §4) |
 | Depends on | — |
 | Blocks | **T02** (Wave 1 must run the corrected adapter), T04 (Naive-Hash must consume decomposed DAGs), T06 (k-stratification only), T07 (§7bis fork resolved), T09, T10 |
-| Status | **IMPLEMENTED AND VALIDATED 2026-07-30.** Direction 4b. AC-0…AC-12 closed; AC-13 (R2.3 answer, T09) and AC-14 (§11) remain, both blocked on the Wave 1 re-run. Sharing decided: **do not share**. Write-up: `docs/md_files/changes/t16_commutative_decomposition.md`. **Wave 1 must launch against the corrected adapter — gate G9 in `EXECUTION-PLAN.md`.** |
+| Status | **IMPLEMENTED AND VALIDATED 2026-07-30. ANSWERS WRITTEN 2026-08-03** (R2.2 + R2.3 in `response_to_reviewers.tex`; AC-13 and AC-14 closed, §11). Direction 4b. AC-0…AC-14 closed. **One sentence of the R2.3 answer asserts the re-execution as done — do not send the letter before C2 lands.** Sharing decided: **do not share**. Write-up: `docs/md_files/changes/t16_commutative_decomposition.md`. **Wave 1 must launch against the corrected adapter — gate G9 in `EXECUTION-PLAN.md`.** |
 | Opened | 2026-07-29, by Mario, from a T07 finding |
 | Last updated | 2026-07-30 — Ezequiel's decision recorded; ticket rewritten as an implementation spec |
 
@@ -293,6 +293,50 @@ reviewer-requested extension:
 The added cost is therefore **IsalSR on `D1`**, because those results were
 produced under the wrong alphabet. The C++ core (T01) makes this materially
 cheaper than the original campaign.
+
+### 8.2 Amended 2026-08-03 (second pass) — the `+660` figure in §8.1 was wrong
+
+`EXECUTION-PLAN.md:10` fixes C2 as `{baseline, hash, isalsr} × {UDFS, Bingo} ×
+(D1 ∪ D2) × 20 seeds` = **8,400 runs**. The baseline is *already* re-run on
+everything at 20 seeds, so the marginal compute cost of the uniform operator set
+is **zero**, not +660 runs. The real cost is **continuity**: gate **A4b**
+recommends freezing D1's per-tier sets so the §7 C1↔C2 table stays like-for-like,
+and the uniform set breaks that comparison on the 22 affected D1 problems.
+Accepted by Mario on the grounds that continuity is already partially broken (T05
+excludes five D1 problems for definition corrections), C2 moves 30→20 seeds and
+adds a third arm, so C1↔C2 is a sanity check rather than a claim — whereas the
+confound would ship with the published code. **A4b must be rewritten to match.**
+
+### 8.1 Amended 2026-08-03 — uniform Bingo operator set, baseline `D1` re-run
+
+**Mario's decision, taken on the design argument, not on T16's original scope.**
+Bingo's operator set was **not uniform across the suite**: `bingo_{nguyen,feynman}.yaml`
+omitted `sqrt` and `pow`, `bingo_{hard,cherrypicked,roundoff,strogatz,feynman_remainder}.yaml`
+included them. The operator set was therefore **confounded with the problem
+group**, so any per-group difference in results is unattributable. All Bingo
+configs now carry `["+","-","*","/","sin","cos","exp","log","sqrt","pow"]`.
+
+**This deliberately overrides §5.2 non-goal 1**, and the reason that non-goal
+existed is exactly the cost it now incurs: changing the host operator set changes
+the host's *search*, so on the 22 affected problems (`nguyen` 12 + `feynman` 10)
+**the Bingo baseline arm must be re-run too**, not only IsalSR.
+
+| | Before this amendment | After |
+|---|---|---|
+| Bingo baseline | `D2` | **`D2` + the 22 problems of `D1`** (+660 runs, 30 seeds each) |
+| Bingo IsalSR | `D1 + D2` | `D1 + D2` *(unchanged)* |
+| UDFS, both arms | as planned | *(unchanged — its operator set is fixed by the vendor and was never configurable, so nothing moved)* |
+
+**Fold the +660 Bingo baseline runs into C2 before launch (T02).** Most
+Nguyen/Feynman runs terminate far inside the 12 h budget (`T_BL` in the submitted
+Table 6 ranges from 1.0 s to 22,185 s), so the wall-clock cost is well below the
+nominal 660 × 12 h.
+
+**UDFS configs made honest at the same time** (documentation only, zero execution
+effect): all eight now carry the same `operator_set` list recording the vendor's
+fixed table, with a comment stating that `to_dag_regressor_kwargs()` does not
+forward the field. Previously three of the eight listed a set without `sqrt`,
+which is what fed the manuscript's wrong description of UDFS.
 
 Fold into `EXECUTION-PLAN.md` and **settle before T02 Wave 1 launches**, or
 Wave 1 runs the wrong adapter.
@@ -602,8 +646,101 @@ not as a bug.
 
 ## 11. Proposed answer
 
-*(unfilled — R2.3, to be written once the re-run lands. The answer must state
-that Σ_SR and the host operator set are different objects: the host searches over
-`{+, −, ×, ÷, sin, cos, exp, log}`, and `−` and `÷` enter the representation
-through the commutative decomposition of Definition 3.2, so Σ_SR needs no `-` or
-`/` label.)*
+**Written 2026-08-03 into `reviews/response_to_reviewers.tex` (R2.2 and R2.3).**
+AC-13 and AC-14 closed. Letter compiles clean (2 passes, 0 overfull, 0 warnings,
+0 unresolved refs); annotated manuscript compiles clean (paper 13 pp, supplementary
+12 pp, 0 errors, 0 undefined refs, submitted theorem numbering preserved).
+
+**R2.3** is built on the distinction the ticket required: Σ_SR is the *encoding
+alphabet*, the Appendix D.2 set is the hosts' *search primitives*, and the
+requirement runs one way only (every host primitive must be encodable; a Σ_SR
+label with no host primitive is harmless). `−` and `÷` enter through the
+decomposition; `Pow`/`√` are Σ_SR labels the host need not provide, and criterion
+(ii) of §4.2 is a property of the *benchmark*, not of the solver configuration.
+Nguyen-8/-11 answered empirically (√x = exp(½ log x), x^y = exp(y log x) for
+x>0; both hosts R²_test = 1.0000 in both arms).
+
+**Three facts verified for the letter that the ticket did not carry:**
+
+1. **Host operator sets were not uniform across the suite** — Bingo only, and
+   **fixed 2026-08-03, see §8.1**. The encoding alphabet Σ_SR was never
+   method-dependent: both adapters map into the same `NodeType` set and both call
+   `emit_binary(decompose=True)`, so every candidate from either host is encoded
+   over the same 12 labels of 𝓛. What differed was the *host search* set.
+2. **UDFS's searched set is fixed by the vendor, confirming §10's finding 2 at
+   file:line.** `vendor/DAG_search/config.py:53-71` — binary `{+, *, sub_l, sub_r,
+   div_l, div_r}`, unary `{=, inv, neg, sin, cos, exp, log, sqrt}`, `pow_l/pow_r`
+   commented out; enumerated wholesale at `dag_search.py:1226-1227`. So UDFS
+   **always** has √, neg and inv and **never** has Pow, on all 50 problems,
+   whatever the YAML says. Disclosed in the letter and corrected in D.2.
+3. **The `k_∧ = 0` remark of §3 now has a stated scope**: it covers every UDFS run
+   and the Bingo runs on the 22 base-set problems; `(k−k_∧)!` applies to the rest.
+   This closes the "third statement on the same question" flagged in the R2
+   source notes.
+
+**Disclosure taken, per the honesty gate.** The letter states plainly that the two
+host translation routines did not apply the decomposition, that candidates
+therefore carried 14 labels instead of the 12 of 𝓛, that the encoding used was
+*finer* than the one defined (so no candidate was wrongly merged), and that under
+an alphabet carrying `−`/`÷` condition (iv) of Definition 3.9 does not cover every
+non-commutative operator present — which is the argument for 4b over 4a, given in
+the letter without narrating the decision history. No internal measurement numbers
+(the 61.1 %, the k/ρ/length deltas, the mutation-testing counts) are quoted.
+
+**One sentence is contingent and must be re-checked before submission**:
+"the experiments have been re-executed under it. Every result reported in the
+revision comes from that re-execution." C2 is `NOT SUBMITTED` as of 2026-08-02
+(T02 §0). The claim is true of the revision as it will ship and false today. **Do
+not send the letter before C2 lands.**
+
+### 2026-08-03 — containment made a checked precondition (§12)
+
+**The question that produced this**: "does Σ_SR cover all possible operators, and
+should Σ_SR equal the host operator set?" Answers, from the code:
+
+1. **No.** 𝓛 is twelve labels. Bingo's own opcode table has 23 entries and ten are
+   outside 𝓛 (`TAN, TANH, SINH, COSH, ARCSIN, ARCCOS, ARCTAN, SQUARE, CUBE,
+   SAFE_POWER`). Containment held only because the configs happen to stay inside.
+2. **Equality is unreachable, and containment is the right invariant.** 𝓛 is
+   *post-decomposition*: it has NEG/INV and no SUB/DIV, while Bingo has SUB/DIV
+   and no NEG/INV opcode at all, and UDFS has both plus identity and no POW.
+3. **Enlarging 𝓛 to Bingo's table was considered and rejected.** `SQUARE`, `CUBE`
+   and `SAFE_POWER` denote operations 𝓛 already expresses through `Pow`, so
+   labelling them would give one operation two non-isomorphic encodings — the
+   exact redundancy the canonical map removes — and `SAFE_POWER` is
+   non-commutative, so Rule 1, Definition 3.9(iv) and the completeness argument
+   would all have to widen. R1's assessment praises the minimality by name.
+
+**A correction to the table given in-session**: UDFS's `'='` is **not** unmapped.
+The adapter contracts identity nodes onto their child (documented in
+`compgraph_to_labeled_dag`). Measured on 2,000 sampled CompGraphs: **9.8 % carry
+an identity node, 0 conversion failures, and every emitted label lies in 𝓛**.
+
+**What was built.**
+
+| Deliverable | Where |
+|---|---|
+| `AlphabetCoverageError`, `SIGMA_SR_LABELS`, `bingo_operator_image`, `validate_bingo_operators`, `validate_udfs_operators` | `experiments/models/alphabet_guard.py` (new) |
+| Guard fires at config construction, before any search | `bingo/config.py::__post_init__`, `udfs/isalsr_runner.py::__init__` |
+| `n_conversion_failures` persisted per run | `schemas.py::SearchSpaceResults` + orchestrator splat, mirroring `n_shadow_failures` (a21416e) |
+| 41 tests, incl. drift test asserting the static alias table still matches Bingo's `OPERATOR_NAMES` | `tests/unit/test_alphabet_guard.py` (new) |
+
+**Why the guard matters and is not cosmetic.** An operator outside 𝓛 was refused
+inside the adapter, caught by the runner, counted in the ledger and the candidate
+then evaluated **undeduplicated**. One line in a YAML (`tanh`, `square`) silently
+depresses ρ for a whole 12 h run with nothing in the reported numbers saying so.
+The ledger's count previously reached only an INFO log line; it is now a field.
+
+Verified: 41/41 new tests, `tests/unit` **6,187 passed / 5 skipped**, ruff +
+format clean. mypy is not run over `experiments/` (scope is `src/isalsr/`).
+
+**Rewritten 2026-08-03** after the §8.1 decision: the 22/28 split is gone from the
+answer (it was dressing a configuration inconsistency as design), the counterfactual
+about widening 𝓛 is cut, and the answer states one operator set per solver. Length
+roughly halved; letter 21 pp → 20 pp.
+
+**Seams left for other tickets** (deliberate, not oversights): the
+`2×2×(12+10)×30 = 2,640` clause in D.2 is untouched (R2.6/T09 owns it); the
+Appendix D.1 per-problem tables (T09) should state the single operator set per
+solver; the annotated paper stands at 13 pp against a 12 pp limit (T13 owns the
+budget). **T02 must absorb §8.1's +660 Bingo baseline runs before C2 launches.**

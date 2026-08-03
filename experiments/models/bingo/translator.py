@@ -176,13 +176,33 @@ class BingoTranslator(ResultTranslator):
         for snap in r.trajectory_snapshots:
             r2_train = 1.0 - snap.best_fitness / var_y if np.isfinite(snap.best_fitness) else 0.0
             dedup_rate = snap.n_skipped / snap.n_total_dags if snap.n_total_dags > 0 else 0.0
+            # `n_dags_explored` must come from the SAME counter as the final row,
+            # or the series is not a series.  Two different counters exist:
+            #
+            #   snap.n_total_dags -- candidate DAGs admitted to the dedup hook.
+            #       This is rho's numerator and what the final row reports.  It
+            #       is 0 on the baseline arm, which has no dedup hook at all.
+            #   snap.n_evals      -- ExplicitRegression.eval_count, i.e. fitness
+            #       FUNCTION INVOCATIONS.  Inflated 3.3-4.1x on the dedup arms by
+            #       ScipyOptimizer/LocalOptFitnessFunction inner iterations during
+            #       LM constant optimisation, so it counts a different population.
+            #
+            # Using n_evals on a dedup arm made the trajectory climb to ~110k and
+            # then DROP to ~30k on the final row -- the same quantity measured two
+            # ways.  Each arm now uses whichever counter its own final row uses:
+            # the DAG counter where it exists, eval_count on the baseline (where
+            # runner.py sets n_total_dags = total_evals = eval_count anyway).
+            # rho itself was never affected: translator.py builds it from
+            # dedup.n_total / dedup.n_unique, and no analyzer or figure code reads
+            # this column.
+            n_explored = snap.n_total_dags if snap.n_total_dags > 0 else snap.n_evals
             rows.append(
                 TrajectoryRow(
                     timestamp_s=snap.timestamp_s,
                     iteration=snap.generation,
                     best_r2=r2_train,
                     best_nrmse=0.0,
-                    n_dags_explored=snap.n_evals,
+                    n_dags_explored=n_explored,
                     n_unique_canonical=snap.n_unique_canonical,
                     current_expr="",
                     current_complexity=0,

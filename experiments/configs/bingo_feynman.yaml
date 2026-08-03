@@ -15,7 +15,12 @@ benchmarks:
 bingo:
   population_size: 500
   stack_size: 32
-  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log"]
+  # Uniform operator set across all 50 problems (2026-08-03). Previously this
+  # tier omitted sqrt and pow, which confounded the operator set with the
+  # problem group and made the single operator set of Appendix D.2 wrong.
+  # Changing it re-defines the Bingo search on this tier: the baseline arm must
+  # be re-run, not only the IsalSR arm.
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
   use_simplification: false
   crossover_prob: 0.4
   mutation_prob: 0.4

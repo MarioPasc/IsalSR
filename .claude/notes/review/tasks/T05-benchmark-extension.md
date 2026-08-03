@@ -259,7 +259,7 @@ Requirements:
 |---|---|---|
 | AC-0 | **met** | §8, written as the work proceeded |
 | AC-1 | **met** | `feynman_catalogue.py`; 120 equations, 116 syntactic / 117 semantic representable, 4 blocked with the operator named per exclusion; 652 tests |
-| AC-2 | **met** | 130 = 116 + 14 counted from `groundtruth.csv`; black-box track's failing criteria named in §8 |
+| AC-2 | **met** | 130 = 116 + 14 counted from `groundtruth.csv`; black-box track's failing criteria named in §8. Re-measured 2026-08-03 through `pmlb_id`: all 30 suite Feynman ids lie inside the track (rows nested, not additive), and SRBench's own 3 omissions equal criterion (ii)'s semantic exclusion set |
 | AC-3 | **met** | rule `d95e7d9`, draw `0e4a573`; ordering verifiable from git, seed content-derived |
 | AC-4 | **met** | `strogatz.py` + `feynman_remainder.py`, 433 tests; `sympy_expression` on 20/20 D2 and, after the C1.5 fix, on 70/70 overall |
 | AC-4b | **met** | Arrays 1741991/1742002 at `fa41e2a`, **40/40 COMPLETED**. SP-1…SP-6 + SP-3′ all 40/40 PASS as a six-row table; SP-7's five statements established for every D2 problem on both hosts. `T05-appendix/probe_results.md` |
@@ -374,6 +374,42 @@ than rhetorical: those datasets have no ground-truth expression, so criterion (i
 (published provenance *of the expression*) and criterion (iii) (structural rather
 than constant-fitting difficulty) have no referent, and `solution_recovered` —
 a reported metric — is undefined, not merely hard.
+
+### 2026-08-03 — AC-2 re-measured: no double counting, and criterion (ii) gets an external check
+
+Asked while writing the R3.1 answer: do the "AI Feynman" and "SRBench
+ground-truth track" rows of the coverage table report overlapping problems, and
+could a reviewer read them as duplicated coverage? Re-fetched `groundtruth.csv`
+and mapped every suite id through `feynman_catalogue`'s verbatim `pmlb_id`
+field. **Do not map ids by string substitution** — PMLB truncates
+(`I.6.20a → feynman_I_6_2a`, `I.48.20 → feynman_I_48_2`,
+`I.39.10 → feynman_I_39_1`), and a naive `.replace('.','_')` reports three false
+gaps.
+
+Measured:
+
+| Quantity | Result |
+|---|---|
+| unique datasets in `groundtruth.csv` | 130 = 116 `feynman_*` + 14 `strogatz_*`, 0 other |
+| suite AI Feynman ids inside the track | **30 / 30** |
+| the drawn six inside the track | **6 / 6** |
+| PMLB `feynman_*` datasets in the catalogue | 119 (120 equations, `II.11.17` has no PMLB dataset) |
+| datasets in `groundtruth.csv` absent from the catalogue | 0 |
+
+So the rows are **nested, not additive**, and `24 → 44` is right: the suite's 70
+are 44 SRBench ground-truth (30 Feynman + 14 Strogatz) + 12 Nguyen + 14 others,
+with no problem counted twice. The letter's table now says so in the caption and
+italicises *its* on the two component rows.
+
+🟢 **Unplanned result, and it is the strongest thing in the R3.1 answer.**
+SRBench omits exactly **3** of PMLB's 119: `I.26.2`, `I.30.5`, `test_10` — which
+is **exactly** criterion (ii)'s exclusion set under the *semantic* reading. The
+only equation the two curations disagree on is `II.35.21`, which SRBench keeps
+and we exclude, and that disagreement *is* the syntactic/semantic `tanh`
+distinction already disclosed. **Our operator criterion and SRBench's own
+selection agree on 118 of 119 datasets.** This makes criterion (ii) externally
+corroborated rather than self-declared, which is worth more than the §3 claim it
+replaced. Written into the letter.
 
 ### 2026-08-02 — the 14 ODE-Strogatz targets (verified, dual-sourced)
 
@@ -712,8 +748,36 @@ campaign, which this ticket gates rather than runs. Everything else is measured.
 
 ### 9.2 Changes made to the manuscript
 
-Not yet applied — the manuscript repo is not checked out in this working tree. What
-the extension requires, for T13's page ledger:
+**Applied 2026-08-03** to the annotated draft
+(`reviews/internal_copy_reviewed_article/`), in blue; `article/` untouched. Both
+documents compile clean (0 errors, 0 undefined refs/cites); numbered environments
+the reviewers cite (Thm. 3.13/3.15, Def. 3.5) are unchanged.
+
+| File | Applied |
+|---|---|
+| `paper/main.tex` | abstract: `50`→`70` problems, `eight`→`nine` suites. Results numbers left alone (they are C2's) |
+| `paper/computational_experiments.tex` §5 opening | `50`→`70`, `eight`→`nine`, `30`→`20` seeds |
+| `paper/computational_experiments.tex` `sec:benchmarks` | assembly now three stages; **core corrected `32`→`22` and its Feynman share `20`→`10`, extension `18`→`28`** (the submitted split did not match the registry: the suite is 12 Nguyen + 24 Feynman + 14 others); criterion (ii) gains the syntactic-reading clause; new blue paragraph for the coverage extension with the pre-registered rule, the 30/120 and 44/130 coverage, and the black-box exclusion; training sizes gain `300` |
+| `paper/computational_experiments.tex` `sec:cpdt` | `N = 50`→`70`, `S = 30`→`20`, and the normal-approximation sentence |
+| `supplementary/supplementary.tex` §D.1 | two new blue tables: 14 ODE-Strogatz and the 6 Feynman remainder, with the trajectory-split caveat and `vdp2` named |
+| `paper/references.bib`, `supplementary/references.bib` | `strogatz2014`, `romano2021` added |
+
+**Left for other tickets, deliberately:**
+- `supplementary.tex:735–737` still reads `2 × 2 × (12+10) × 30 = 2,640 total runs`
+  and `:750` `all 2,640 runs`. That sentence is already wrong against the submitted
+  6,000 and is **R2.6's** to rewrite; editing `30`→`20` inside a wrong formula makes
+  it wronger. R2.6 must produce it at three arms × 20 seeds × 70 problems = 8,400.
+- `results.tex:24` and `supplementary.tex:767, 785, 824` still say `30 seeds` /
+  `50-problem suite`; they describe **existing figures and tables** and refresh with
+  the C2 regeneration.
+- The core/extension correction above overlaps **R2.5** (the undocumented 28) and
+  **T09**. T09 owns placing all 70 Appendix D.1 rows; this session added only D2's 20.
+
+Transient inconsistency, known and accepted: the revised setup describes 70 problems
+at 20 seeds while every reported result still comes from the 50-problem, 30-seed
+campaign. It resolves when C2 lands.
+
+Original page-cost estimate, for T13's ledger:
 
 | File | Change | Page cost |
 |---|---|---|
@@ -726,7 +790,23 @@ the extension requires, for T13's page ledger:
 
 ### 9.3 Draft response text
 
-Bracketed values are filled from C2. Everything else is measured and final.
+**Superseded 2026-08-03.** The R3.1 answer is written into
+`reviews/response_to_reviewers.tex` (letter Table 4 carries the coverage counts;
+the pending statistics sit in a red `\todoblock`). Two numbers in the draft below
+were **not** used, because they do not survive checking:
+
+- `≈45,840 runs, 7.6× the campaign` double-counts. SRBench's ground-truth track
+  *contains* 116 of the 120 AI Feynman equations, so `120 + 250` is not a union.
+  The shipped letter says: 256 distinct problems, `3 × 2 × 256 × 20 = 30,720` runs
+  against C2's 8,400.
+- `36 of 50 problems exhaust the ceiling` overstates the source, which measured a
+  *mean wall-clock at* the ceiling. The shipped letter says the weaker, true thing.
+
+No probe number reached the letter. The 25-minute ρ values and the 16/20 saturation
+count are provisional until C2, so the saturation risk is stated qualitatively
+(coverage, not a smaller p-value) with `Strogatz-vdp2` named as the concrete case.
+
+Original draft, kept for the record:
 
 ```latex
 %% --- R3.1 ---

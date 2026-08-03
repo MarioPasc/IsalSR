@@ -322,3 +322,31 @@ class FallbackLedger:
             "atlas_hit": self.atlas_hit,
             "atlas_hit_hist": _sk(self._hist_atlas_hit),
         }
+
+    def to_search_space_fields(self) -> dict[str, Any]:
+        """Return the scalar counters under their ``SearchSpaceResults`` names.
+
+        The five fallback paths and their denominators, ready to splice into a
+        :class:`~experiments.models.schemas.SearchSpaceResults` so they reach
+        ``run_log.json`` (EXECUTION-PLAN C1.9). Only scalars: the per-k
+        histograms stay in :meth:`to_dict` and in the separate ledger artefact,
+        because a run log carrying one dict per counter per k is a schema the
+        analyzer would have to special-case for no gain -- the k-stratification
+        is a post-hoc analysis over the campaign, not a per-run field.
+
+        Returns:
+            Mapping from ``SearchSpaceResults`` field name to value, suitable
+            for ``dataclasses.replace(search_space, **fields)``.
+        """
+        return {
+            "ledger_enabled": bool(self.enabled),
+            "ledger_sample_rate": int(self._rate),
+            "n_ledger_seen": int(self.n_seen),
+            "n_ledger_sampled": int(self.n_sampled),
+            "n_violations_pre": int(self.violated_pre),
+            "n_violations_post": int(self.violated_post),
+            "n_canon_timeouts": int(self.timeout),
+            "n_conversion_failures": int(self.conversion_failure),
+            "n_canon_raised": int(self.canon_raised),
+            "n_atlas_hits": int(self.atlas_hit),
+        }

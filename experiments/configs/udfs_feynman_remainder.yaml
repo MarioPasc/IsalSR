@@ -43,7 +43,12 @@ udfs:
   k: 2
   stop_thresh: 1.0e-10
   use_tan: false
-  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log", "sqrt"]
+  # Informational only: to_dag_regressor_kwargs() does not forward this field and
+  # DAGRegressor has no such parameter. The search always enumerates the vendor's
+  # own table (vendor/DAG_search/config.py, NODE_ARITY): binary {+, *, sub_l,
+  # sub_r, div_l, div_r}, unary {id, inv, neg, sin, cos, exp, log, sqrt}, no pow.
+  # The list below records that fixed set and is identical in every UDFS config.
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log", "sqrt", "neg", "inv"]
   snapshot_frequency: 1000
 
 isalsr:

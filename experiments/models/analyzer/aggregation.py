@@ -124,7 +124,9 @@ def aggregate_seeds(
             If None, uses METRIC_EXTRACTORS[metric_name].
 
     Returns:
-        AggregateRow with mean, std, median, q25, q75, min, max.
+        AggregateRow with mean, std, median, q25, q75, min, max and ``n``, the
+        number of runs aggregated. The summary statistics are NaN-aware, so a
+        run whose value is NaN is counted in ``n`` without entering them.
     """
     if extractor is None:
         extractor = METRIC_EXTRACTORS[metric_name]
@@ -146,6 +148,7 @@ def aggregate_seeds(
         q75=float(np.nanpercentile(values, 75)),
         min_val=float(np.nanmin(values)),
         max_val=float(np.nanmax(values)),
+        n=len(run_logs),
     )
 
 
@@ -187,7 +190,9 @@ def compute_paired_stats(
         bootstrap_seed: Seed for bootstrap CI.
 
     Returns:
-        PairedStats with all metrics.
+        PairedStats with all metrics, ``n_seeds`` set to the number of matched
+        seeds and each metric's ``n`` set to the pairs that survived NaN
+        pairwise deletion for that metric.
     """
     # Match seeds by number (robust to 1-3 missing seeds per variant)
     bl_by_seed = {rl.metadata.seed: rl for rl in baseline_logs}
@@ -215,6 +220,7 @@ def compute_paired_stats(
         method=rl0.metadata.method,
         benchmark=rl0.metadata.benchmark,
         problem=rl0.metadata.problem,
+        n_seeds=len(common_seeds),
     )
 
     for metric_name, extractor in METRIC_EXTRACTORS.items():
@@ -288,6 +294,9 @@ def compute_paired_stats(
             cohens_d_ci_upper=d_ci_hi,
             mean_diff_ci_lower=ci_lo,
             mean_diff_ci_upper=ci_hi,
+            # The true N for this metric: pairs surviving the NaN pairwise
+            # deletion above, which is <= n_seeds.
+            n=int(len(diff_clean)),
         )
 
     return paired

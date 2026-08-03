@@ -127,11 +127,22 @@ Four sub-decisions taken with it:
 **Arms** (`--variants`): `baseline`, `hash`, `isalsr`. `gray` is spillover only.
 **Methods**: UDFS, Bingo. **Seeds**: 1…20.
 
-**Array topology.** One SLURM array task = one `(problem, seed)` pair for a fixed
-`(method, arm)` — this is what `slurm/workers/models_experiment_slurm.sh` already
-does. So C2 is **6 arrays × (70 × 20) = 6 × 1,400 tasks**. See pre-flight check
-**A12**: 1,400 exceeds the default `MaxArraySize` on many SLURM builds and the
-arrays may need chunking.
+**Array topology — corrected 2026-08-03 (§11.1, T17 §2.2).** One SLURM array task
+= one `(problem, seed)` pair for a fixed `(method, arm)`. The earlier statement
+"6 arrays × 1,400 tasks" did not match the configs: **every config file declares
+exactly one benchmark suite**, and the launcher maps one config to one array. The
+real shape is
+
+```
+7 suites × 3 arms × 2 methods = 42 arrays          (8,400 runs either way)
+```
+
+Per-array size is `suite_size × n_seeds`: nguyen 240, feynman 200, hard 200,
+cherrypicked 200, roundoff 160, feynman_remainder 120, strogatz 280 — all far
+inside `MaxArraySize = 4096` (**A12**, measured), so **no chunking is needed**
+and the earlier chunking caveat is withdrawn. Stage C uses the identical
+topology at 3 seeds (42 arrays, 18–42 tasks each, 1,260 total): certifying a
+topology you will not launch certifies nothing.
 
 **Campaign root** (one, and only one):
 
@@ -253,9 +264,9 @@ measured values.
 |---|---|---|
 | **P1** | **Per-candidate stream persistence.** T04 Mode 1 replays a DAG/canonical-hash stream. C1 persisted only aggregate counts, so replay of the submitted campaign was never possible. Decide the format and the sampling rate (full persistence is millions of entries per run) and land it before launch | Mode 1 can only ever replay C2 post-hoc, and the ρ_exact/ρ_iso go/no-go on the hash arm is lost |
 | **P2** | **Cost fields survive the C++ port.** `T_canon` and `T_eval` per DAG feed T10's break-even analysis and R1.1's answer | Restore before launch |
-| **P3** | **Data fingerprinting.** Every run must record `sha256` of `(X_train, y_train, X_test, y_test)` | Without it, **C5** cannot prove the three arms saw identical data, and the paired design is unverifiable |
-| **P4** | **Terminal-status record.** Every run must write a status record **even when it fails** (§5.5) | T08's 35-cell shortfall recurs at 8,400-run scale and is again unexplainable |
-| **P5** | **Allocation sizing.** §8.2 — 100,800 core-hours against the freeze needs ≈200–300 concurrent cores. **Policy half MEASURED 2026-07-31 and it passes**: QOS `long_uma` allows `MaxWall = 7 days` and **`cpu = 9000` concurrent cores per user**, with `MaxJobsPU`/`MaxSubmitJobsPU` unset. 300 cores is 3.3 % of the entitlement | The binding constraint is therefore **contention, not policy** — which cannot be read from `sacctmgr` and must be measured. Time the 420-task smoke (Stage C) end to end and divide: that gives the *achieved* concurrency under real queue pressure, and it is the number §8.2 needs |
+| **P3** | ✅ **DONE 2026-08-03.** `experiments/models/provenance.py`: `data_fingerprint()` (SHA-256 over name+shape+IEEE-754 bytes of the four arrays, cast to float64 and made contiguous so the *sample* is certified, not the container) and `config_sha256()`. Both recorded on `RunMetadata`. C4 rehearsed locally: identical across 3/3 arms on both hosts | Without it, **C4** cannot prove the three arms saw identical data, and the paired design is unverifiable |
+| **P4** | ✅ **DONE 2026-08-03.** `experiments/models/status_ledger.py`: **write-ahead** `status.json` per run (`terminal_status="started"` before the search, rewritten after) — the only design that survives the dominant C1 failure, an OOM `SIGKILL`, which no Python handler observes. Atomic `os.replace`; one file per seed dir, not a shared append, because 1,400 concurrent tasks interleave partial lines. `collect_status_ledger()` emits `status_ledger.csv` deterministically; `reconcile()` **names** missing/killed/failed cells (C1.15, E6). Orchestrator records and continues, then returns exit 1 if any cell failed | T08's 35-cell shortfall recurs at 8,400-run scale and is again unexplainable |
+| **P5** | **Allocation sizing.** §8.2 — 100,800 core-hours against the freeze needs ≈200–300 concurrent cores. **Policy half MEASURED 2026-07-31 and it passes**: QOS `long_uma` allows `MaxWall = 7 days` and **`cpu = 9000` concurrent cores per user**, with `MaxJobsPU`/`MaxSubmitJobsPU` unset. 300 cores is 3.3 % of the entitlement | The binding constraint is therefore **contention, not policy** — which cannot be read from `sacctmgr` and must be measured. Time the 1,260-task smoke (Stage C) end to end and divide: that gives the *achieved* concurrency under real queue pressure, and it is the number §8.2 needs |
 | **P6** | 🔴 **Quota headroom (see A13).** Re-read 2026-08-02: FSCRATCH **222.8k / 250.0k** files (was 248.4k on 07-31 — something was cleaned up), HOME **0.43 TB / 0.28 TB soft** with **4 days of grace left** (was 6). So: ≈27k files of FSCRATCH headroom against C2's ≈42,000, and a HOME grace clock that expires ≈2026-08-06 | Two separate failures. **HOME**: when grace expires, writes to HOME are blocked — that is days away and independent of C2. **FSCRATCH**: C2 hits the hard file quota mid-campaign and every running task keeps burning wallclock while all its writes fail. **Re-read live on the day** (`ssh picasso 'quota'`); these numbers move. Fix HOME this week; fix FSCRATCH before Stage C |
 
 ---
@@ -341,17 +352,17 @@ thing that ticket contributes, and states it in its own amendment block:
 | **A2** | `pytest tests/ -v`, `ruff check src/ tests/ experiments/`, `mypy --strict src/isalsr/` on `campaign/c2` | all green, zero skips in the core suite | raw command output, not a claim |
 | **A3** | **Backend parity.** Rebuild per `CLAUDE.md` (`pip install -e . --force-reinstall --no-deps`; **never** `--no-build-isolation`). Verify the `.so` mtime is newer than the last C++ edit **at the site-packages path**, not in the repo tree. Then run every core-semantics check against **both** `backend="python"` and `backend="cpp"` | byte-identical canonical strings; `.so` mtime post-dates the last C++ commit | `stat -c "%y" $(python -c "from isalsr.core import _native; print(_native.__file__)")` + parity report |
 | **A4** | **Config equivalence.** Dump the resolved hyperparameters for all 6 `(method, suite)` configs. The three arms must differ **only** in the `--variants` flag; nothing arm-specific may live in a YAML | a diff table showing operator set, pop size, stack size, cx/mut rates, LM settings and `max_time` identical across arms for a given `(method, problem)` | `c2_preflight/config_diff.md` |
-| **A4b** | **Operator-set policy — decide and record.** C1 used *different* operator sets per tier (`hard`/`cherrypicked` add `sqrt`, Bingo adds `pow`). **Recommendation: freeze D1's per-tier sets exactly as submitted** so continuity with C1 holds, and adopt the hard-tier set for D2, disclosed in Appendix D.2. The invariant that actually matters: **for a fixed `(method, problem)` the operator set is identical across all three arms** | the invariant holds for 70/70 problems; the policy is written into the MANIFEST | `c2_preflight/operator_sets.csv` |
+| **A4b** | **Operator-set policy — DECIDED 2026-08-03: uniform per method, across every problem.** C1 gave Bingo *different* sets per tier (`nguyen`/`feynman` omit `sqrt` and `pow`; `hard`/`cherrypicked`/`roundoff` include them), which **confounds the operator set with the problem group** and makes any per-group difference in results unattributable. All seven `bingo_*.yaml` now carry `["+","-","*","/","sin","cos","exp","log","sqrt","pow"]` on D1 and D2 alike. UDFS takes **no** operator set from the YAML — `to_dag_regressor_kwargs()` never forwards the field and the search enumerates the vendored `NODE_ARITY` table — so its set is already uniform and not ours to change; the eight `udfs_*.yaml` lists are documentation only and now all record that fixed table. **This supersedes the earlier recommendation to freeze D1's per-tier sets.** Its cost is *not* compute (§0.4b re-runs the baseline on `D1 ∪ D2` regardless) but **continuity**: the 22 D1 problems whose Bingo set changed are no longer like-for-like against C1 and must be **excluded from §7's continuity table**, alongside the five T05 already excludes. Two invariants to check, not one: **(i)** for a fixed `(method, problem)` the operator set is identical across all three arms; **(ii)** every configured operator has an image in `𝓛` (Definition 3.2) — now *enforced* at config construction by `experiments/models/alphabet_guard.py` rather than assumed, because an operator outside `𝓛` is refused by the adapter, counted, and the candidate then evaluated **undeduplicated**, depressing ρ for a whole run with nothing in the reported numbers saying so | (i) holds for 70/70 problems; (ii) a deliberately bad config raises `AlphabetCoverageError`; the policy **and the continuity exclusion** are written into the MANIFEST | `c2_preflight/operator_sets.csv` + `pytest tests/unit/test_alphabet_guard.py` |
 | **A5** | **Seed declaration.** Seeds 1…20, and confirm they are the *same integers* C1 used, so the continuity table (§7) can restrict C1 to the same 20 seeds and compare like-for-like. Seed 0 is reserved for smoke and must never appear in the campaign | recorded in MANIFEST; `0 ∉ seeds` | MANIFEST |
 | **A6** | **MANIFEST schema frozen** and extended for C2: git commit + tag, native build hash, compiler + flags, config sha256 per `(method, suite)`, operator-set policy, arm list, seed list, alphabet version (`decomposed`), engine, node-constraint string, submission splits. Plus a validator that **fails** on any missing field | validator exits non-zero on a deliberately truncated MANIFEST | `experiments/models/manifest.py` + its test |
-| **A7-BUG** | 🔴 **`engine` is NOT in `metadata.hardware` — found 2026-08-02 in a live T04 probe run_log, where it read `<none>`.** A7 requires `engine` per run and **C1.14** requires asserting `engine == native` on 420/420 smoke tasks; **neither is currently possible from a RunLog.** `collect_hardware_info()` (`experiments/models/hardware_info.py:17-30`) returns only cpu/cpu_count/ram_gb/python_version/platform/os/os_version/conda_env/git_hash/timestamp. Must land with the rest of A7, **before Stage C** | a probe `run_log.json` shows `metadata.hardware.engine == "cpp"` |
+| **A7-BUG** | ✅ **CLOSED 2026-08-03.** `collect_hardware_info()` now returns `engine` (normalised to `native`/`python`, read from **actual dispatch** via `backends.engine()` so the B2 defect cannot recur), plus `build_hash`, `isa_level`, `avx512f`, `compiler`, `native_module_path/_mtime`, `cpu_model`, `hostname`, `git_describe`, `git_dirty`, the four SLURM ids and `mem_requested_gb`. Verified live on both hosts: `engine=native`, `build_hash=298fc1188bf1b051`, `isa_level=x86-64-v3`, `avx512f=0`. Ten pre-C2 fields retained verbatim so C1 artefacts still parse. Write-up: `docs/md_files/changes/c2_run_provenance.md` | a probe `run_log.json` shows `metadata.hardware.engine == "native"` — **done**, 3/3 arms × 2 hosts |
 | **A7** | **RunLog schema accepts three arms.** `RunMetadata.representation` currently documents `"baseline" or "isalsr"`. Extend to `"hash"`; extend `hardware` to carry `cpu_model`, `hostname`, `slurm_job_id`, `slurm_array_task_id`, `mem_requested_gb`, `max_rss_gb`, `engine`, `git_commit`, `build_hash`, `config_sha256`, `data_fingerprint` | round-trip `to_dict`/`from_dict` test passes for all three arms | `tests/unit/test_schemas.py` |
 | **A8** | **Analyzer three-arm readiness.** `analyze.py` accepts `--variants baseline,hash,isalsr`; pairwise CPDT with Holm across **three** contrasts and Friedman/Nemenyi over three arms are implemented and unit-tested on synthetic data | a synthetic case with a known answer reproduces it; the Holm correction divides by 3, not 2 | `tests/unit/test_three_arm_stats.py` |
 | **A9** | **T08 code half landed.** NaN can never be marked better in `aggregation.py` (regression test); NaN policy in `statistical_tests.py` explicit, tested, and the reported `N` matches what the code does, per metric | both regression tests green | test output |
 | **A10** | **Failure ledger implemented (P4).** A run that raises, OOMs or is time-killed still leaves a status record | kill a local run with `SIGKILL` mid-search; a status row still exists | `c2_preflight/ledger_demo.csv` |
 | **A11** | **Hash-collision bound, stated not hoped.** Both the IsalSR dedup set and the T04 hash arm use 64-bit keys. Birthday bound `n²/2⁶⁵`: at `n = 10⁷` entries per run this is `2.7 × 10⁻⁶`; across 5,600 dedup-bearing runs the expected number of collisions is `≈1.5 × 10⁻²`. Record the arithmetic and the observed max entries per run from Stage C | a written bound in the MANIFEST notes, and a measured `max(n)` from Stage C that does not invalidate it | `c2_preflight/collision_bound.md` |
 | **A12** | ~~SLURM limits~~ — **MEASURED 2026-07-31, PASSES.** `MaxArraySize = 4096` (so 1,400-task arrays are fine, **no chunking needed**), `MaxJobCount = 15000`, `MaxSubmitJobsPU` unset. Re-check on the frozen commit's submission day only if it has been weeks | 1,400 < 4,096 ✓ | `scontrol show config` |
-| **A13** | 🔴 **Storage and file-count projection — this is now a live blocker, not a formality.** Measured 2026-07-31: FSCRATCH is at **248.4k files against a 250.0k soft quota** (400k hard) and HOME is **0.56 TB against a 0.28 TB soft quota with 6 days of grace left**. C2 writes ≥5 files per run × 8,400 runs ≈ **42,000 files**, plus 420 smoke runs. **The account does not currently have room for it.** Required: free FSCRATCH file headroom (archive or delete old campaigns), bring HOME back under quota before the grace expires, and — per the ≥15,000-file rule — either consolidate per-run output into one archive or **mail `soporte@scbi.uma.es` before the first array** | `quota` shows ≥60,000 files of FSCRATCH headroom and HOME under its soft quota, **before** Stage C | `c2_preflight/storage_projection.md` + a `quota` capture |
+| **A13** | 🔴 **Storage and file-count projection — this is now a live blocker, not a formality.** Measured 2026-07-31: FSCRATCH is at **248.4k files against a 250.0k soft quota** (400k hard) and HOME is **0.56 TB against a 0.28 TB soft quota with 6 days of grace left**. C2 writes ≥5 files per run × 8,400 runs ≈ **42,000 files**, plus ≈1,260 smoke runs (≈7,600 files). **The account does not currently have room for it.** Required: free FSCRATCH file headroom (archive or delete old campaigns), bring HOME back under quota before the grace expires, and — per the ≥15,000-file rule — either consolidate per-run output into one archive or **mail `soporte@scbi.uma.es` before the first array** | `quota` shows ≥60,000 files of FSCRATCH headroom and HOME under its soft quota, **before** Stage C | `c2_preflight/storage_projection.md` + a `quota` capture |
 
 ### 4.2 Stage B — Picasso micro-jobs (each < 5 min, 1 task)
 
@@ -374,36 +385,50 @@ environment activation, compiler-dependent floating point.
 | **B8** | **Resume and idempotency.** Run one task; re-submit it; then corrupt its `run_log.json` and re-submit again | second run **skips**; the corrupted run is **detected, deleted and re-run**. Both behaviours observed, not assumed |
 | **B9** | **T06 counter re-verification** (owned by T02, threshold set by T06). One ≤30 min probe on **both hosts** on the frozen commit: the five fallback counters present and finite **at the production sampling rate**, and the instrumentation overhead **re-measured under the C++ engine and the decomposed alphabet**. Both changed underneath T06's original measurement — an overhead that was negligible as a *fraction* of a Python canonicaliser costing ~24× more per DAG may not be negligible now | counters live and finite on both hosts; overhead below the threshold T06 supplies. **A zero-everywhere ledger means the counters are dead, not that the rates are zero** — at N = 10,000 a short run samples almost nothing (the 2026-07-28 60 s smoke drew 5 DAGs), so design the probe so a live counter is distinguishable from a dead one. **If the overhead is now material**, the counters come out of C2 and T06 reopens for a separate subsampled characterisation run: a violation *rate* does not need the full campaign, a paired *timing* does |
 
-### 4.3 Stage C — the 15-minute full-coverage smoke (**420 tasks, ≈105 core-hours**)
+### 4.3 Stage C — the 15-minute full-coverage smoke (**1,260 tasks, ≈315 core-hours**)
+
+> **Amended 2026-08-03: three seeds, not one.** `compute_paired_stats` requires
+> **three matched seeds** (`aggregation.py:207`), so at one seed none of the three
+> paired contrasts is ever constructed and the smoke certifies every artefact
+> *except* the ones the paired design rests on. Two seeds does not work either —
+> the threshold is `< 3`. Three is also exactly `scipy.stats.shapiro`'s minimum,
+> so the Shapiro-Wilk → t/Wilcoxon branch is exercised at its lower boundary.
+> The stage's cost rises from ≈105 to ≈315 core-hours, **0.3 % of the campaign.**
+> It buys the code path only: at `n = 3` the minimum attainable two-sided
+> Wilcoxon `p` is 0.25, so no number from this stage can mean anything. Ticket:
+> `T17-c2-submission-certification.md` §0.1.
 
 This is the coverage test: **every problem × every arm × every method, at least
 once, on real Picasso hardware.**
 
-**Configuration.** `max_time = 900 s`, **seed 0** (deliberately outside the campaign
-seed set so a smoke output can never contaminate C2), all ≈70 problems × 3 arms ×
-2 methods = **420 tasks**. Output root: `c2_smoke/`. Resources: as production, so
-the memory profile measured here is the profile that sizes production.
+**Configuration.** `max_time = 900 s`, **seeds 0, 101, 102** (all deliberately outside the campaign
+seed set **and** the 21…30 top-up range, so a smoke output can never contaminate
+C2), all ≈70 problems × 3 arms × 2 methods × 3 seeds = **1,260 tasks**. Output
+root: `c2_smoke/`. Resources: as production, so the memory profile measured here
+is the profile that sizes production.
 
 Every criterion below is **blocking**. A single violation stops the stage.
 
 | # | Criterion | Threshold |
 |---|---|---|
-| **C1.1** | Every task exits 0 | 420 / 420 |
-| **C1.2** | Every `run_log.json` exists, parses, and validates against the extended RunLog schema — **every field present, correct type**: `r2_train`, `r2_test`, `nrmse_train`, `nrmse_test`, `mse_test`, `solution_recovered`, `jaccard_index`, `model_complexity`; `wall_clock_total_s`, `wall_clock_search_only_s`, `canonicalization_precomputed_s`, `canonicalization_runtime_s`, `cache_hit_rate`, `cache_hits`, `cache_misses`, `estimated_time_saved_s`, `time_to_r2_099_s`, `time_to_r2_0999_s`, `evaluation_time_s`, `overhead_time_s`; `total_dags_explored`, `unique_canonical_dags`, `empirical_reduction_factor`, `max_internal_nodes_seen`, `theoretical_reduction_bound`, `redundancy_rate`; `symbolic_form`, `isalsr_string`, `canonical_string`, `n_nodes`, `n_edges` | 420 / 420 |
-| **C1.3** | **No NaN and no inf** in any regression metric. **Amended 2026-08-02 by T08:** this is now *enforced by the runtime*, not merely hoped for — a run whose expression is undefined on part of the evaluation set is scored `R² = 0` / `NRMSE = 1` and records `regression.n_nonfinite_test_predictions > 0`. A NaN metric is therefore once again an unambiguous defect signal. **Additional criterion:** report the distribution of `n_nonfinite_test_predictions` across all 420 tasks; a non-zero count is a legitimate scientific outcome (extrapolation failure), **not** a blocker, but it must be counted and disclosed | 420 / 420 NaN-free. Any NaN now means the guard itself is broken and blocks Stage D |
+| **C1.1** | Every task exits 0 | 1,260 / 1,260 |
+| **C1.2** | Every `run_log.json` exists, parses, and validates against the extended RunLog schema — **every field present, correct type**: `r2_train`, `r2_test`, `nrmse_train`, `nrmse_test`, `mse_test`, `solution_recovered`, `jaccard_index`, `model_complexity`; `wall_clock_total_s`, `wall_clock_search_only_s`, `canonicalization_precomputed_s`, `canonicalization_runtime_s`, `cache_hit_rate`, `cache_hits`, `cache_misses`, `estimated_time_saved_s`, `time_to_r2_099_s`, `time_to_r2_0999_s`, `evaluation_time_s`, `overhead_time_s`; `total_dags_explored`, `unique_canonical_dags`, `empirical_reduction_factor`, `max_internal_nodes_seen`, `theoretical_reduction_bound`, `redundancy_rate`; `symbolic_form`, `isalsr_string`, `canonical_string`, `n_nodes`, `n_edges`; plus `data_fingerprint`, `config_sha256` and the ten ledger fields | 1,260 / 1,260 |
+| **C1.3** | **No NaN and no inf** in any regression metric. **Amended 2026-08-02 by T08:** this is now *enforced by the runtime*, not merely hoped for — a run whose expression is undefined on part of the evaluation set is scored `R² = 0` / `NRMSE = 1` and records `regression.n_nonfinite_test_predictions > 0`. A NaN metric is therefore once again an unambiguous defect signal. **Additional criterion:** report the distribution of `n_nonfinite_test_predictions` across all 1,260 tasks; a non-zero count is a legitimate scientific outcome (extrapolation failure), **not** a blocker, but it must be counted and disclosed | 1,260 / 1,260 NaN-free. Any NaN now means the guard itself is broken and blocks Stage D |
 | **C1.4** | Every dataset loaded with the expected train/test shapes, asserted against the benchmark registry (Vlad-7 is 300/1200, Keijzer-6 is 50/120, Pagie-1 is 676/2500 — these are not typos, do not "fix" them) | 70 / 70 problems |
 | **C1.5** | `solution_recovered` is **computable** for every problem, i.e. a `sympy_expression` ground truth exists — the known gap for the D2 additions (T05 AC-4) | 70 / 70 |
 | **C1.6** | `isalsr` arm: `unique_canonical_dags > 0` and `empirical_reduction_factor ≥ 1` on **140/140**; `ρ > 1` on **≥ 90 %**. `ρ < 1` is arithmetically impossible and means a counter is broken. A ρ of exactly 1.0 everywhere means the dedup hook is dead and the entire arm is a null result | see cells |
 | **C1.7** | **Hash-arm sanity:** `ρ_hash ≤ ρ_isalsr` for the same `(method, problem)`. This is **guaranteed** on identical input streams (a fixed-order hash is sound but incomplete) and **strongly expected** live. Report every violation | 140/140 expected; investigate if violations exceed 5 % |
 | **C1.8** | `baseline` arm: dedup counters absent or zero and `canonicalization_runtime_s == 0`. Proves the baseline really is un-instrumented and is not silently paying canonicalisation cost | 140 / 140 |
-| **C1.9-BUG** | 🔴 **THE FIVE FALLBACK RATES ARE NOT IN THE RUNLOG — found 2026-08-02 on a live T05 D2 probe, 0 / 40 runs.** A walk of all 69 keys in a probe `run_log.json` finds no fallback, violation, timeout, conversion or reachability field, and there is no ledger file anywhere in the probe output. **C1.9 is therefore not failing, it is uncheckable.** This is the same class as **A7-BUG** and worse: §3's dividing line is *"anything measured during a run must be in the code before launch"*, and the reachability population **exists only while a search runs**, so unlike `engine` these cannot be recovered post hoc. They are the evidence base for R1.2. Note that **SP-6 passes and does not contradict this** — `slurm/t04_probe/sp_probe.py:189` imports `FallbackLedger` and lists its attributes; it never reads a live count. Must land with A7, **before Stage C**. Owner **T02**; T06 supplies the threshold | a probe `run_log.json` shows the five rates present and finite |
+| **C1.9-BUG** | ✅ **CLOSED 2026-08-03.** `SearchSpaceResults` now carries all five paths (`n_violations_pre/_post`, `n_canon_timeouts`, `n_conversion_failures`, `n_canon_raised`), the `n_atlas_hits` partition **and the denominators that make them rates** (`ledger_enabled`, `ledger_sample_rate`, `n_ledger_seen`, `n_ledger_sampled`), via `FallbackLedger.to_search_space_fields()`; per-k histograms go to a sibling `fallback_ledger.json`. `None` = arm never asked, `0` = asked and none occurred — the distinction SP-6 needs. 🔴 **Closing it exposed a launch-blocking defect: `ISALSR_LEDGER_ENABLED` defaults to `"0"` and NO worker/launcher/config sets it**, so C2 as configured would have recorded five zeros on all 8,400 runs. Now an auditable launch parameter (`--ledger`, `--ledger-sample-rate`) plus a loud warning; the keep/drop decision remains B9's and Mario's (T06 AC-10). Verified live, UDFS: `n_seen=476, violated_pre=476, violated_post=0` | a probe `run_log.json` shows the five rates present and finite — **done**; **the launcher must pass `--ledger`** |
 | **C1.9** | **T06 fallback counters** present and finite on every `isalsr` task, covering all five paths (pre-normalisation violation, post-normalisation violation, 60 s timeout, conversion failure, canonicalisation raised). Report the five rates. This is check **B9** re-run at scale: B9 establishes the counters are alive and affordable on 2 probes, C1.9 confirms it holds across all 70 problems | 140/140 present; the five rates reported; overhead consistent with B9's measurement |
-| **C1.10** | `trajectory.csv` non-empty; `timestamp_s` monotone non-decreasing; `best_r2` monotone non-decreasing; `n_dags_explored` monotone non-decreasing; `n_unique_canonical ≤ n_dags_explored` | 420 / 420 |
-| **C1.11** | **Memory profile.** `MaxRSS` per task, tabulated by `(method, arm)`. Bingo+IsalSR historically needed 128 GB from heap fragmentation; the C++ dedup set should reduce that materially — **measure it, do not assume it**. Size production `--mem` at p99 + 50 % headroom. 🔴 **`sacct -X` returns an EMPTY `MaxRSS`** (verified on Picasso 2026-07-31): memory is accounted on the **`.batch` step**, not the allocation. Use `sacct -j <ID> -n -P -o JobID,MaxRSS \| awk -F'\|' '$1 ~ /\.batch$/'`. A profile built with `-X` comes back **silently blank** — a table of empty cells, no error | a populated table with 420 non-empty `MaxRSS` values, and a production `--mem` per `(method, arm)` derived from it |
+| **C1.10** | `trajectory.csv` non-empty; `timestamp_s` monotone non-decreasing; `best_r2` monotone non-decreasing; `n_dags_explored` monotone non-decreasing; `n_unique_canonical ≤ n_dags_explored` | 1,260 / 1,260 |
+| **C1.11** | **Memory profile.** `MaxRSS` per task, tabulated by `(method, arm)`. Bingo+IsalSR historically needed 128 GB from heap fragmentation; the C++ dedup set should reduce that materially — **measure it, do not assume it**. Size production `--mem` at p99 + 50 % headroom. 🔴 **`sacct -X` returns an EMPTY `MaxRSS`** (verified on Picasso 2026-07-31): memory is accounted on the **`.batch` step**, not the allocation. Use `sacct -j <ID> -n -P -o JobID,MaxRSS \| awk -F'\|' '$1 ~ /\.batch$/'`. A profile built with `-X` comes back **silently blank** — a table of empty cells, no error | a populated table with 1,260 non-empty `MaxRSS` values, and a production `--mem` per `(method, arm)` derived from it |
 | **C1.12** | **`max_time` is honoured.** Every task terminates at ≈900 s or earlier by convergence; **none** is killed by the SLURM wall limit. A SLURM kill without a `max_time` stop means `max_time` is not reaching `evolve_until_convergence` — the known Bingo defect in `CLAUDE.md` | 0 SLURM time-kills |
 | **C1.13** | **Alphabet assertion on the real candidate stream** of every `isalsr` and `hash` task, not only in unit tests: 0 forbidden labels | 280 / 280 |
-| **C1.14** | **Engine assertion**: every task records `engine == native` | 420 / 420 |
-| **C1.15** | **Cell completeness reconciliation**: expected 420, observed 420, with a machine-checked comparison. This is the mechanism that must prevent a recurrence of C1's unexplained 35-cell shortfall | exact match, or every gap individually named |
+| **C1.14** | **Engine assertion**: every task records `engine == native` | 1,260 / 1,260 |
+| **C1.15** | **Cell completeness reconciliation**: expected 1,260, observed 1,260, with a machine-checked comparison. This is the mechanism that must prevent a recurrence of C1's unexplained 35-cell shortfall | exact match, or every gap individually named |
+| **C1.16** | **Paired-stats path constructed — the reason for three seeds.** All three contrasts emit a file per problem: `paired_stats.json`, `paired_stats_hash_vs_baseline.json`, `paired_stats_isalsr_vs_hash.json`; each parses and reports `n_seeds == 3`; the across-problem Holm correction runs and writes back. **Assert existence and validity, never a p-value** — at `n = 3` the minimum two-sided Wilcoxon `p` is 0.25 | 3 × 70 × 2 = 420 files |
+| **C1.17** | `aggregate.csv` per `(method, problem, arm)`, exactly 3 rows each | 420 files |
 
 #### C2 — the failure ledger (deliverable, not a check)
 
@@ -443,8 +468,9 @@ all three arms and both methods**. If the data generator consumes RNG differentl
 per method or per arm, the paired test compares different data and the whole design
 is void.
 
-**Pass:** `70 × 1` distinct fingerprints at the smoke's single seed, each appearing
-exactly 6 times.
+**Pass:** `70 × 3` = **210** distinct fingerprints, each appearing exactly 6 times.
+Also assert the 210 are mutually distinct: two seeds yielding identical data means
+the seed is not reaching the generator and the design has no replication at all.
 
 #### C5 — comparison against the submitted campaign C1 (**reasoned sign-off, not a threshold**)
 
@@ -460,9 +486,9 @@ Reference:
 | R² at 900 s vs C1 at 43,200 s | smoke `≤` C1, per problem | a smoke R² materially **exceeding** the published 12 h value means the dataset, the split or the metric changed |
 | ρ (isalsr), decomposed vs C1 | smoke ρ **≥** C1 ρ in direction — `k` grew ≈22 %, so there are more internal nodes to permute | a *drop* means either the decomposition is not reaching the canonicaliser or the dedup population changed unexpectedly |
 | Korns-12 / Vlad-2, Bingo–isalsr | **finite**, not NaN | the T08 root cause is still live and Stage D must not proceed |
-| Cell count | 420/420 present | the C1 shortfall mechanism is still present |
+| Cell count | 1,260/1,260 present | the C1 shortfall mechanism is still present |
 | Baseline R², D1 | within seed noise of C1's baseline at comparable budget | the baseline path changed when it should not have — the baseline never invokes the adapter |
-| `POW` presence | only in configs whose operator set includes it | operator-set drift (A4b) |
+| `POW` presence | Bingo: reachable on **every** problem, since the set is now uniform (A4b); UDFS: **never**, its table has no `pow` | operator-set drift (A4b) |
 
 **Deliverable:** `c2_preflight/smoke_vs_C1.md` — a table with every anomaly either
 explained or escalated. An unexplained anomaly blocks Stage D.
@@ -544,12 +570,12 @@ September is the single most expensive failure mode left.
 
 | # | Check | Pass criterion |
 |---|---|---|
-| **E1** | Full analyzer end-to-end on `c2_smoke/` (420 runs, 3 arms, 1 seed) | every artefact in T02 §5.5 produced without exception, with 3 arms present: `benchmark_summary_*`, `computational_overhead_*`, `cross_method_*`, `reduction_comparison_*`, `three_axis_*`, `cross_problem_dominance_*`, `global_summary.json` |
+| **E1** | Full analyzer end-to-end on `c2_smoke/` (1,260 runs, 3 arms, 3 seeds — paired stats now exist, so E2's three contrasts have real input) | every artefact in T02 §5.5 produced without exception, with 3 arms present: `benchmark_summary_*`, `computational_overhead_*`, `cross_method_*`, `reduction_comparison_*`, `three_axis_*`, `cross_problem_dominance_*`, `global_summary.json` |
 | **E2** | Three-arm statistics: pairwise CPDT (`isalsr` vs `baseline`, `hash` vs `baseline`, `isalsr` vs `hash`) with **Holm across three contrasts**, plus Friedman/Nemenyi over the three arms per method | outputs exist; `N` reported per metric; the synthetic test from A8 confirms the correction divides by 3 |
 | **E3** | **NaN policy, adversarially tested.** Inject a synthetic NaN into a copy of the smoke root | (a) the NaN is **never** bold/marked better; (b) the reported `N` drops by exactly 1 for that metric; (c) the conservative-substitution sensitivity check runs and reports |
 | **E4** | LaTeX table generation on 3-arm data | tables emit with three arms and **compile** |
 | **E5** | Figure generation: forest plot with CPDT diamonds, critical-difference diagram over 3 arms | figures produced, axes labelled, no silent 2-arm fallback |
-| **E6** | **Cell-count reconciliation is enforced by the analyzer.** Delete one run from a copy of the smoke root | the analyzer reports 419/420 and **names the missing cell**. Silent tolerance of missing cells is the C1 defect and must be made impossible |
+| **E6** | **Cell-count reconciliation is enforced by the analyzer.** Delete one run from a copy of the smoke root | the analyzer reports 1,259/1,260 and **names the missing cell**. Silent tolerance of missing cells is the C1 defect and must be made impossible |
 | **E7** | The analyzer refuses to mix campaign roots: point it at `c2_smoke/` and `wl_subtree_unified/` together | it errors, or it labels provenance per row. It must not silently pool |
 
 ### 4.6 Stage F — go/no-go sign-off
@@ -586,7 +612,9 @@ Recorded per run (A7), asserted during analysis.
 Enforced by the `data_fingerprint` (P3, C4).
 
 ### 5.3 Identical operator set per `(method, problem)` across arms
-Enforced by A4b.
+Enforced by A4b, which since 2026-08-03 requires the stronger property that the
+set is identical across *problems* too, one per method. A4b also carries the
+containment check: every configured operator must be encodable in `𝓛`.
 
 ### 5.4 No early stopping
 Considered 2026-07-27 and **rejected**. Recorded here so it is not re-proposed.
@@ -676,6 +704,15 @@ C1 is **reference only**. No C1 number enters a C2 table. Its two uses:
    the host's search) while **ρ, `k` and the cost axis moved** (the alphabet and the
    engine did). Restrict C1 to seeds 1…20 for the comparison (§6.3).
    If R² *did* move materially, that is a finding: investigate before writing it up.
+   **Two exclusions, both mandatory, both because the compared object changed and
+   not the method.** Five D1 problems whose definitions were corrected (T05, §3):
+   `I.39.10, I.12.4, II.3.24, II.11.27, III.17.37`. And, for **Bingo only**, the
+   22 D1 problems C1 configured without `sqrt` and `pow`, whose operator set A4b
+   made uniform: Bingo now searches a strictly larger primitive set there, so a
+   C1↔C2 difference on those rows confounds the alphabet, the engine **and** the
+   search space. UDFS is unaffected by the second exclusion, its set having never
+   been ours to set. State both exclusions in the letter's continuity appendix
+   rather than dropping the rows silently.
 2. **Pre-flight sanity** (C5, D1.6) — catching a broken pipeline by checking C2's
    numbers against a known-good reference before spending 100,800 core-hours.
 
@@ -701,9 +738,9 @@ Known C1 headline values, for the sanity comparisons:
 | Block | Arms × methods × problems × seeds | Runs | Core-hours |
 |---|---|---|---|
 | Pre-flight Stage B | micro-jobs | ~30 | ≈2 |
-| Pre-flight Stage C | 3 × 2 × 70 × 1, 900 s | 420 | ≈105 |
+| Pre-flight Stage C | 3 × 2 × 70 × 3, 900 s | 1,260 | ≈315 |
 | Pre-flight Stage D | 12 × 43,200 s | 12 | 144 |
-| **Pre-flight total** | | | **≈250** |
+| **Pre-flight total** | | | **≈460** |
 | **C2 campaign** | 3 × 2 × 70 × 20 | **8,400** | **100,800** |
 
 ### 8.2 The concurrency arithmetic — answer this before T04/T05 finish (P5)
@@ -730,8 +767,8 @@ regardless of how correct the code is.**
 **The binding constraint is therefore contention, and `sacctmgr` cannot tell us that.**
 It has to be measured:
 
-> **Stage C is the measurement.** Time the 420-task smoke end to end and divide:
-> `420 tasks × 0.25 h ÷ wall-clock hours = achieved concurrent cores` under real queue
+> **Stage C is the measurement.** Time the 1,260-task smoke end to end and divide:
+> `1,260 tasks × 0.25 h ÷ wall-clock hours = achieved concurrent cores` under real queue
 > pressure, at exactly C2's `--mem`/`--constraint`/throttle. If the smoke sustains ≥300,
 > C2 fits the 2026-09-03 target. If it sustains 100, invoke §8.3 **before** launching,
 > not after discovering it in week three.
@@ -844,10 +881,10 @@ nor T05 touches. It must land before T02 reaches Stage E, not before Stage A.
 
 | Agent | Ticket | Scope |
 |---|---|---|
-| **T02** | Pre-flight and campaign | Stages **A → B → C → D → E**, then hand to Mario for Stage F. Owns the `campaign/c2` tag, the 8 micro-jobs (incl. **B9**, inherited from T06), the 420-task smoke, the 12-task certification with the detailed trace, and the analysis dry-run |
+| **T02** | Pre-flight and campaign | Stages **A → B → C → D → E**, then hand to Mario for Stage F. Owns the `campaign/c2` tag, the 8 micro-jobs (incl. **B9**, inherited from T06), the 1,260-task smoke, the 12-task certification with the detailed trace, and the analysis dry-run |
 
-**T02 is days of work, not weeks.** Stages A and B are a day; Stage C is one 420-task
-array (≈105 core-hours, wall-clock hours not days) plus its analysis; Stage D is 12 tasks
+**T02 is days of work, not weeks.** Stages A and B are a day; Stage C is one 1,260-task
+wave (≈315 core-hours, wall-clock hours not days) plus its analysis; Stage D is 12 tasks
 at 12 h, so one overnight; Stage E is a day. **If T02 is taking weeks, something is
 wrong** — the likely cause is a stage failing repeatedly, which is a finding to escalate,
 not a schedule to absorb. The only thing in this plan that legitimately takes weeks is
@@ -900,6 +937,23 @@ wrong at cost:
 | 2026-07-31 | B6b, AVX-512 | **NEW EXPOSURE.** Login node is `sd`/Intel **with avx512**; `sr` and `bl` (180 of 334 CPU nodes) **without**. A `-march=native` build of the C++ engine would SIGILL on `sr`/`bl` as a *fraction* of tasks — looking like flaky nodes, not a build bug. Folded into T01 AC-5 | Claude, `sinfo` |
 | 2026-08-02 | C1.11, `sacct -X` | **DEFECT IN THE PLAN AS WRITTEN, fixed.** `sacct -X` returns an **empty** `MaxRSS`; memory is accounted on the `.batch` step. The Stage C memory profile would have come back silently blank — no error, just empty cells — and Stage C1.11's only purpose is to size production `--mem` | Claude, verified on job 1679902 |
 | 2026-08-02 | Queue state | No IsalSR jobs queued or running. Last IsalSR activity was the G9 alphabet gate, 2026-07-30 (1692435 FAILED 20 s, 1692445 FAILED 14 s, **1692451 COMPLETED 1 m 27 s** — the recorded pass). Cluster load: 3,950 jobs / 43 users / 16,531 CPUs, 503 PD / 3,447 R | Claude, `squeue`/`sacct` |
+| 2026-08-03 | A7-BUG, C1.9-BUG, P3, P4 | **ALL FOUR CLOSED.** The during-run half of §3's dividing line is now complete. 6,247 unit tests pass; ruff and `mypy --strict` clean; 3-arm local runs green on **both** hosts. Write-up `docs/md_files/changes/c2_run_provenance.md`; certification ticket `T17-c2-submission-certification.md` | Claude |
+| 2026-08-03 | 🔴 **T06 ledger off by default** | **LAUNCH BLOCKER, found while closing C1.9-BUG.** `ISALSR_LEDGER_ENABLED` defaults to `"0"` and is set in **no** worker, launcher or config — only in `measure_ledger_overhead.py` and unit tests. C2 as configured would have written five reachability rates of zero on all 8,400 runs, unrecoverably, and it would have read as "no fallbacks occurred". Exactly SP-6's trap. Mitigated by `--ledger`/`--ledger-sample-rate` flags + a warning; **the launcher must pass `--ledger`**, and B9/T06 AC-10 still own the keep-or-drop decision | Claude, grep + live run |
+| 2026-08-03 | 🔴 **1-seed runs exited non-zero** | **STAGE C WOULD HAVE FAILED C1.1 ON ALL 420 TASKS.** `compute_paired_stats` raises below 3 matched seeds; Stage C ran **one** seed by design. Every task would have raised *after a complete, correct run*, written no `status_ledger.csv`, and exited 1. Fixed: the contrast is skipped with a logged reason when fewer than 3 seeds are matched. The guard stays — SP-0 probes elsewhere legitimately run one seed | Claude, local 3-arm run |
+| 2026-08-03 | **§2.2 array topology — Option A** | **DECIDED.** C2 ships as **42 arrays**, one per `(method, arm, suite)`, not 6 merged ones. Every config declares exactly one suite and the launcher maps one entry to one array, so 42 is what the configs already describe; Option B would have required two new merged configs and two new `config_sha256`. Option A changes **no configuration content**, so it cannot perturb the A4b operator-set invariant, and a 42-task array fails ≈33× more cheaply than a 1,400-task one. Suite sizes × 3 seeds: nguyen 36, feynman 30, hard 30, cherrypicked 30, roundoff 24, feynman_remainder 18, strogatz 42 → **210 per `(method, arm)`, 1,260 total**. §1 and §11.3 updated to match | Claude, T17 §2.2 |
+| 2026-08-03 | **§2.1 `--ledger` in the worker** | **CLOSED.** `slurm/c2_smoke/worker.sh` passes `--ledger` on every task. Without it all 1,260 (and later all 8,400) runs record five reachability rates of zero, which reads as "no fallbacks occurred" and means "nothing was counted" — SP-6's trap verbatim, and unrecoverable because the population exists only while a search runs. C1.9 asserts `ledger_enabled == true` **and `n_ledger_sampled > 0`** on 840/840 dedup-arm tasks | Claude |
+| 2026-08-03 | 🔴 **Per-task post-processing is a race** | **THIRD LAUNCH BLOCKER, found while building the Stage C harness.** `orchestrator.py:631-698` runs after every cell: it writes `aggregate.csv` (3 concurrent tasks share the path), the three paired contrasts (which need arms living in *other* SLURM arrays), and `collect_status_ledger`, **a full recursive walk of the whole output tree followed by a write to one shared CSV — executed 1,260 times concurrently on GPFS, and 8,400 times in the campaign.** Torn artefacts and an arm-ordering dependence, on top of a filesystem hammer. Fixed with `--postprocess {auto,skip,only}`: array tasks run `skip`, and one dependent `afterany` job runs `only` over the whole root once the arrays drain | Claude, `orchestrator.py:631` |
+| 2026-08-03 | **Stage C memory request deviates from §3.3** | **DECIDED, recorded rather than silently applied.** §3.3 sets Bingo-IsalSR to 256 GB in C2, from C1 runs that hit `MaxRSS ≈ 127.7 GB` after *hours* of evolution. A 900 s run cannot approach it, and holding 256 GB × 210 tasks for 15 minutes would turn §8.2's achieved-concurrency figure into a measurement of fat-node availability rather than of core contention. Stage C requests **UDFS 16 GB, Bingo 32 GB, Bingo-IsalSR 48 GB** — >4× any plausible 900 s peak — and the production `--constraint`. C1.11's product is the *measured* `MaxRSS`, which the request does not affect, and the plan itself designates **D1.2 at the full 12 h budget** as what sizes production memory. **Consequence to carry:** the Stage C concurrency figure applies to the five non-Bingo-IsalSR arm-arrays; Bingo-IsalSR's production concurrency stays bounded by §3.3's node arithmetic (`sd` 0, `sr` 1, `bc` 2, `bl` 7 per node) | Claude, T17 AC-3 |
+| 2026-08-03 | **Stage C does not pin a node family** | **DECIDED.** `--constraint=cpu`. The engine is `isa_level = x86-64-v3`, `avx512f = 0`, hence portable across `sd`/`sr`/`bc`/`bl` (B6b), and **Stage C produces no number that enters a table**, so the wall-clock-homogeneity argument for pinning does not apply to it. Every run records its own `cpu_model` (A7), so B5's node census arrives as a by-product and the arm balance across node types is reportable. The pinning decision for **C2 itself** stays open at B6 | Claude |
+| 2026-08-03 | 🔴 **A13 fails for the campaign, passes for Stage C** | **MEASURED live 17:31 UTC.** FSCRATCH **222.8k / 250.0k soft / 400.0k hard** files → **27.2k of headroom against the ticket's ≥60,000 criterion**. Stage C needs ≈7.9k inodes and **fits** (230.7k < 250k soft). Campaign C2 needs ≈45k and **does not** (275.7k > 250k soft, still < hard). Separately, HOME is **0.43 TB against a 0.28 TB soft quota with 2 days of grace**, and **436 GB of the 0.43 TB is `~/execs/vena`** — a different project entirely. Both must be cleared before C2; neither blocks Stage C, whose logs are ≈20 MB / 2.6k files on HOME. Projection: `c2_preflight/storage_projection.md` | Claude, `quota` |
+| 2026-08-03 | **A4/A5: 10 configs still declare `n_seeds: 30`** | **RECORDED, not blocking Stage C.** The five D1 suites × both methods still carry `n_seeds: 30`; the D2 suites correctly carry 20. §0.4a fixes the campaign at 20. Stage C is unaffected — its seeds are passed explicitly (`--seeds 0,101,102`) and its task counts derive from that flag, never from `n_seeds`. **Must be corrected before C2 is submitted.** A4 otherwise passes: no arm block overrides a host-search hyperparameter, and the top-level `isalsr:` block holds only canonicaliser settings | Claude, `c2_preflight/config_diff.md` |
+| 2026-08-03 | **B6b-PRE re-measured: `gcc/11.1.0` still present** | The module list on `picasso3` today offers `gcc/{11.1.0, 12.2.0, 13.1.0, 13.2.0, 14.3.0, 15.2.0}`. Built with **`gcc/13.2.0`**; `pip install -e . --force-reinstall --no-deps` exits 0, the `.so` mtime is **2026-08-03 19:27** (post-dating the last `src/isalsr/core/native/**` commit, 2026-07-30), `build_hash = 298fc1188bf1b051` **identical to the local gcc 12.2.0 build**, `isa_level = x86-64-v3`, `avx512f = 0`, and it imports with every module purged. ⚠ **Trap re-confirmed:** piping `module load` into anything (`module load gcc/13.2.0 \| tail`) runs it in a subshell and the `PATH` change is lost — the build then silently used the system g++ 7.5.0 | Claude |
+| 2026-08-03 | 🔴 **Canonical-string completeness: 5 counterexamples** | **FOUND AT B4, ESCALATED, does not block Stage C.** Gate 3 (round-trip isomorphism) fails on **5 of 10,000** generated DAGs (0.05 %), `k ∈ {13,15,17,18,19}`, **identically on both engines** — so B4's own question (does C++ agree with Python on this compiler and CPU?) is answered **yes**: gate 1 54,765 comparisons / 0 mismatches, gate 2 10,000 / 0. The failure is a property of the canonicaliser, present equally in the Python code that produced C1. **It is not cosmetic:** for all five, `fcs(D) == fcs(S2D(fcs(D)))` **and** `D ≇ S2D(fcs(D))` — two non-isomorphic labeled DAGs share a canonical string, an **unsound merge**, which biases ρ *upward*. The obvious artefact is ruled out: **no case has an in-degree-0 CONST**, and three of the five also have **no VAR as an edge target**, so they sit inside `𝒞₂` where `normalize_const_creation` is equivariant; node counts, edge counts and label multisets are equal. **Distinct from T15**, whose 6/4,000 *raise* and are counted by the T06 ledger — these raise nothing and return a well-formed string. Open: the rate on *evolved* candidates (T01 measured 0/117,798, a different corpus — but B3 shows real Bingo candidates reach **k = 37**). Owner **T07**; blocking for **Stage F**, not Stage C. Write-up: `docs/md_files/changes/canonical_completeness_counterexamples.md` | Claude, job 1751918 + local repro |
+| 2026-08-03 | **Bingo `trajectory.csv` counted the wrong population** | **FIXED.** On the dedup arms, `n_dags_explored` rows 1…n−1 carried `ExplicitRegression.eval_count` — fitness-function *invocations*, inflated **3.3–4.1×** by ScipyOptimizer/LocalOptFitnessFunction inner iterations during LM constant optimisation — while the final row carried `dedup.n_total` (candidate DAGs). The series climbed to ~110k then **dropped to ~30k**: the same quantity measured two ways. **ρ was never affected** — it is built from `dedup.n_total / dedup.n_unique` in the same loop, and no analyzer or figure code reads this column (0 grep hits). The correct per-snapshot value already existed unused. Fixed in `experiments/models/bingo/translator.py`: each arm now uses whichever counter its own final row uses (`n_total_dags` where it exists; `n_evals` on the baseline, where `n_total_dags` is 0 by construction and the final row uses `eval_count` anyway). Verified monotone on all three arms. Without this, **C1.10 would have failed on all 420 Bingo dedup-arm tasks** | Claude |
+| 2026-08-03 | **Baseline ρ is definitional, not measured** | Recorded so no one reads it as evidence. `bingo/runner.py:428` sets `n_unique_canonical = total_evals`, so the baseline arm's `empirical_reduction_factor` is **1.000 by construction** — it has no dedup hook and nothing to measure. Intermediate baseline rows also write `n_unique_canonical = 0` and jump on the last row. Neither is a defect; both must be stated rather than compared against the dedup arms as if they were measurements | Claude |
+| 2026-08-03 | **SP-1 could never have passed, by construction** | The deployment path is `rsync`, and the historical sync command **excluded `.git`**. Picasso's `.git` therefore described a months-old commit while the working tree was current, so `git describe --tags --always --dirty` on a compute node reported a stale hash with `-dirty` **permanently** — the check that exists to catch a stale deployment instead cried wolf on every run. Observed live: remote `b34cded-dirty` against local `d02106f`. Fixed by `slurm/c2_smoke/deploy.sh`, which refuses to deploy a dirty local tree, syncs `.git` with everything else, and then **verifies from the remote side** that HEAD matches and the tree is clean before rebuilding | Claude, job 1751916/1751917 |
+| 2026-08-03 | 🔴 **C3 has no mechanism yet** | The dedup-off equivalence control needs the `isalsr` runner run with dedup **forced off**, and **no such switch exists** in either host runner (`experiments/models/{udfs,bingo}/isalsr_runner.py`). C3 is blocking for **Stage D**, not for Stage C's 1,260-task array, and runs as its own 6-task job. Implement before Stage D | Claude, grep |
+| 2026-08-03 | **Stage C moves to 3 seeds** (§4.3 amended) | **DECIDED (Mario).** Seeds **0, 101, 102** — disjoint from campaign seeds 1…20 *and* from the 21…30 top-up range, so SP-0's "never mistakable for a campaign cell" intent is preserved. Reason: at one seed the three paired contrasts are **never constructed**, so the smoke would certify everything except the machinery the paired design rests on, and the first three-arm run of that code would be the campaign itself — §4.5's most expensive failure mode. **Two seeds does not work**: the threshold is `< 3`. Three is also `scipy.stats.shapiro`'s minimum, exercising the Shapiro→t/Wilcoxon branch at its boundary. Cost 105 → **315 core-hours (0.3 % of C2)**. Buys the code path only — at `n = 3` the minimum two-sided Wilcoxon `p` is 0.25, so **no number from Stage C means anything** | Claude, `aggregation.py:207` |
 
 ### 11.2 Pre-flight sign-off
 
@@ -909,7 +963,7 @@ wrong at cost:
 | A | A2 | pytest / ruff / mypy clean | | | |
 | A | A3 | Backend parity, `.so` freshness | | | |
 | A | A4 | Config equivalence across arms | | | |
-| A | A4b | Operator-set policy decided | | | |
+| A | A4b | Operator-set policy decided (uniform per method) | 2026-08-03 | **Decided.** Configs updated; containment guard landed. Still to do at sign-off: dump `operator_sets.csv`, record the policy **and the 22-problem continuity exclusion** in the MANIFEST | `c2_preflight/operator_sets.csv` |
 | A | A5 | Seed set declared (1…20, ⊂ C1) | | | |
 | A | A6 | MANIFEST schema frozen + validator | | | |
 | A | A7 | RunLog accepts three arms | | | |
@@ -929,7 +983,7 @@ wrong at cost:
 | B | B7 | `sbatch --test-only`, all six arrays | | | |
 | B | B8 | Resume / idempotency | | | |
 | B | B9 | T06 counter re-verification (threshold from T06) | | | |
-| C | C1.1–C1.15 | 420-task smoke, all criteria | | | |
+| C | C1.1–C1.17 | 1,260-task smoke, all criteria (incl. C1.16 paired-stats path) | | | |
 | C | C2 | Failure ledger emitted | | | |
 | C | C3 | Dedup-off equivalence control | | | |
 | C | C4 | Cross-arm data identity | | | |
@@ -942,13 +996,29 @@ wrong at cost:
 
 ### 11.3 Launch ledger
 
-One row per array. Fill at submission.
+**42 arrays**, one per `(method, arm, suite)` — see §1 and §11.1 (2026-08-03).
+Task counts are `suite_size × 20` for C2 and `suite_size × 3` for Stage C.
+Fill at submission; the launcher writes the job ids to
+`<logs>/job_ids.txt` in submission order, which is the order below.
 
-| Array | Method | Arm | Suite | Tasks | Job ID | Submitted | Completed | Failed | Notes |
+| Suite | Problems | C2 tasks/array | Stage C tasks/array |
+|---|---|---|---|
+| nguyen | 12 | 240 | 36 |
+| feynman | 10 | 200 | 30 |
+| hard | 10 | 200 | 30 |
+| cherrypicked | 10 | 200 | 30 |
+| roundoff | 8 | 160 | 24 |
+| feynman_remainder | 6 | 120 | 18 |
+| strogatz | 14 | 280 | 42 |
+| **per (method, arm)** | **70** | **1,400** | **210** |
+| **total (× 6)** | | **8,400** | **1,260** |
+
+| # | Method | Arm | Suite | Tasks | Job ID | Submitted | Completed | Failed | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | UDFS | baseline | D1∪D2 | 1,400 | | | | | |
-| 2 | UDFS | hash | D1∪D2 | 1,400 | | | | | |
-| 3 | UDFS | isalsr | D1∪D2 | 1,400 | | | | | |
-| 4 | Bingo | baseline | D1∪D2 | 1,400 | | | | | |
-| 5 | Bingo | hash | D1∪D2 | 1,400 | | | | | |
-| 6 | Bingo | isalsr | D1∪D2 | 1,400 | | | | | |
+| 1–7 | UDFS | baseline | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
+| 8–14 | UDFS | hash | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
+| 15–21 | UDFS | isalsr | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
+| 22–28 | Bingo | baseline | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
+| 29–35 | Bingo | hash | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
+| 36–42 | Bingo | isalsr | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
+| 43 | — | — | aggregation (`--postprocess only`, `afterany`) | 1 | | | | | |

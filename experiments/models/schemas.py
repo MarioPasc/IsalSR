@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,19 @@ class RunMetadata:
     seed: int
     hardware: dict[str, Any] = field(default_factory=dict)
     hyperparameters: dict[str, Any] = field(default_factory=dict)
+
+    # SHA-256 over (X_train, y_train, X_test, y_test).  The paired design
+    # asserts that all three arms of a (method, problem, seed) cell saw the
+    # same data; before this field that assertion was unverifiable, and a
+    # generator consuming RNG differently per arm would have made every paired
+    # test compare different samples with nothing in the output saying so.
+    # Check C4 is an equality over this string.  Empty = a pre-C2 log.
+    data_fingerprint: str = ""
+
+    # SHA-256 of the YAML that configured the run, by content.  Distinguishes
+    # "the same config file" from "the same configuration" when six arrays are
+    # submitted over several days.  Empty = a pre-C2 log.
+    config_sha256: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -126,6 +140,60 @@ class SearchSpaceResults:
     # task and depended on log retention and on the line staying at INFO.
     # ``None`` = shadow hashing was off for this run, so the question does not apply.
     n_shadow_failures: int | None = None
+
+    # Candidates the adapter refused, i.e. host expressions with no encoding in
+    # the alphabet of Definition 3.2.  Persisted for the same reason as the field
+    # above: the runner catches the refusal, counts it and evaluates the
+    # candidate without deduplication, so a host operator outside the alphabet
+    # depresses the reduction factor with nothing else recording it.  The
+    # containment invariant is checked before the run starts, which makes this
+    # field the empirical confirmation that the check held for every candidate
+    # actually produced.  ``None`` = the arm never converted anything.
+    n_conversion_failures: int | None = None
+
+    # ------------------------------------------------------------------ #
+    # T06 reachability / fallback ledger (EXECUTION-PLAN C1.9-BUG)
+    # ------------------------------------------------------------------ #
+    # The five paths on which a candidate is evaluated WITHOUT canonical
+    # deduplication.  They are the evidence base for R1.2 and they are the
+    # denominator of every honest statement about how often the representation
+    # actually applies.
+    #
+    # These are persisted rather than logged because the population they
+    # describe exists only while a search runs: a candidate that violated the
+    # reachability precondition is evaluated, discarded and never seen again.
+    # Unlike ``engine``, no post-hoc pass can recover them -- re-running the
+    # search draws a different population.  Until 2026-08-03 only
+    # ``n_conversion_failures`` reached the run log, so four of the five rates
+    # were uncheckable rather than merely unchecked, and a probe walking all 69
+    # keys of a run_log.json found no reachability field at all.
+    #
+    # ``None`` on every field = the ledger was absent (a baseline or hash arm,
+    # which does not canonicalise).  Zero is a *measurement*; None is not.  The
+    # distinction matters because a zero-everywhere ledger means the counters
+    # are dead, not that the rates are zero, and only the sampled denominators
+    # below can tell those two apart.
+    ledger_enabled: bool | None = None
+    ledger_sample_rate: int | None = None
+    #: Candidates the ledger observed (full rate) and sampled (1 in
+    #: ``ledger_sample_rate``).  ``n_ledger_sampled`` is the denominator of the
+    #: two violation rates; a count with no denominator is not a rate.
+    n_ledger_seen: int | None = None
+    n_ledger_sampled: int | None = None
+    #: Reachability precondition violated on the DAG as the adapter emitted it.
+    n_violations_pre: int | None = None
+    #: Still violated after ``normalize_const_creation``.  This is the residual
+    #: T07's precondition hypothesis is stated against.
+    n_violations_post: int | None = None
+    #: Canonicalisation exceeded its wall-clock budget for one candidate.
+    n_canon_timeouts: int | None = None
+    #: Canonicalisation raised.  Distinct from a timeout: a raise is a defect
+    #: signal, a timeout is a budget outcome.
+    n_canon_raised: int | None = None
+    #: Candidates answered from the precomputed atlas rather than canonicalised
+    #: on the fly.  Not a fallback -- recorded here because it partitions the
+    #: same stream and the five rates are otherwise not interpretable.
+    n_atlas_hits: int | None = None
 
 
 @dataclass(frozen=True)
@@ -271,7 +339,16 @@ TRAJECTORY_COLUMNS = [
 
 @dataclass(frozen=True)
 class AggregateRow:
-    """One row of aggregate.csv (Section C.7)."""
+    """One row of aggregate.csv (Section C.7).
+
+    Attributes:
+        n: Number of runs aggregated into this row, or ``None`` for a row read
+            from a C1-era file that predates the column. Every statistic in the
+            row is NaN-aware (``nanmean``/``nanstd``/...), so a run whose value
+            for this metric is NaN is counted in ``n`` but does not enter the
+            statistics; ``n`` is therefore the number of seeds attempted, not
+            the number of finite observations.
+    """
 
     method: str
     representation: str
@@ -285,6 +362,7 @@ class AggregateRow:
     q75: float
     min_val: float
     max_val: float
+    n: int | None = None
 
     def to_csv_row(self) -> dict[str, Any]:
         return {
@@ -300,6 +378,7 @@ class AggregateRow:
             "q75": f"{self.q75:.10f}",
             "min": f"{self.min_val:.10f}",
             "max": f"{self.max_val:.10f}",
+            "n": "" if self.n is None else str(self.n),
         }
 
 
@@ -316,6 +395,7 @@ AGGREGATE_COLUMNS = [
     "q75",
     "min",
     "max",
+    "n",
 ]
 
 
@@ -326,7 +406,17 @@ AGGREGATE_COLUMNS = [
 
 @dataclass
 class PairedStatsMetric:
-    """Statistical comparison for one metric between baseline and IsalSR."""
+    """Statistical comparison for one metric between baseline and IsalSR.
+
+    Attributes:
+        n: Number of paired observations that entered this metric's test, after
+            pairwise deletion of NaN differences (EXECUTION-PLAN §6.4, "the true
+            N reported per metric"). It is at most the enclosing
+            :attr:`PairedStats.n_seeds` and may be smaller when a metric is
+            undefined for some seeds. ``None`` for a record read from a C1-era
+            file written before the field existed, which is distinct from ``0``
+            ("no observation survived deletion").
+    """
 
     baseline_mean: float
     baseline_std: float
@@ -345,39 +435,70 @@ class PairedStatsMetric:
     cohens_d_ci_upper: float
     mean_diff_ci_lower: float
     mean_diff_ci_upper: float
+    n: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PairedStatsMetric:
-        return cls(**d)
+        """Rebuild a record, tolerating fields absent from C1-era files.
+
+        Args:
+            d: Decoded JSON object. Keys the dataclass does not declare are
+                ignored so a file written by a newer schema still loads; ``n``
+                stays ``None`` when the file predates it.
+
+        Returns:
+            The reconstructed record.
+        """
+        fields = {f.name for f in dataclass_fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in fields})
 
 
 @dataclass
 class PairedStats:
-    """All paired statistical comparisons for one (method, problem) pair."""
+    """All paired statistical comparisons for one (method, problem) pair.
+
+    Attributes:
+        n_seeds: Number of seeds matched between the two arms, i.e. the number
+            of pairs the comparison was built from before any per-metric NaN
+            deletion. ``None`` for a file written before the field existed
+            (C1's ``wl_subtree_unified`` tree), which is distinct from ``0``.
+    """
 
     method: str
     benchmark: str
     problem: str
     metrics: dict[str, PairedStatsMetric] = field(default_factory=dict)
+    n_seeds: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "method": self.method,
             "benchmark": self.benchmark,
             "problem": self.problem,
+            "n_seeds": self.n_seeds,
             "metrics": {k: v.to_dict() for k, v in self.metrics.items()},
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PairedStats:
+        """Rebuild from a decoded JSON object, tolerating a missing ``n_seeds``.
+
+        Args:
+            d: Decoded JSON object.
+
+        Returns:
+            The reconstructed comparison; ``n_seeds`` is ``None`` when the file
+            predates the field.
+        """
         return cls(
             method=d["method"],
             benchmark=d["benchmark"],
             problem=d["problem"],
             metrics={k: PairedStatsMetric.from_dict(v) for k, v in d["metrics"].items()},
+            n_seeds=d.get("n_seeds"),
         )
 
     def save_json(self, path: Path) -> None:

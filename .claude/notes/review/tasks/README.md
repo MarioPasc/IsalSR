@@ -99,6 +99,7 @@ the frozen MANIFEST schema, and checks P1–P3** — see `EXECUTION-PLAN.md` §2
 |---|---|---|---|---|
 | [T08](T08-nan-and-paired-test-integrity.md) | NaN failures and paired-test integrity | Mario | **R2.7** (+E4) | T02 |
 | [T09](T09-appendix-d-rebuild.md) | Appendix D rebuild and numerical consistency | Mario | **R2.5**, **R2.6**, **R2.3** (+E1, E2, E8) | T02, T05, T08 |
+| [T17](T17-c2-submission-certification.md) | **C2 submission certification** — the **1,260-task** full-coverage smoke (`EXECUTION-PLAN.md` Stage C) that must pass before 100,800 core-hours are committed. Every arm × every method × every problem × **seeds 0, 101, 102**, 900 s. Amended 2026-08-03 from one seed to three: below three matched seeds `compute_paired_stats` never constructs a contrast, so the smoke would certify everything *except* the machinery the paired design rests on. **Blocks the campaign** | Mario | — (internal gate) | T01, T04, T05, T08 |
 
 ### Track E — Manuscript
 

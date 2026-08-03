@@ -29,6 +29,7 @@ if _vendor_dir not in sys.path:
 import DAG_search.dag_search as dag_search_module  # noqa: E402
 from DAG_search.dag_search import DAGRegressor  # noqa: E402
 
+from experiments.models.alphabet_guard import validate_udfs_operators
 from experiments.models.base_runner import ModelRunner
 from experiments.models.fallback_ledger import FallbackLedger
 from experiments.models.udfs.adapter import compgraph_to_labeled_dag
@@ -422,6 +423,13 @@ class IsalSRUDFSRunner(ModelRunner):
     KEY_MODE: str = "canonical"
 
     def __init__(self, config: UDFSConfig | None = None, atlas: Any = None):
+        # UDFS takes no operator set from the configuration: its search
+        # enumerates the vendored node table, so that table is what has to be
+        # encodable.  Checked here rather than assumed, because an operator
+        # without an image in the alphabet of Definition 3.2 is refused by the
+        # adapter, counted as a conversion failure and then evaluated without
+        # deduplication, which depresses the reduction factor silently.
+        validate_udfs_operators()
         self._config = config or UDFSConfig()
         # The atlas maps DAGs to CANONICAL hashes, so it is only sound for the
         # canonical arm.  The hash arm must compute its own key every time.

@@ -6,7 +6,10 @@ description: |
   `.claude/notes/review/tasks/`. Decides with the user whether a figure or table
   is needed, builds it from live code if so, then writes the answer as continuous
   scientific prose following a fixed narrative spine and an explicit style
-  contract. Verifies every quoted number against the ticket, compiles, renders,
+  contract. Carries the matching manuscript edits into the annotated draft at
+  `reviews/internal_copy_reviewed_article/`, marked in blue, leaving the clean
+  manuscript under `article/` untouched. Verifies every quoted number against the
+  ticket, compiles, renders,
   and optionally pushes to Overleaf. Triggers on "write the response to R1.3",
   "answer reviewer comment R2.1", "draft the response letter entry", "fill the
   response block", "write the reviewer answer", "review-answer", "respond to the
@@ -60,12 +63,62 @@ Two failure modes dominate, and both are silent:
 | Ticket work logs | `.claude/notes/review/tasks/T*.md` (+ `T*-appendix/`) |
 | Verbatim reviewer text | `.claude/notes/review/source/reviewer-{1,2,3}.md` |
 | Known discrepancies | `.claude/notes/review/source/verified-discrepancies.md` |
-| Manuscript | `…/69c1637a28a81fea2badda9a/article/paper/`, `…/article/supplementary/` |
+| Manuscript, clean | `…/69c1637a28a81fea2badda9a/article/paper/`, `…/article/supplementary/` |
+| **Manuscript, annotated** | `…/69c1637a28a81fea2badda9a/reviews/internal_copy_reviewed_article/{paper,supplementary}/` |
 | Overleaf token | `/home/mpascual/research/token-overleaf.txt` |
 | Figure generators | `experiments/scripts/generate_fig_*.py` |
 
 The manuscript root is a live Overleaf checkout. **`double_blind/paper/*.tex` is
 a byte-identical copy, not a symlink** — every manuscript edit must be mirrored.
+
+### The two manuscript copies, and which one you edit
+
+There are two, and they are not interchangeable.
+
+`article/` is the **clean** manuscript, the one that goes to the journal. Rule 4
+of `.claude/notes/review/tasks/README.md` requires it to carry no colour and no
+highlighting; annotated versions belong in the separate "Summary of Changes"
+upload. It is also the live Overleaf checkout, so anything written there is one
+`git push` away from being the submitted paper.
+
+`reviews/internal_copy_reviewed_article/` is the **annotated draft**: the same
+manuscript with the revision's changes applied and **wrapped in
+`{\color{blue}…}`**. It is the working copy this skill and `review-ticket` write
+to, and the artefact that becomes the Summary of Changes. It starts as a
+byte-identical copy of the submitted manuscript, so a `diff` against `article/`
+is exactly the set of changes the reviewers will be shown.
+
+Working rules:
+
+- **Write manuscript edits into the annotated copy, in blue, not into
+  `article/`.** Promoting them into `article/` with the colour stripped is a
+  separate, deliberate step, and pushing to Overleaf is another one on top
+  (§6). Do neither unless asked.
+- **Blue means "changed in this revision", and nothing else.** Do not use it for
+  emphasis, and do not use a second colour. If an upstream patch arrives with its
+  own colours (red for one author's edits over another's blue, say), collapse all
+  of it to blue when integrating.
+- **Strip review scaffolding before integrating.** Inline notes of the form
+  `[MPG 2026-08-02 — removed: …]` explain a decision to a co-author; they are not
+  manuscript content. Grep for them and for any leftover `\color{red}` and
+  confirm zero hits after integration.
+- **A passage deleted in the revision leaves nothing behind.** Do not ship a blue
+  paragraph narrating what used to be there. That belongs in the response letter,
+  which may say the old sentence was wrong; the article must not narrate its own
+  review history (see §5.3).
+- **Check the numbering after integrating anything numbered.** Inserting a
+  `theorem`/`definition`/`lemma` renumbers everything after it, and the reviewers
+  quote the submitted numbers as literals in their comments and in the letter.
+  Prefer appending new environments at the end of a section. Verify from the
+  rebuilt PDF, not from the source:
+  ```bash
+  pdftotext paper/main.pdf - | grep -oE "(Theorem|Lemma|Definition|Corollary) [0-9]+\.[0-9]+" | sort -u -V
+  ```
+- **Both documents must compile.** `pdflatex` three times in
+  `internal_copy_reviewed_article/paper/` and `.../supplementary/`, then check
+  the logs for `^! ` and for undefined references.
+- The annotated copy is untracked in the Overleaf repo. Leave it that way unless
+  the user asks otherwise.
 
 ---
 
@@ -224,6 +277,24 @@ All four must hold:
 - `pdftotext … | grep '??'` finds no unresolved reference;
 - no new `LaTeX Warning` lines.
 
+If the answer also touched the manuscript, the annotated copy has its own gate.
+Three passes, because the numbered environments and `\ref`s need them:
+
+```bash
+cd <reviews dir>/internal_copy_reviewed_article/paper
+for i in 1 2 3; do pdflatex -interaction=nonstopmode main.tex; done
+grep -c "^! " main.log            # 0
+grep -c "Reference.*undefined" main.log   # 0
+# then the same in ../supplementary on supplementary.tex
+```
+
+Then, in the annotated sources:
+
+- `grep -c "color{red}"` and a grep for inline review notes both return **0**;
+- the numbering check of the Paths section reproduces the numbers the reviewers
+  cite;
+- `article/` is unchanged (`git status` shows nothing under it).
+
 ### 5.2 Content gate
 
 - Every number in the answer appears in the §1 ledger.
@@ -284,6 +355,12 @@ rm -f "$SCRATCH/askpass.sh"
 Check the figure is tracked. The letter fails to compile on Overleaf if a
 `\includegraphics` target was left untracked, and `git status` will not warn you
 if the file is already committed at an older revision.
+
+**Stage the letter and its figures, never the annotated manuscript copy.**
+`reviews/internal_copy_reviewed_article/` is a working artefact; committing it
+puts a blue-marked duplicate of the paper into the Overleaf project. Promoting
+its content into `article/` is a separate request, and when it comes the colour
+is stripped in the process: the clean manuscript carries no `\color`.
 
 ---
 

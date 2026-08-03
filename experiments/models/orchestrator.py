@@ -17,8 +17,12 @@ import argparse
 import dataclasses
 import json
 import logging
+import math
 import os
 import sys
+import time
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +53,7 @@ from experiments.models.analyzer.aggregation import (  # noqa: E402
     apply_holm_correction,
     compute_paired_stats,
 )
-from experiments.models.hardware_info import collect_hardware_info  # noqa: E402
+from experiments.models.hardware_info import collect_hardware_info, peak_rss_gb  # noqa: E402
 from experiments.models.io_utils import (  # noqa: E402
     ensure_output_structure,
     load_all_run_logs,
@@ -61,7 +65,13 @@ from experiments.models.io_utils import (  # noqa: E402
     save_trajectory,
     seed_dir,
 )
-from experiments.models.schemas import RunMetadata  # noqa: E402
+from experiments.models.provenance import config_sha256, data_fingerprint  # noqa: E402
+from experiments.models.schemas import PairedStats, RunMetadata  # noqa: E402
+from experiments.models.status_ledger import (  # noqa: E402
+    RunStatus,
+    collect_status_ledger,
+    write_status,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -387,10 +397,199 @@ def _positive_float(value: str) -> float:
     return parsed
 
 
-def run_experiment(config_path: str, args: argparse.Namespace) -> None:
-    """Run the full experiment from a YAML config."""
+# Every arm the post-run block knows about.  Ordering is fixed so that
+# discovery from disk is deterministic.
+_ALL_ARMS: tuple[str, ...] = ("baseline", "hash", "isalsr")
+
+# Paired contrasts as ``(reference, treatment, filename)``; the isalsr-vs-baseline
+# contrast keeps the historical filename and is the only one carried into the
+# across-problem Holm correction.
+_CONTRASTS: tuple[tuple[str, str, str], ...] = (
+    ("baseline", "isalsr", "paired_stats.json"),
+    ("baseline", "hash", "paired_stats_hash_vs_baseline.json"),
+    ("hash", "isalsr", "paired_stats_isalsr_vs_hash.json"),
+)
+
+
+def _problem_paths(
+    output_base: Path,
+    method: str,
+    benchmark: str,
+    problem: str,
+    variants: Sequence[str] | None,
+) -> dict[str, Path] | None:
+    """Resolve the problem directory and its arm subdirectories.
+
+    Args:
+        output_base: Root of the results tree.
+        method: SR method name.
+        benchmark: Benchmark suite key.
+        problem: Problem name.
+        variants: Arms to allocate directories for, or ``None`` to discover the
+            arms already present on disk. Discovery is what the standalone
+            aggregation job needs: it runs after all arms have landed and must
+            not depend on the ``--variants`` of any single array task.
+
+    Returns:
+        A dict mapping ``"problem"`` and each arm to its directory, or ``None``
+        when discovery found no directory for this problem.
+    """
+    if variants is not None:
+        return ensure_output_structure(output_base, method, benchmark, problem, variants=variants)
+
+    problem_dir = output_base / method / benchmark / problem.lower().replace("-", "_")
+    if not problem_dir.is_dir():
+        return None
+    paths = {"problem": problem_dir}
+    for arm in _ALL_ARMS:
+        arm_dir = problem_dir / arm
+        if arm_dir.is_dir():
+            paths[arm] = arm_dir
+    return paths
+
+
+def postprocess_output_root(
+    output_base: Path,
+    method: str,
+    config: dict[str, Any],
+    problem_filter: str | None = None,
+    *,
+    variants: Sequence[str] | None = None,
+) -> dict[str, int]:
+    """Aggregate, compare and index whatever run logs are already on disk.
+
+    Performs the per-cell post-run block over an entire output root: one
+    ``aggregate.csv`` per ``(benchmark, problem, arm)``, the three paired
+    contrasts written next to the problem, the across-problem Holm correction on
+    the isalsr-vs-baseline contrast, and the campaign ``status_ledger.csv``.
+    Reads only run logs and status records; it never runs a search.
+
+    Args:
+        output_base: Root of the results tree to post-process.
+        method: SR method name, i.e. the first path component under the root.
+        config: Parsed YAML config; its ``benchmarks`` section selects the
+            suites and its ``experiment.method`` is expected to equal ``method``.
+        problem_filter: Comma-separated problem names, ``"all"`` or ``None`` to
+            take every problem in each suite's registry.
+        variants: Arms to consider. ``None`` (the standalone-job case) discovers
+            the arms present on disk and skips problems with no directory, so no
+            empty tree is created for a problem that was never run.
+
+    Returns:
+        Counts of the artefacts produced: ``aggregates`` (aggregate.csv files
+        written), ``paired_stats`` (paired-stats JSON files written, before the
+        Holm re-save) and ``ledger_rows`` (rows in the status ledger).
+    """
+    counts = {"aggregates": 0, "paired_stats": 0, "ledger_rows": 0}
+
+    for bench_name in config.get("benchmarks", {}):
+        benchmarks = get_benchmarks(bench_name, problem_filter)
+        all_paired_stats: list[PairedStats] = []
+
+        for bench in benchmarks:
+            problem_name = bench["name"]
+            paths = _problem_paths(output_base, method, bench_name, problem_name, variants)
+            if paths is None:
+                continue
+            arms = [arm for arm in _ALL_ARMS if arm in paths]
+
+            for variant in arms:
+                logs = load_all_run_logs(paths[variant])
+                if logs:
+                    agg_rows = aggregate_all_metrics(logs)
+                    save_aggregate(agg_rows, paths[variant] / "aggregate.csv")
+                    counts["aggregates"] += 1
+
+            for ref, treat, fname in _CONTRASTS:
+                if ref not in paths or treat not in paths:
+                    continue
+                ref_logs = load_all_run_logs(paths[ref])
+                treat_logs = load_all_run_logs(paths[treat])
+                if not ref_logs or not treat_logs:
+                    continue
+                # A paired test needs >= 3 matched seeds (aggregation.py).  The
+                # pre-flight smoke runs ONE seed by design -- seed 0, deliberately
+                # outside the campaign seed set -- so without this guard every
+                # one of Stage C's 420 tasks would raise here, after a complete
+                # and correct run, and exit non-zero.  That would fail check
+                # C1.1 universally while the artefacts it certifies were all
+                # present.  Producing the artefacts and computing the statistic
+                # are separate obligations; only the second needs seeds.
+                n_paired = len(
+                    {rl.metadata.seed for rl in ref_logs} & {rl.metadata.seed for rl in treat_logs}
+                )
+                if n_paired < 3:
+                    log.info(
+                        "  Skipping %s vs %s paired stats: %d matched seed(s), need 3",
+                        treat,
+                        ref,
+                        n_paired,
+                    )
+                    continue
+                paired = compute_paired_stats(ref_logs, treat_logs)
+                save_paired_stats(paired, paths["problem"] / fname)
+                counts["paired_stats"] += 1
+                if treat == "isalsr" and ref == "baseline":
+                    all_paired_stats.append(paired)
+
+        # Holm correction across problems
+        if all_paired_stats:
+            apply_holm_correction(all_paired_stats)
+            for ps in all_paired_stats:
+                problem_slug = ps.problem.lower().replace("-", "_")
+                ps_path = output_base / method / bench_name / problem_slug / "paired_stats.json"
+                save_paired_stats(ps, ps_path)
+
+    # P4: assemble the campaign status ledger from the per-run records.
+    ledger_rows = collect_status_ledger(output_base, output_base / "status_ledger.csv")
+    counts["ledger_rows"] = len(ledger_rows)
+    n_killed = sum(1 for r in ledger_rows if r.terminal_status == "started")
+    log.info(
+        "Status ledger: %d rows (%d completed, %d failed, %d killed) -> %s",
+        len(ledger_rows),
+        sum(1 for r in ledger_rows if r.terminal_status == "completed"),
+        sum(1 for r in ledger_rows if r.terminal_status == "failed"),
+        n_killed,
+        output_base / "status_ledger.csv",
+    )
+    return counts
+
+
+def run_experiment(config_path: str, args: argparse.Namespace) -> int:
+    """Run the full experiment from a YAML config.
+
+    Returns:
+        ``0`` if every cell completed, ``1`` if any cell's search raised. The
+        code is propagated to the process exit status so a SLURM task that
+        recorded a failure in the status ledger does not also report success
+        (EXECUTION-PLAN P4).
+    """
     with open(config_path) as f:
         config = yaml.safe_load(f)
+
+    mode = str(getattr(args, "postprocess", "auto") or "auto")
+    if mode == "only":
+        # No search, no data generation, no runner: just the post-run block over
+        # whatever the arrays already wrote.
+        output_root = Path(args.output_dir)
+        log.info("Post-processing only over %s", output_root)
+        try:
+            counts = postprocess_output_root(
+                output_root,
+                config["experiment"]["method"],
+                config,
+                problem_filter=getattr(args, "problems", None),
+            )
+        except Exception:  # noqa: BLE001 -- reported through the exit code
+            log.exception("Post-processing failed for %s", output_root)
+            return 1
+        log.info(
+            "Post-processing complete: %d aggregate.csv, %d paired-stats file(s), %d ledger row(s)",
+            counts["aggregates"],
+            counts["paired_stats"],
+            counts["ledger_rows"],
+        )
+        return 0
 
     config = apply_cli_overrides(
         config,
@@ -405,13 +604,21 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
     seeds = parse_seeds(args.seeds) if args.seeds else list(range(1, n_seeds + 1))
     variants = args.variants.split(",") if args.variants else ["baseline", "isalsr"]
 
+    _configure_ledger(args, variants)
+
     output_base = Path(args.output_dir)
     hardware = collect_hardware_info()
+    cfg_sha = config_sha256(config_path)
+
+    # Cells whose search raised.  Reported through the exit code so a SLURM
+    # task that recorded a failure in the ledger does not also report success.
+    n_failed_cells = 0
 
     # Save global metadata
     save_metadata(
         {
             "config": config,
+            "config_sha256": cfg_sha,
             "hardware": hardware,
             "seeds": seeds,
             "variants": variants,
@@ -425,8 +632,6 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
         benchmarks = get_benchmarks(bench_name, args.problems)
         train_size = bench_cfg.get("train_size", 20)
         test_size = bench_cfg.get("test_size", 100)
-
-        all_paired_stats = []
 
         # Resolve atlas once per (benchmark_name, num_variables)
         atlas_dir = getattr(args, "atlas_dir", None)
@@ -475,101 +680,219 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> None:
                         seed,
                     )
 
-                    runner = create_runner(method, variant, config, atlas=atlas)
-                    raw = runner.fit(
-                        x_train,
-                        y_train,
-                        x_test,
-                        y_test,
-                        seed=seed,
-                        config=config.get(method, {}),
-                    )
+                    # P3: commit to the data this run actually received, before
+                    # any arm touches it.  Check C4 compares this string across
+                    # the three arms of the cell.
+                    fingerprint = data_fingerprint(x_train, y_train, x_test, y_test)
 
-                    # Get ground truth for solution recovery
-                    gt_expr = _get_ground_truth_sympy(bench)
-                    gt_vars = _get_ground_truth_vars(bench)
-
-                    translator = create_translator(
-                        method,
-                        y_train,
-                        y_test,
-                        gt_expr,
-                        gt_vars,
-                    )
-
-                    metadata = RunMetadata(
+                    # P4, write-ahead: the record exists BEFORE the search, so an
+                    # OOM SIGKILL -- which no handler observes, and which caused
+                    # 36 of C1's 45 missing cells -- still leaves a row reading
+                    # "started" rather than leaving a silent hole.
+                    status = RunStatus(
                         method=method,
-                        representation=variant,
+                        arm=variant,
                         benchmark=bench_name,
                         problem=problem_name,
                         seed=seed,
-                        hardware=hardware,
-                        hyperparameters=config.get(method, {}),
+                        node_cpu_model=str(hardware.get("cpu_model", "")),
+                        hostname=str(hardware.get("hostname", "")),
+                        engine=str(hardware.get("engine", "")),
+                        git_commit=str(hardware.get("git_hash", "")),
+                        config_sha256=cfg_sha,
+                        data_fingerprint=fingerprint,
+                        slurm_job_id=str(hardware.get("slurm_job_id") or ""),
+                        slurm_array_task_id=str(hardware.get("slurm_array_task_id") or ""),
+                        started_at=datetime.now(tz=UTC).isoformat(),
                     )
+                    write_status(status, sd)
+                    started_at = time.monotonic()
 
-                    run_log = translator.to_run_log(raw, metadata)
-                    trajectory = translator.to_trajectory(raw)
-
-                    # Shadow fixed-order cardinality estimates, if the arm
-                    # collected them.  Attached here rather than in the
-                    # translator so the two host translators stay identical.
-                    shadow = getattr(runner, "last_shadow", None)
-                    if shadow:
-                        run_log = dataclasses.replace(
-                            run_log,
-                            search_space=dataclasses.replace(run_log.search_space, **shadow),
+                    try:
+                        runner = create_runner(method, variant, config, atlas=atlas)
+                        raw = runner.fit(
+                            x_train,
+                            y_train,
+                            x_test,
+                            y_test,
+                            seed=seed,
+                            config=config.get(method, {}),
                         )
 
-                    save_run_log(run_log, sd / "run_log.json")
-                    save_trajectory(trajectory, sd / "trajectory.csv")
+                        # Get ground truth for solution recovery
+                        gt_expr = _get_ground_truth_sympy(bench)
+                        gt_vars = _get_ground_truth_vars(bench)
 
-                    # Dense per-generation convergence log (Bingo only)
-                    if method == "bingo" and hasattr(translator, "save_convergence_log"):
-                        translator.save_convergence_log(raw, sd / "convergence_log.npz")
+                        translator = create_translator(
+                            method,
+                            y_train,
+                            y_test,
+                            gt_expr,
+                            gt_vars,
+                        )
 
-                    log.info(
-                        "    R²=%.4f total_dags=%d unique=%d",
-                        run_log.regression.r2_test,
-                        run_log.search_space.total_dags_explored,
-                        run_log.search_space.unique_canonical_dags,
-                    )
+                        metadata = RunMetadata(
+                            method=method,
+                            representation=variant,
+                            benchmark=bench_name,
+                            problem=problem_name,
+                            seed=seed,
+                            hardware=hardware,
+                            hyperparameters=config.get(method, {}),
+                            data_fingerprint=fingerprint,
+                            config_sha256=cfg_sha,
+                        )
 
-            # After all seeds: aggregate + paired stats
-            for variant in variants:
-                logs = load_all_run_logs(paths[variant])
-                if logs:
-                    agg_rows = aggregate_all_metrics(logs)
-                    save_aggregate(agg_rows, paths[variant] / "aggregate.csv")
+                        run_log = translator.to_run_log(raw, metadata)
+                        trajectory = translator.to_trajectory(raw)
 
-            # Paired contrasts.  (reference, treatment, filename); the
-            # isalsr-vs-baseline contrast keeps the historical filename and is
-            # the only one carried into the across-problem Holm correction.
-            contrasts = (
-                ("baseline", "isalsr", "paired_stats.json"),
-                ("baseline", "hash", "paired_stats_hash_vs_baseline.json"),
-                ("hash", "isalsr", "paired_stats_isalsr_vs_hash.json"),
-            )
-            for ref, treat, fname in contrasts:
-                if ref not in variants or treat not in variants:
-                    continue
-                ref_logs = load_all_run_logs(paths[ref])
-                treat_logs = load_all_run_logs(paths[treat])
-                if not ref_logs or not treat_logs:
-                    continue
-                paired = compute_paired_stats(ref_logs, treat_logs)
-                save_paired_stats(paired, paths["problem"] / fname)
-                if treat == "isalsr" and ref == "baseline":
-                    all_paired_stats.append(paired)
+                        # Shadow fixed-order cardinality estimates, if the arm
+                        # collected them.  Attached here rather than in the
+                        # translator so the two host translators stay identical.
+                        shadow = getattr(runner, "last_shadow", None)
+                        if shadow:
+                            run_log = dataclasses.replace(
+                                run_log,
+                                search_space=dataclasses.replace(run_log.search_space, **shadow),
+                            )
 
-        # Holm correction across problems
-        if all_paired_stats:
-            apply_holm_correction(all_paired_stats)
-            for ps in all_paired_stats:
-                problem_slug = ps.problem.lower().replace("-", "_")
-                ps_path = output_base / method / bench_name / problem_slug / "paired_stats.json"
-                save_paired_stats(ps, ps_path)
+                        # T06 reachability ledger: the five paths on which a
+                        # candidate is evaluated without canonical dedup, plus
+                        # their sampled denominator.  Attached here for the same
+                        # reason as the shadow counts, and persisted because the
+                        # population they describe exists only while the search
+                        # runs -- no post-hoc pass can recover them (C1.9).
+                        ledger = getattr(runner, "last_ledger", None)
+                        if ledger is not None:
+                            run_log = dataclasses.replace(
+                                run_log,
+                                search_space=dataclasses.replace(
+                                    run_log.search_space,
+                                    **ledger.to_search_space_fields(),
+                                ),
+                            )
+                            save_metadata(ledger.to_dict(), sd / "fallback_ledger.json")
+
+                        save_run_log(run_log, sd / "run_log.json")
+                        save_trajectory(trajectory, sd / "trajectory.csv")
+
+                        # Dense per-generation convergence log (Bingo only)
+                        if method == "bingo" and hasattr(translator, "save_convergence_log"):
+                            translator.save_convergence_log(raw, sd / "convergence_log.npz")
+
+                        nan_fields = _nonfinite_metric_fields(run_log)
+                        status.terminal_status = "completed"
+                        status.exit_code = 0
+                        status.n_nan_metrics = len(nan_fields)
+                        status.nan_fields = ";".join(nan_fields)
+
+                        log.info(
+                            "    R²=%.4f total_dags=%d unique=%d",
+                            run_log.regression.r2_test,
+                            run_log.search_space.total_dags_explored,
+                            run_log.search_space.unique_canonical_dags,
+                        )
+                    except Exception as exc:  # noqa: BLE001 -- the ledger is the point
+                        # §5.5 admits no third state: this cell now carries a
+                        # named cause instead of becoming an unexplained gap.
+                        # The failure is re-reported through the process exit
+                        # code at the end of main(), so SLURM still sees it.
+                        n_failed_cells += 1
+                        status.terminal_status = "failed"
+                        status.exit_code = 1
+                        status.exception_class = type(exc).__name__
+                        status.exception_message = str(exc)[:2000]
+                        log.exception("  FAILED %s", run_key)
+                    finally:
+                        status.wall_clock_s = round(time.monotonic() - started_at, 3)
+                        status.max_rss_gb = peak_rss_gb()
+                        status.finished_at = datetime.now(tz=UTC).isoformat()
+                        write_status(status, sd)
+
+    # After every cell: aggregate, the three paired contrasts, the across-problem
+    # Holm correction and the status ledger.  Suppressed under ``--postprocess
+    # skip`` because inside a SLURM array every task would rewrite the same
+    # shared files concurrently and re-walk the whole output tree.
+    if mode == "skip":
+        log.info(
+            "Post-processing suppressed (--postprocess skip): no aggregate.csv, "
+            "paired stats or status_ledger.csv written. Run --postprocess only "
+            "over %s once every array has drained.",
+            output_base,
+        )
+    else:
+        postprocess_output_root(
+            output_base, method, config, problem_filter=args.problems, variants=variants
+        )
 
     log.info("Experiment complete. Results in %s", output_base)
+    if n_failed_cells:
+        log.error("%d cell(s) failed; see status_ledger.csv", n_failed_cells)
+        return 1
+    return 0
+
+
+def _configure_ledger(args: argparse.Namespace, variants: list[str]) -> None:
+    """Set the T06 ledger environment before any runner constructs one.
+
+    ``FallbackLedger`` reads ``ISALSR_LEDGER_ENABLED`` at construction time, and
+    the runners construct one inside ``fit``, so setting the variable here
+    reaches every run. Routing it through a CLI flag rather than leaving it as
+    an ambient environment variable makes the choice an auditable launch
+    parameter: it is recorded in ``run_log.json`` as ``ledger_enabled`` and can
+    be checked against the submission command afterwards.
+
+    Warns loudly when a deduplicating arm runs with the counters off. That
+    combination is the SP-6 trap in its exact form -- the run log then reports
+    five rates of zero, which reads as "no fallbacks occurred" and actually
+    means "nothing was counted". The distinction cannot be recovered later.
+    """
+    if getattr(args, "ledger", False):
+        os.environ["ISALSR_LEDGER_ENABLED"] = "1"
+    if getattr(args, "ledger_sample_rate", None):
+        os.environ["ISALSR_LEDGER_SAMPLE_RATE"] = str(args.ledger_sample_rate)
+
+    enabled = os.environ.get("ISALSR_LEDGER_ENABLED", "0").strip() not in (
+        "",
+        "0",
+        "false",
+        "False",
+        "no",
+        "NO",
+    )
+    dedup_arms = [v for v in variants if v in ("isalsr", "hash")]
+    if dedup_arms and not enabled:
+        log.warning(
+            "T06 fallback ledger is DISABLED for arm(s) %s. The five "
+            "reachability rates will be recorded as zero and are NOT "
+            "recoverable after the run. Pass --ledger to enable them.",
+            ",".join(dedup_arms),
+        )
+    elif dedup_arms:
+        log.info(
+            "T06 fallback ledger ENABLED (sample rate %s) for arm(s) %s",
+            os.environ.get("ISALSR_LEDGER_SAMPLE_RATE", "1"),
+            ",".join(dedup_arms),
+        )
+
+
+def _nonfinite_metric_fields(run_log: Any) -> list[str]:
+    """Return the names of regression metrics that are NaN or infinite.
+
+    Feeds the status ledger's ``n_nan_metrics``/``nan_fields`` columns. Since
+    T08 the runtime scores an expression undefined on part of the evaluation set
+    as ``R2 = 0`` / ``NRMSE = 1`` and counts it in
+    ``n_nonfinite_test_predictions``, so a NaN metric is once again an
+    unambiguous defect signal rather than an expected extrapolation outcome --
+    which is exactly why it is worth counting per run instead of discovering it
+    during analysis (check C1.3).
+    """
+    offenders: list[str] = []
+    for name in ("r2_train", "r2_test", "nrmse_train", "nrmse_test", "mse_test"):
+        value = getattr(run_log.regression, name, None)
+        if isinstance(value, float) and not math.isfinite(value):
+            offenders.append(name)
+    return offenders
 
 
 def _get_ground_truth_sympy(bench: dict[str, Any]):
@@ -692,14 +1015,46 @@ def build_parser() -> argparse.ArgumentParser:
         "(shadow_distinct_* stay unset in run_log.json). If not set, "
         "shadow counting keeps its per-arm default (on for the isalsr arm).",
     )
+    parser.add_argument(
+        "--postprocess",
+        choices=("auto", "skip", "only"),
+        default="auto",
+        help="When to run the post-run block (aggregate.csv, the three paired "
+        "contrasts, the Holm correction, status_ledger.csv). Inside a SLURM "
+        "array every task writes the same shared aggregate.csv/paired_stats.json "
+        "and re-walks the whole output tree to rebuild one status_ledger.csv, "
+        "concurrently, which tears those files and makes the contrasts depend on "
+        "which arms happen to have landed. Use 'skip' in the array tasks and a "
+        "single dependent 'only' job (no search, no data generation) over the "
+        "whole output root afterwards; 'auto' (default) keeps the in-process "
+        "behaviour for local runs.",
+    )
+    parser.add_argument(
+        "--ledger",
+        action="store_true",
+        help="Enable the T06 reachability/fallback counters for the dedup arms "
+        "(sets ISALSR_LEDGER_ENABLED=1). The five fallback rates are the "
+        "evidence base for R1.2 and CANNOT be recovered after the fact: the "
+        "population they describe exists only while a search runs. The "
+        "underlying env var defaults to OFF, so a campaign launched without "
+        "this flag records zeros everywhere.",
+    )
+    parser.add_argument(
+        "--ledger-sample-rate",
+        type=int,
+        default=None,
+        help="Sampling rate for the two O(V+E) reachability counters "
+        "(sets ISALSR_LEDGER_SAMPLE_RATE; 1 = every candidate). The other "
+        "three paths are counted at full rate regardless.",
+    )
     return parser
 
 
-def main() -> None:
+def main() -> int:
     """Parse command-line arguments and run the experiment."""
     args = build_parser().parse_args()
-    run_experiment(args.config, args)
+    return run_experiment(args.config, args)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

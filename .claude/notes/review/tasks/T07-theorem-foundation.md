@@ -9,7 +9,9 @@
 | Blocks | T03 phase 3, T06, T13 |
 | Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis. The **T16 alphabet fork is RESOLVED (2026-07-30, Branch B — the code aligns to the paper)**, so `𝓝 = {Pow}` and Definition 3.9(iv), Rule 1's prose and Definition 3.2 all stand as submitted: **D-2 and D-3 evaporate and §7bis.3 is now empty of work.** What remains for Ezequiel is §7bis.2 alone: the five Lemma 3.14/A.2 gaps plus a sixth, the Theorem 3.13 domain mismatch. All of it is alphabet-independent and none of it is blocked. Remaining for Mario: AC-9 (page cost → T13) and AC-10 (§8). |
 | Target | 2026-08-24 |
-| Proof patch | **Ezequiel's AC-1…AC-4 patch received 2026-08-02 and REVIEWED — do not integrate as-is.** Four blocking items (B1 `fcs:=fcs∘𝒩` contradicts code + the R1.3 answer + D-1; B2 Step 3's CDLL-timing claim false, 4-node counterexample; B3 per-position non-emptiness false; B4 sixth gap untouched, Thm 3.13's domain). Review: `T07-appendix/ezequiel_patch_review_2026-08-02.md`. Nothing pushed to Overleaf. |
+| Proof patch | **Ezequiel's AC-1…AC-4 patch, with all four blocking repairs applied, is INTEGRATED into `reviews/internal_copy_reviewed_article/` (2026-08-03), changes in blue, review notes stripped.** B0 numbering fixed (3.13/3.14/3.15 preserved; new material at 3.16–3.18), B1 `fcs:=fcs∘𝒩` removed everywhere, B2 CDLL-timing claim replaced by a topological induction, B3 non-emptiness restated over the `𝒫ₙ` sweep, B4 Theorem 3.13 widened. Both documents compile clean. Review: `T07-appendix/ezequiel_patch_review_2026-08-02.md`. **Nothing pushed to Overleaf; `article/` untouched.** |
+| R2.1 answer | **WRITTEN** in `reviews/response_to_reviewers.tex`, with `fig_operand_order.pdf`. R1.3 gains the Lemma 3.17 / Corollary 3.18 paragraph. |
+| Code vs theory | **22/22 checks pass on both engines** — `experiments/scripts/t07_theorem_verification.py`, output pinned at `reviews/t07_theorem_verification_output.txt`. No code defect found; the two defects found were in the *harness* (a vacuous-zero population, and a misused `permute_internal_nodes` signature), both fixed. |
 
 ---
 
@@ -1025,6 +1027,58 @@ open with Ezequiel. Nothing was pushed to Overleaf and no file under the Overlea
 checkout was edited. A Spanish draft email covering all issues plus the proposal
 is §6 of the appendix doc.
 
+### 2026-08-03 — Patch integrated into the reviewed copy; R2.1 written; every theorem re-verified against code
+
+**AC-1…AC-4 are discharged in text, AC-9/AC-10 remain.** Ezequiel's five-step
+skeleton, with the four blocking repairs of the 2026-08-02 review applied, is now
+in `reviews/internal_copy_reviewed_article/`, changes in **blue**, all `[MPG …]`
+review notes and all red markup stripped. Both documents compile clean (0 errors,
+0 undefined references). **Numbering confirmed from the rebuilt PDF: Theorem
+3.13 / Lemma 3.14 / Theorem 3.15 exactly as the reviewers cite them**, with the
+new Definition 3.16, Lemma 3.17 and Corollary 3.18 after Theorem 3.15. Paper
+still 13 pages, supplementary 12.
+
+**Independent verification of every formal statement against both engines.**
+`experiments/scripts/t07_theorem_verification.py` (deterministic, seed 20260803,
+output pinned at `reviews/t07_theorem_verification_output.txt`): **22/22 PASS**.
+It implements a *free-choice D2S sampler* — the procedure Definition 3.5
+quantifies over — which is what makes the widened Theorem 3.13 testable rather
+than merely asserted.
+
+| Check | Result |
+|---|---|
+| Def 3.5 loose reading breaks Thm 3.13 | `NV^Nc` on `x₁^x₂`: 3 nodes / 2 edges placed, decodes to `x₂^x₁`, `is_isomorphic=False` |
+| Thm 3.13 widened, corrected Def 3.5 | **2,000** free-choice runs, **0** non-isomorphic |
+| Thm 3.13 under the **submitted** Def 3.5 (POW-dense population) | **3,538 / 4,548 = 77.79 %** non-isomorphic — the defect is typical, not a curiosity |
+| Lemma A.2 Step 3, Rule 1 defers (POW-only) | **4,548** runs, **4,081** exercised an exclusion, **0** stranded |
+| Lemma A.2 Step 4, `|E|` accepted operations | 400 DAGs, 0 mismatches; the patch's `(|V|−m)+|E|` matched **0** times |
+| Thm 3.15 (⇐)/(⇒) | 18,280 permutations 0 fails; 629 colliding pairs 0 non-isomorphic |
+| Lemma 3.17 (i)–(iv) | 400 host DAGs; acyclicity, reachability, equivariance, evaluation all 0 failures |
+| Corollary 3.18 | 2,100 permutation tests on host DAGs, 0 failures |
+| `𝒩` out of the canonicaliser | orphan CONST refused on **both** engines; `𝒩(D)` canonicalises, engines agree |
+| Engine equivalence | 400 DAGs, 0 disagreements |
+
+**One harness defect worth recording, because it is the failure mode this ticket
+has hit twice.** The first version measured the loose Def 3.5 reading on random
+S2D DAGs and reported a rate that swung 0.5 % → 0.1 % → 0.0 % across seeds. Cause:
+a random S2D string rarely closes a binary op's second operand, so almost every
+binary op there has in-degree 1 and the first-operand restriction *cannot bite*.
+The zero was **vacuous**, exactly like T07's earlier `Const`-free generator and
+P2/P5's first run. The check was moved to a POW-dense generator that can exhibit
+the phenomenon, and the vacuous variant deleted with a comment saying why.
+**No rate from the random-S2D population may be quoted for this property.**
+
+**Response letter written** (`reviews/response_to_reviewers.tex`): R2.1 in full,
+plus the R1.3 addendum naming Lemma 3.17 / Corollary 3.18. New figure
+`fig_operand_order.pdf`, generated from live code by
+`experiments/scripts/generate_fig_operand_order.py`, which asserts equal node
+sets, equal edge sets, differing operand orders, non-isomorphism and differing
+canonical strings before drawing. Letter compiles: 17 pages, 0 Overfull, 0
+unresolved references, 0 warnings; `rcomment` blocks verified untouched.
+
+**Nothing pushed to Overleaf**, and no file under `article/` was edited — only
+`reviews/` and `reviews/internal_copy_reviewed_article/`.
+
 ---
 
 ## 7bis. Hand-over to Ezequiel — what is left, and what is now settled
@@ -1248,56 +1302,46 @@ statement of the precondition it assumes. Alphabet-independent.
 
 | Item | Submitted | Revised | Source |
 |---|---|---|---|
-| Proof of Lemma A.2, length | 14 lines | | |
-| Gap 1 — termination | not addressed | | AC-4 |
-| Gap 2 — pools claimed identical (false) | asserted | | AC-2 |
-| Gap 3 — Rule 1 non-exclusion | informal, in Def 3.8 | | AC-1 |
-| Gap 4 — κ-minimal choice ∈ 𝒲(D) | not shown | | AC-1 |
-| Gap 5 — reachability hypothesis used | never invoked | | AC-3 |
-| `normalize_const_creation` defined | **nowhere** | | AC-5 |
-| Its complexity stated | no | | AC-5 |
-| Theorem 3.15 mentions normalisation | no | | AC-6 |
-| Counterexample without normalisation | not given | | AC-7 |
-| Tests covering the above | — | | AC-7 |
-| Theorem restatements in Appendix A | verbatim duplicates | | AC-9 / T13 |
+| Proof of Lemma A.2, length | 14 lines | 5 labelled steps, ~95 lines | AC-1 |
+| Gap 1 — termination | not addressed | Step 4, measure argument, **`|E|`** accepted operations | AC-4 |
+| Gap 2 — pools claimed identical | asserted | **derived** `𝒞_j = 𝒟_j`, Step 2 — the ticket had this backwards; Rule 1 restates D2S's own predicate | AC-2 |
+| Gap 3 — Rule 1 non-exclusion | informal, in Def 3.8 | Step 3, topological induction; the false CDLL-timing claim removed from Def 3.8 too | AC-1 |
+| Gap 4 — κ-minimal choice ∈ 𝒲(D) | not shown | Step 5, from `𝒞_j = 𝒟_j` | AC-1 |
+| Gap 5 — reachability hypothesis used | never invoked | Step 3, base case **and** closure of the induction | AC-3 |
+| Gap 6 — Thm 3.13's domain | `D = S2D(w,m)`, one string | widened to every labeled DAG satisfying reachability and every `w ∈ 𝒲(D)`; **proof unchanged** | new |
+| Def 3.5's first-operand restriction | **absent — Thm 3.13 false** | stated in Def 3.5 and Table 2 | new |
+| `normalize_const_creation` defined | **nowhere** | Definition 3.16, with complexity `O(|C| m (|V|+|E|))` | AC-5 |
+| Theorem 3.15 mentions normalisation | no | **no, and correctly so** — `𝒩` is out of the canonicalisation path | AC-6 |
+| Interface argument for host DAGs | **never made** | Lemma 3.17 + Corollary 3.18, after Thm 3.15 | new |
+| Tests covering the above | — | 22/22 in `t07_theorem_verification.py`, both engines | AC-7 |
 
 ### 8.2 Changes made to the manuscript
 
-| File | Lines (revised) | Change |
-|---|---|---|
-| `article/paper/methodology.tex` | | |
-| `article/supplementary/supplementary.tex` | | |
+Applied to `reviews/internal_copy_reviewed_article/`, changes in blue. **Not**
+pushed to Overleaf and **not** applied under `article/`.
 
-### 8.3 Draft response text
+| File | Change |
+|---|---|
+| `paper/methodology.tex` | Def 3.5 gains the first-operand restriction and the `NV^Nc` counterexample; Def 3.8 gains the precondition sentence and loses the false timing claim; Rule 1's prose replaced by the deferral argument; Thm 3.13 widened; Thm 3.15 **untouched**; new §3.6 "The host-solver interface" with Definition 3.16, Lemma 3.17, Corollary 3.18 |
+| `supplementary/supplementary.tex` | Thm A.1 statement mirrors 3.13 and its proof opens on "a D2S run"; part (iv) cites the restriction; Lemma A.2 proof replaced by the five steps; Thm A.3 **untouched**; Lemma 3.17 restated with its four-clause proof; Table 2's two insertion guards gain `σ(v)=ε or σ(v)[0]=u`; Table 3's first line becomes the Precondition |
+| `reviews/response_to_reviewers.tex` | R2.1 written; R1.3 gains the Lemma 3.17 / Corollary 3.18 paragraph; Table 1 rows for R1.3 and R2.1; `\fcs`, `rlemma`, `rcoro` added to the preamble |
+| `reviews/fig_operand_order.pdf` | new figure for R2.1, generated from live code |
 
-```latex
-%% --- R2.1 ---
-\begin{response}
-%% Structure that works here:
-%%  1. Accept the criticism directly. The reviewer is right, and gap 2 is worse
-%%     than they said -- the proof's own central sentence is false, because Rule 1
-%%     does restrict the pool. Saying this ourselves is worth more than being
-%%     told it in round 2.
-%%  2. Walk the five gaps and say where each is now discharged, with line numbers.
-%%  3. Note that the reachability hypothesis is now consumed at an identified
-%%     step, since it was previously stated and unused.
-%%  4. Note the added tests, so the proof has an executable counterpart.
-\changeref{}
-\end{response}
+### 8.3 Response text — WRITTEN
 
-%% --- R1.3 ---
-\begin{response}
-%% Structure that works here:
-%%  1. Confirm the omission -- the step appeared once, in pseudocode, undefined.
-%%  2. State plainly that it is a precondition of Theorem 3.15, not preprocessing:
-%%     without it the theorem is false for DAGs with Const nodes. Give the
-%%     counterexample from AC-7.
-%%  3. Point at the new numbered definition and the amended theorem statement.
-%%  4. If T06 confirms the constant-subexpression mechanism, connect the two
-%%     comments: this step is also what makes R1.2's precondition hold in practice.
-\changeref{}
-\end{response}
-```
+Both are in `reviews/response_to_reviewers.tex`. Note that the R2.1 structure
+sketched here was **wrong on gap 2** and was not followed: the letter does not
+concede that "exactly the same candidate pool as D2S" is false, because it is
+true of the two algorithms. The concession the letter makes instead is the
+correct one, that Definition 3.5 described D2S without its first-operand
+restriction and Theorem 3.13 is false under that reading.
+
+R2.1 runs: concede; name Definition 3.5 as the root defect and show it with
+Figure 3; note the restriction is already used by Theorem 3.13's own proof at
+part (iv), so no proof changes; derive `𝒞_j = 𝒟_j`; widen Theorem 3.13; walk the
+five steps as prose; report the free-choice verification; volunteer the
+termination-versus-cost limitation; state that no reported number changes;
+cross-link R1.3 and R2.4.
 
 ### 8.4 Residual risk
 
