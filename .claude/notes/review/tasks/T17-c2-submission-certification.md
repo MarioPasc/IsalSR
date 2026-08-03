@@ -386,6 +386,61 @@ counters demonstrably alive — or the failing cells are individually named.*
 | B7 | **PASS. `sbatch --test-only` exit 0 on all 42 arrays**, task counts exactly as intended |
 | B9 | in flight |
 
+#### C3 — dedup-off equivalence control (the most valuable check here)
+
+A `nodedup` arm was added to both hosts: the wrapper stays installed and keeps
+canonicalising and counting, but **suppression is disabled**, so every candidate the
+baseline would evaluate is still evaluated. That isolates *"the wrapper perturbs the
+search"* from *"dedup changes the search"*, which is the effect we claim.
+
+| host | best expression | `r2_train` | `total_dags_explored` | verdict |
+|---|---|---|---|---|
+| **UDFS** | identical | **identical bit-for-bit** | 766 vs 771 (+0.65 %) | **PASS** |
+| **Bingo** | differs (algebraically identical function) | identical (1.0) | 41,061 vs 70,640 | **criterion untestable — see below** |
+
+**UDFS passes outright.** An outermost recorder of every `evaluate_cgraph` host-native
+hash gives a **313/313 identical candidate-stream prefix** between `baseline` and
+`nodedup`. The 766-vs-771 gap is wall-clock truncation, not path divergence — a
+baseline-vs-baseline *repeat* only matches to 311. The wrapper does not perturb the
+UDFS search.
+
+**Bingo cannot satisfy an exact-equality criterion, because the baseline does not
+reproduce itself.** Verified independently in the main tree — three identical
+`--variants baseline --seeds 0` invocations:
+
+| run | `total_dags_explored` | best expression |
+|---|---|---|
+| 1 | **155,449** | `x_0*((x_0 + 0.5)**2 - 0.2…)` |
+| 2 | 41,023 | `x_0**3 + x_0**2 + x_0` |
+| 3 | 41,049 | `x_0**3 + x_0**2 + x_0` |
+
+A 3.8× spread in candidates explored and two different symbolic forms, at one seed.
+Two mechanisms, and they compound: **(i)** the protocol budgets by **wall clock**, not
+by generations (§5.4), so how far the search gets is machine-state dependent by
+construction; **(ii)** floating-point and iteration-count jitter inside the LM constant
+optimiser — at generation 0, with RNG-state digests bit-identical and 500 outer fitness
+calls in both, the inner evaluation counts still differ.
+
+**The residual is bounded, which is what §4.3 C3 requires when exact reproduction is
+unachievable for a principled reason:** the wrapper's generation-0 perturbation is
+**3 inner evaluations**, while baseline-vs-baseline self-noise is **12**. The wrapper's
+effect is smaller than the noise floor of the thing it is being compared against.
+
+**Consequence to carry into the paper, not to discover in review:** any claim of
+per-seed determinism for Bingo is false. The paired design survives — both arms carry
+the same noise and CPDT pools over problems, not seeds — but the response letter must
+say so rather than implying seed-level reproducibility.
+
+#### A third counter inconsistency, same root as the trajectory bug
+
+`bingo/runner.py:427` sets the **baseline** arm's `n_total_dags = total_evals`
+(`ExplicitRegression.eval_count`, which includes LM inner calls), while the wrapper arms
+report `dedup.n_total` (individuals entering `_serial_eval`). The two differ by the same
+**3.3–4.1×** LM inflation factor as the trajectory defect. ρ is unaffected — it is
+computed within an arm from a matching numerator and denominator — but **a cross-arm
+comparison of `total_dags_explored` for Bingo compares two different quantities.** Do not
+put baseline and dedup-arm "DAGs explored" in the same column without reconciling them.
+
 #### Two findings that outlive this ticket
 
 1. 🔴 **Canonical-string completeness — 5 counterexamples.** `fcs(D) == fcs(S2D(fcs(D)))` **and** `D ≇ S2D(fcs(D))` on 5 of 10,000 generated DAGs (`k ∈ {13,15,17,18,19}`): two non-isomorphic labeled DAGs sharing a canonical string, i.e. an **unsound merge**, which biases ρ upward. Engine-independent, so present in the Python code that produced C1. The precondition artefact is ruled out — no case has an in-degree-0 CONST, and three of the five also have no VAR as an edge target. **Distinct from T15**, whose failures *raise*. Owner **T07**; blocking for Stage F, not Stage C. Write-up: `docs/md_files/changes/canonical_completeness_counterexamples.md`
