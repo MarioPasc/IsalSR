@@ -99,8 +99,16 @@ record $? "B1 environment + datasets"
 # label mix rather than only Add/Mul.
 note "B3 -- alphabet gate (decomposed Sigma_SR)"
 B3_RC=0
+# Problem choice matters more than the budget here.  Bingo SOLVES Nguyen-1
+# (x^3+x^2+x) inside the first generations, so under a bounded budget it stops
+# before any candidate reaches the canonicaliser and the gate reports
+# "DAGs observed: 0" -- a dead measurement, which the gate rightly refuses.
+# (Observed: job 1751926.)  Both Bingo problems below are structurally hard
+# enough that the search is still producing candidates when the budget expires.
+# UDFS enumerates systematically and does not converge away, so Nguyen-1 is fine
+# for it (verified PASS on job 1751925).
 if [[ "${METHOD}" == "bingo" ]]; then
-    B3_PAIRS="bingo_nguyen:Nguyen-1 bingo_hard:Pagie-1"
+    B3_PAIRS="bingo_hard:Pagie-1 bingo_cherrypicked:I.29.16"
 else
     B3_PAIRS="udfs_nguyen:Nguyen-1 udfs_hard:Keijzer-6"
 fi
