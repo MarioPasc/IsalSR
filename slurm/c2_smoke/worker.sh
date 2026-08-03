@@ -74,6 +74,20 @@ PYTHON="${CONDA_PREFIX}/bin/python"
 # produces a complete, plausible, WRONG result set.
 # ---------------------------------------------------------------------------
 TASK_ID="${SLURM_ARRAY_TASK_ID:-1}"
+
+# The launcher ships the seed list COLON-separated because sbatch --export is
+# comma-separated and would otherwise truncate "0,101,102" to "0". Accept either
+# form, then assert the count matches what the array was sized for -- a silently
+# short seed list is the exact failure that made 2/3 of the first wave die with
+# "index out of range" while the other 1/3 produced correct-looking cells.
+SEEDS="${SEEDS//:/,}"
+N_SEEDS_DECODED=$(awk -F, '{print NF}' <<<"${SEEDS}")
+if [[ "${N_SEEDS_DECODED}" -lt 2 ]]; then
+    echo "[FATAL] C2_SEEDS decoded to ${N_SEEDS_DECODED} seed(s): '${SEEDS}'." >&2
+    echo "        Stage C requires three. Check the launcher's --export quoting." >&2
+    exit 1
+fi
+
 SPEC="$("${PYTHON}" -m experiments.scripts.c2_task_spec \
             --config "${CONFIG}" --seeds "${SEEDS}" --index "${TASK_ID}")"
 PROBLEM_NAME="$(awk '{print $1}' <<<"${SPEC}")"

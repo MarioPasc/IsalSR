@@ -33,6 +33,14 @@ LOGS_DIR="${C2_LOGS_DIR:-/mnt/home/users/tic_163_uma/mpascual/execs/isalsr/c2_sm
 ACCOUNT="tic_163_uma"
 
 SEEDS="0,101,102"          # T17 §0.1: outside campaign 1..20 AND the 21..30 top-up range
+# 🔴 sbatch --export is COMMA-separated, so a comma inside a VALUE is parsed as
+# the start of the next variable. Exporting C2_SEEDS=0,101,102 delivered
+# C2_SEEDS=0 to the worker -- one seed instead of three -- so every array had
+# n_problems valid indices instead of n_problems*3 and every task above that
+# died with "index N out of range". Worse, the tasks that DID run produced
+# correct-looking seed-0 cells, so the array was 1/3 right and 2/3 failed rather
+# than failing outright. Ship the list colon-separated; the worker translates.
+SEEDS_EXPORT="${SEEDS//,/:}"
 MAX_TIME=900               # payload budget, seconds.  Never the production 43,200
 WALL="0-00:40:00"          # SLURM limit: >2x the payload, so a SLURM kill means a real defect (C1.12)
 THROTTLE="${C2_THROTTLE:-8}"   # per array; 42 arrays x 8 = up to 336 concurrent (§8.2 target ~300)
@@ -156,7 +164,7 @@ for METHOD in "${METHODS[@]}"; do
           --account="${ACCOUNT}"
           --output="${LOGS_DIR}/${JOB_NAME}_%A_%a.out"
           --error="${LOGS_DIR}/${JOB_NAME}_%A_%a.err"
-          --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=${SUITE},C2_CONFIG=${CONFIG},C2_SEEDS=${SEEDS},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT}"
+          --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=${SUITE},C2_CONFIG=${CONFIG},C2_SEEDS=${SEEDS_EXPORT},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT}"
           "${SCRIPT_DIR}/worker.sh"
       )
 
