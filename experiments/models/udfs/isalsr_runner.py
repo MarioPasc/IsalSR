@@ -76,6 +76,7 @@ SHADOW_FIELDS: dict[FixedOrder, str] = {
 # is keyed on the host's own ``node_dict`` entries in the host's own key order,
 # so it is the only shadow counter that is free of the adapter's renumbering.
 SHADOW_HOST_NATIVE_FIELD = "shadow_distinct_host_native"
+SHADOW_FAILURES_FIELD = "n_shadow_failures"
 
 
 def udfs_host_native_records(cgraph: Any) -> list[HostNativeRecord]:
@@ -249,9 +250,17 @@ class _CanonicalDeduplicator:
         offered to :meth:`record_shadow`; otherwise the counter has no defined
         value and the RunLog field stays ``None``.
         """
+        if not self._shadow:
+            return {}
         counts = {SHADOW_FIELDS[order]: sketch.count() for order, sketch in self._shadow.items()}
         if self._shadow_host_native is not None and self._host_native_offered:
             counts[SHADOW_HOST_NATIVE_FIELD] = self._shadow_host_native.count()
+        # Ships with the cardinalities, not beside them: a count is only
+        # interpretable together with the number of records that failed to
+        # serialise.  Reported only when the sketches actually ran, so a
+        # shadow-off run leaves the field None rather than claiming zero
+        # failures for work it never did.
+        counts[SHADOW_FAILURES_FIELD] = self.n_shadow_failures
         return counts
 
     def _resolve_canonical_hash(self, labeled_dag: Any, host: Any = None) -> int | None:

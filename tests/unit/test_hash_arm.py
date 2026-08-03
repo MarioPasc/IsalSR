@@ -15,7 +15,9 @@ parity between the arm's deduplicator and the reference implementation in
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -190,13 +192,17 @@ def test_shadow_counters_track_all_three_orders(module_name: str) -> None:
         dedup.record_shadow(dag)  # duplicates must not inflate the estimate
 
     counts = dedup.shadow_counts()
-    assert set(counts) == {
+    orders = {
         "shadow_distinct_insertion",
         "shadow_distinct_topological",
         "shadow_distinct_topological_commutative",
     }
-    for key, value in counts.items():
-        assert value == pytest.approx(len(dags), rel=0.05), key
+    # No host was offered, so the host-native sketch stays undefined; the
+    # failures counter ships alongside the cardinalities and is not one of them.
+    assert set(counts) == orders | {"n_shadow_failures"}
+    for key in orders:
+        assert counts[key] == pytest.approx(len(dags), rel=0.05), key
+    assert counts["n_shadow_failures"] == 0
 
 
 @pytest.mark.parametrize("module_name", ["bingo", "udfs"])
@@ -210,6 +216,142 @@ def test_shadow_memory_is_constant_in_stream_length(module_name: str) -> None:
     for _ in range(2000):
         dedup.record_shadow(dag)
     assert len(dedup._shadow[FixedOrder.TOPOLOGICAL]._registers) == before  # type: ignore[index]
+
+
+# ----------------------------------------------------------------------
+# Shadow counter #4 -- the host-native sketch
+# ----------------------------------------------------------------------
+#
+# This is the ONLY same-stream measurement free of the adapter-renumbering
+# bias.  The adapters reorder nodes (VAR, then CONST, then topological) before
+# the other three sketches see them, which pre-canonicalises the DAG and
+# flatters the naive baseline: on the 2026-08-02 Picasso probe the adapter-order
+# rung 3 reported that a fixed-order serialisation captures 94.6 % of UDFS's
+# reduction, while the host-native *arm* on the same host and problems captured
+# 0 %.  Only the host-native sketch can be quoted.
+#
+# It shipped in commit a24d73c, after the probe was submitted at a4206b8, so it
+# had never executed anywhere -- no unit test, never on Picasso.  These tests
+# close the local half of that gap.
+
+
+def _bingo_hosts(mod: Any, count: int) -> list[Any]:
+    """Stub ``AGraph``s honouring the contract of ``bingo_host_native_records``.
+
+    Needs only ``command_array`` and ``get_utilized_commands()``.  Op codes are
+    drawn from the module's own arity sets so the stub cannot drift from the
+    extractor's branching.
+    """
+    import numpy as np
+
+    binop = sorted(mod.BINGO_BINARY_OPS)[0]
+    term = next(
+        c for c in range(64) if c not in mod.BINGO_BINARY_OPS and c not in mod.BINGO_UNARY_OPS
+    )
+
+    class _StubAGraph:
+        def __init__(self, rows: list[tuple[int, int, int]]) -> None:
+            self.command_array = np.array(rows, dtype=int)
+            self._n = len(rows)
+
+        def get_utilized_commands(self) -> list[bool]:
+            return [True] * self._n
+
+    return [
+        _StubAGraph([(term, 0, 0)] + [(binop, r, 0) for r in range(depth)])
+        for depth in range(1, count + 1)
+    ]
+
+
+def _udfs_hosts(_mod: Any, count: int) -> list[Any]:
+    """Stub ``CompGraph``s honouring the contract of ``udfs_host_native_records``.
+
+    Needs only ``node_dict`` mapping ``key -> (children, op)``.
+    """
+
+    class _StubCompGraph:
+        def __init__(self, node_dict: dict[int, tuple[list[int], str]]) -> None:
+            self.node_dict = node_dict
+
+    hosts = []
+    for depth in range(1, count + 1):
+        node_dict: dict[int, tuple[list[int], str]] = {0: ([], "inp")}
+        for i in range(1, depth + 1):
+            node_dict[i] = ([i - 1], "sin")
+        hosts.append(_StubCompGraph(node_dict))
+    return hosts
+
+
+_HOST_BUILDERS = {"bingo": _bingo_hosts, "udfs": _udfs_hosts}
+
+
+@pytest.mark.parametrize("module_name", ["bingo", "udfs"])
+def test_shadow_failures_are_persisted_not_only_logged(module_name: str) -> None:
+    """``n_shadow_failures`` must reach the RunLog, not just an INFO log line.
+
+    It is the only evidence that the four cardinalities mean what they say. While
+    it lived solely in stderr, verifying a campaign meant grepping one file per
+    task and depended on log retention and on the line staying at INFO.
+    """
+    mod = pytest.importorskip(f"experiments.models.{module_name}.isalsr_runner")
+    dedup = mod._CanonicalDeduplicator(shadow_hash=True)
+    host = _HOST_BUILDERS[module_name](mod, 1)[0]
+    dedup.record_shadow(_two_var_dag(), host)
+
+    counts = dedup.shadow_counts()
+    assert counts["n_shadow_failures"] == 0
+
+    # It must survive the orchestrator's splat into the frozen dataclass, which
+    # is the actual persistence path (orchestrator.py: dataclasses.replace).
+    space = SearchSpaceResults(
+        total_dags_explored=1,
+        unique_canonical_dags=1,
+        empirical_reduction_factor=1.0,
+        max_internal_nodes_seen=1,
+        theoretical_reduction_bound=1.0,
+        redundancy_rate=0.0,
+    )
+    assert space.n_shadow_failures is None, "must default to None when shadow is off"
+    merged = dataclasses.replace(space, **counts)
+    assert merged.n_shadow_failures == 0
+    assert merged.shadow_distinct_host_native is not None
+
+
+@pytest.mark.parametrize("module_name", ["bingo", "udfs"])
+def test_shadow_counts_empty_when_shadow_off(module_name: str) -> None:
+    """Shadow off must yield no entries at all — not a zero failure count.
+
+    Reporting ``n_shadow_failures = 0`` for a run that never fed a sketch would
+    claim a clean bill of health for work that was never done.
+    """
+    mod = pytest.importorskip(f"experiments.models.{module_name}.isalsr_runner")
+    dedup = mod._CanonicalDeduplicator(shadow_hash=False)
+    dedup.record_shadow(_two_var_dag())
+    assert dedup.shadow_counts() == {}
+
+
+@pytest.mark.parametrize("module_name", ["bingo", "udfs"])
+def test_shadow_failures_counted_when_extractor_breaks(
+    module_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A broken extractor must surface in the persisted field, not just in logs.
+
+    Complements ``test_shadow_host_native.py``, which pins the same behaviour on
+    the in-memory attribute; this one pins that the failure reaches
+    ``shadow_counts()`` and therefore the RunLog, which is what Stage C reads.
+    """
+    mod = pytest.importorskip(f"experiments.models.{module_name}.isalsr_runner")
+    dedup = mod._CanonicalDeduplicator(shadow_hash=True)
+
+    def _boom(_host: Any) -> list[Any]:
+        raise RuntimeError("extractor is broken")
+
+    monkeypatch.setattr(mod, f"{module_name}_host_native_records", _boom)
+
+    host = _HOST_BUILDERS[module_name](mod, 1)[0]
+    dedup.record_shadow(_two_var_dag(), host)
+
+    assert dedup.shadow_counts()["n_shadow_failures"] == 1
 
 
 # ----------------------------------------------------------------------

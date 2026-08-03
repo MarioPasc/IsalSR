@@ -114,7 +114,10 @@ def test_host_native_absent_when_no_host_is_ever_offered(module_name: str) -> No
     dedup = mod._CanonicalDeduplicator(shadow_hash=True)
     for n_sin in range(3):
         dedup.record_shadow(_chain_dag(n_sin))
-    assert set(dedup.shadow_counts()) == set(ADAPTER_ORDER_FIELDS)
+    # ``n_shadow_failures`` ships alongside the cardinalities (added 2026-08-02
+    # so campaign verification reads a field instead of grepping one stderr file
+    # per task); it is not one of them.
+    assert set(dedup.shadow_counts()) == set(ADAPTER_ORDER_FIELDS) | {"n_shadow_failures"}
 
 
 @pytest.mark.parametrize("module_name", ["bingo", "udfs"])
