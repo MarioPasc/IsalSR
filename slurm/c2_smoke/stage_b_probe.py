@@ -166,11 +166,18 @@ def b9_overhead(with_ledger: Path, without_ledger: Path) -> dict[str, Any]:
         not counting, not that the rates are zero.
     """
 
+    # run_log.json nests every result block under "results" -- its top-level
+    # keys are only {metadata, results, best_expression}. Reading
+    # rl["search_space"] therefore silently returns {} and every ledger field
+    # comes back None, which this function would then report as DEAD COUNTERS.
+    # That is a false alarm on the single check whose entire purpose is telling
+    # a dead counter from a live one, so resolve the path explicitly.
     def _load(seed_dir: Path) -> dict[str, Any] | None:
         hits = sorted(seed_dir.rglob("run_log.json"))
         if not hits:
             return None
-        return json.loads(hits[0].read_text())
+        raw = json.loads(hits[0].read_text())
+        return raw.get("results", raw)
 
     on = _load(with_ledger)
     off = _load(without_ledger)
@@ -180,9 +187,21 @@ def b9_overhead(with_ledger: Path, without_ledger: Path) -> dict[str, Any]:
             "error": f"missing run_log (on={on is not None}, off={off is not None})",
         }
 
+    # The cost block is named "time" in run_log.json, not "computational_cost".
+    # Accept both so this keeps working if the schema is ever renamed, but do
+    # not fall back to 0.0 silently -- a zero here would read as "no overhead"
+    # when it actually means "field not found", which is the same class of
+    # false-negative as the dead-counter bug above.
     def _search_s(rl: dict[str, Any]) -> float:
-        cost = rl.get("computational_cost", {})
-        return float(cost.get("wall_clock_search_only_s") or cost.get("wall_clock_total_s") or 0.0)
+        cost = rl.get("time") or rl.get("computational_cost") or {}
+        val = cost.get("wall_clock_search_only_s") or cost.get("wall_clock_total_s")
+        if val is None:
+            raise KeyError("no wall-clock field in the run log's cost block")
+        return float(val)
+
+    def _canon_s(rl: dict[str, Any]) -> float:
+        cost = rl.get("time") or rl.get("computational_cost") or {}
+        return float(cost.get("canonicalization_runtime_s") or 0.0)
 
     ss = on.get("search_space", {})
     sampled = ss.get("n_ledger_sampled")
@@ -194,6 +213,8 @@ def b9_overhead(with_ledger: Path, without_ledger: Path) -> dict[str, Any]:
     return {
         "search_s_with_ledger": t_on,
         "search_s_without_ledger": t_off,
+        "canon_s_with_ledger": _canon_s(on),
+        "canon_s_without_ledger": _canon_s(off),
         "overhead_pct": overhead_pct,
         "ledger_enabled": enabled,
         "n_ledger_seen": ss.get("n_ledger_seen"),
