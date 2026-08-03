@@ -60,7 +60,7 @@ abort after a complete run.
 | Shape | `{baseline, hash, isalsr} × {UDFS, Bingo} × 70 problems × 3 seeds` = **1,260 tasks**, `max_time = 900 s` |
 | Seeds | **0, 101, 102** — three, and disjoint from both the campaign set (1…20) and the reserved top-up set (21…30). §0.1 explains why three and not one |
 | Cost | ≈315 core-hours — **0.3 % of the campaign it certifies** |
-| Status | **NOT STARTED** |
+| Status | **IN PROGRESS (2026-08-03).** Three launch blockers closed (§2.1 `--ledger`, §2.2 topology → 42 arrays, and a newly-found post-processing race). Stage A done bar A1/A6; Stage B green on B1/B2/B3/B4/B6b/B7, B9 in flight. Harness built and `--test-only` clean on 42/42. **Escalated, not blocking Stage C:** five canonical-string completeness counterexamples (T07). **Blocking C2, not Stage C:** FSCRATCH file headroom and the HOME quota grace |
 
 ---
 
