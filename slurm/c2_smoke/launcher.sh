@@ -64,9 +64,9 @@ SUITES=(nguyen feynman hard cherrypicked roundoff feynman_remainder strogatz)
 # figure §8.2 needs from this stage. Set from measurement, not from history.
 mem_for() {
     case "$1:$2" in
-        bingo:isalsr)  echo "${C2_MEM_BINGO_ISALSR:-48}" ;;
-        bingo:*)       echo "${C2_MEM_BINGO:-32}" ;;
-        udfs:*)        echo "${C2_MEM_UDFS:-16}" ;;
+        bingo:isalsr)  echo "${C2_MEM_BINGO_ISALSR:-16}" ;;
+        bingo:*)       echo "${C2_MEM_BINGO:-16}" ;;
+        udfs:*)        echo "${C2_MEM_UDFS:-8}" ;;
     esac
 }
 
