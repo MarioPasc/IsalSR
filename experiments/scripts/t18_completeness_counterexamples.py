@@ -125,7 +125,8 @@ def render(rows: list[dict[str, Any]]) -> str:
         "",
         "## Summary",
         "",
-        "| # | k | vars | engines agree | same class | isomorphic | in-deg-0 CONST | VAR as target |",
+        "| # | k | vars | engines agree | same class | isomorphic | in-deg-0 CONST "
+        "| VAR as target |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
