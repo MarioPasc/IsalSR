@@ -1657,15 +1657,43 @@ def check_c2(root: Path, expected: set[tuple[str, str, str, int]]) -> CriterionR
     )
 
 
+#: Problems whose sampling protocol is a DETERMINISTIC GRID, so every seed
+#: yields byte-identical data by construction. This is the published protocol
+#: for both (and ``CLAUDE.md`` says explicitly not to "fix" their shapes), not a
+#: seeding defect: Pagie-1 is a 26x26 grid with the origin skipped (676/2500)
+#: and Keijzer-6 is an integer grid (50/120, an extrapolation benchmark).
+#: Verified empirically 2026-08-04: these are the ONLY 2 of the 70 problems that
+#: are seed-invariant.
+#:
+#: The consequence must be disclosed rather than silently exempted: for these
+#: two, the campaign's seeds replicate the SEARCH's RNG only, not the data, so
+#: they carry no data-level replication. Every other problem replicates both.
+SEED_INVARIANT_PROBLEMS: frozenset[str] = frozenset({"Pagie-1", "Keijzer-6"})
+
+
 def check_c4(cells: list[Cell]) -> CriterionResult:
     """C4 -- cross-arm data identity via ``metadata.data_fingerprint``.
 
-    Two independent assertions. First, every ``(problem, seed)`` must carry ONE
-    fingerprint across all arms and methods: a disagreement means the paired
-    tests compared different samples. Second, the fingerprints of distinct
-    ``(problem, seed)`` pairs must be mutually distinct: a repeat means the seed
-    is not reaching the generator, which would silently collapse three seeds
-    into one.
+    Three assertions, deliberately separated because they fail for different
+    reasons and only two of them are defects (amended 2026-08-04, after the
+    first Stage C certification returned 203 distinct fingerprints against a
+    flat expectation of 210):
+
+    1. **Cross-arm identity (blocking).** Every ``(problem, seed)`` carries ONE
+       fingerprint across all arms and methods. A disagreement means the paired
+       tests compared different samples and the design is void. This is the
+       property C4 exists to protect.
+    2. **Cross-problem distinctness (blocking).** Two *different problems* must
+       not share a fingerprint. A collision means the suite contains a duplicate
+       and the CPDT, which treats each problem as one paired observation, counts
+       the same observation twice.
+    3. **Cross-seed distinctness (advisory, with a declared exemption).** Within
+       one problem, different seeds should yield different data -- except for
+       :data:`SEED_INVARIANT_PROBLEMS`, whose sampling is a deterministic grid.
+
+    The original criterion conflated all three into "210 mutually distinct", so
+    a correct deterministic-grid problem and a genuine duplicate produced the
+    same undifferentiated failure.
     """
     fp_by_cell: dict[tuple[str, int], set[str]] = defaultdict(set)
     fp_counts: Counter[str] = Counter()
@@ -1690,42 +1718,86 @@ def check_c4(cells: list[Cell]) -> CriterionResult:
         for (problem, seed), fps in sorted(fp_by_cell.items())
         if len(fps) > 1
     ]
-    collisions = [
-        f"{fp[:16]}...: shared by {sorted(owners)}"
-        for fp, owners in sorted(fp_owners.items())
-        if len(owners) > 1
-    ]
+    # Split every collision by WHY it happened. A fingerprint shared by two
+    # different problems is a duplicate in the suite; one shared by two seeds of
+    # the SAME problem is a seeding failure -- unless that problem's sampling is
+    # a declared deterministic grid, in which case it is the protocol.
+    duplicate_problems: list[str] = []
+    seed_collapse: list[str] = []
+    exempt_seed_collapse: list[str] = []
+    for fp, owners in sorted(fp_owners.items()):
+        if len(owners) <= 1:
+            continue
+        problems = {problem for problem, _ in owners}
+        if len(problems) > 1:
+            duplicate_problems.append(
+                f"{fp[:16]}...: distinct problems {sorted(problems)} generate identical data "
+                f"(owners {sorted(owners)})"
+            )
+        elif problems <= SEED_INVARIANT_PROBLEMS:
+            exempt_seed_collapse.append(
+                f"{fp[:16]}...: {sorted(problems)[0]} identical across seeds "
+                f"{sorted(seed for _, seed in owners)} -- deterministic grid, expected"
+            )
+        else:
+            seed_collapse.append(
+                f"{fp[:16]}...: {sorted(problems)[0]} identical across seeds "
+                f"{sorted(seed for _, seed in owners)} -- the seed is not reaching the generator"
+            )
+
     expected_multiplicity = n_arms * n_methods
+    # Multiplicity is only meaningful once the legitimate exemptions are taken
+    # out: a deterministic-grid problem correctly appears 3x expected_multiplicity.
+    exempt_fps = {
+        fp
+        for fp, owners in fp_owners.items()
+        if len(owners) > 1 and {p for p, _ in owners} <= SEED_INVARIANT_PROBLEMS
+    }
     wrong_multiplicity = [
         f"{fp[:16]}... appears {n}x (expected {expected_multiplicity}) for {sorted(fp_owners[fp])}"
         for fp, n in sorted(fp_counts.items())
-        if n != expected_multiplicity
+        if n != expected_multiplicity and fp not in exempt_fps
     ]
 
     n_expected_distinct = len(fp_by_cell)
+    # Blocking = the paired design is unsound. Cross-arm disagreement voids it
+    # outright; a duplicate problem double-counts a CPDT observation. A
+    # deterministic grid does neither.
     ok = (
         bool(fp_counts)
         and not missing
         and not disagreements
-        and not collisions
+        and not duplicate_problems
+        and not seed_collapse
         and not wrong_multiplicity
-        and len(fp_counts) == n_expected_distinct
     )
+    n_exempt_lost = n_expected_distinct - len(fp_counts) - len(duplicate_problems)
     return CriterionResult(
         id="C4",
-        title="cross-arm data identity: one fingerprint per (problem, seed), all distinct",
+        title="cross-arm data identity; cross-problem and cross-seed distinctness",
         status=_verdict(ok),
         expected=(
-            f"{n_expected_distinct} distinct fingerprints, each appearing "
-            f"{expected_multiplicity}x ({n_arms} arms x {n_methods} methods)"
+            f"one fingerprint per (problem, seed) across {n_arms} arms x {n_methods} methods; "
+            f"no two problems sharing data; seeds distinct except "
+            f"{sorted(SEED_INVARIANT_PROBLEMS)}"
         ),
-        observed=f"{len(fp_counts)} distinct fingerprints over {sum(fp_counts.values())} run logs",
+        observed=(
+            f"{len(fp_counts)} distinct fingerprints over {sum(fp_counts.values())} run logs; "
+            f"{len(disagreements)} cross-arm disagreements, "
+            f"{len(duplicate_problems)} duplicate-problem collisions, "
+            f"{len(seed_collapse)} unexplained seed collapses, "
+            f"{len(exempt_seed_collapse)} exempt (deterministic grid)"
+        ),
         detail={
             "n_problem_seed_pairs": n_expected_distinct,
             "expected_multiplicity": expected_multiplicity,
             "missing_fingerprint": _truncate(missing),
             "cross_arm_disagreement": _truncate(disagreements),
-            "fingerprint_collisions_across_problem_seed": _truncate(collisions),
+            "duplicate_problems_blocking": _truncate(duplicate_problems),
+            "seed_collapse_blocking": _truncate(seed_collapse),
+            "seed_collapse_exempt_deterministic_grid": _truncate(exempt_seed_collapse),
+            "seed_invariant_problems_declared": sorted(SEED_INVARIANT_PROBLEMS),
+            "n_distinct_lost_to_exemptions": n_exempt_lost,
             "wrong_multiplicity": _truncate(wrong_multiplicity),
             "multiplicity_histogram": dict(Counter(fp_counts.values())),
         },
