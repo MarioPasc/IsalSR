@@ -593,6 +593,13 @@ class CrossProblemDominanceResult:
     and runs a single paired test across all N problems. Tests whether
     IsalSR systematically improves over baseline at the population level.
 
+    ``arm_a``/``arm_b`` name the contrast, with delta = mean(arm_b) - mean(arm_a);
+    they default to the primary ``baseline -> isalsr`` contrast so that result
+    files written before the three-arm campaign load unchanged (contrast policy,
+    decided 2026-08-04). ``p_value_holm`` is the Holm-adjusted p-value within the
+    per-metric family of contrasts that carry a finite p; it stays ``None`` for
+    contrasts reported descriptively.
+
     Reference: Ezequiel Lopez-Rubio proposal (2026-04-28).
     """
 
@@ -618,13 +625,18 @@ class CrossProblemDominanceResult:
     mean_delta: float
     mean_delta_ci_lower: float
     mean_delta_ci_upper: float
+    arm_a: str = "baseline"  # reference arm; delta = mean(arm_b) - mean(arm_a)
+    arm_b: str = "isalsr"
+    p_value_holm: float | None = None  # None for descriptive contrasts
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> CrossProblemDominanceResult:
-        return cls(**d)
+        # Tolerant: legacy files predate arm_a/arm_b/p_value_holm.
+        known = {f.name for f in dataclass_fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})
 
     def save_json(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -80,6 +80,69 @@ def load_all_paired_stats(
     return stats
 
 
+# Contrast name -> (arm_a, arm_b, per-problem file). Mirrors the triples
+# written by the orchestrator for the three-arm C2 campaign; arm_a lands in
+# the PairedStats "baseline" slot and arm_b in the "isalsr" slot, so
+# delta = slot_isalsr - slot_baseline is already mean(arm_b) - mean(arm_a).
+CPDT_CONTRASTS: tuple[tuple[str, str, str, str], ...] = (
+    ("isalsr_vs_baseline", "baseline", "isalsr", "paired_stats.json"),
+    ("isalsr_vs_hash", "hash", "isalsr", "paired_stats_isalsr_vs_hash.json"),
+    ("hash_vs_baseline", "baseline", "hash", "paired_stats_hash_vs_baseline.json"),
+)
+
+CPDT_PRIMARY_CONTRAST = "isalsr_vs_baseline"
+
+CPDT_CONTRAST_ARMS: dict[str, tuple[str, str]] = {
+    name: (arm_a, arm_b) for name, arm_a, arm_b, _ in CPDT_CONTRASTS
+}
+
+
+def load_secondary_contrast_stats(
+    results_dir: Path,
+    method: str,
+    benchmark: str,
+) -> dict[str, list[Any]]:
+    """Load the non-primary contrast paired stats for a (method, benchmark).
+
+    A two-arm results root (no hash arm) yields an empty dict, which restores
+    the pre-2026-08-04 single-contrast behaviour exactly.
+
+    Args:
+        results_dir: Root results directory.
+        method: Method name.
+        benchmark: Benchmark name.
+
+    Returns:
+        Contrast name -> list of PairedStats, one per problem. Contrasts with
+        no files present are omitted.
+    """
+    bench_dir = results_dir / method / benchmark
+    out: dict[str, list[Any]] = {}
+    if not bench_dir.exists():
+        return out
+
+    for contrast_name, _arm_a, _arm_b, filename in CPDT_CONTRASTS:
+        if contrast_name == CPDT_PRIMARY_CONTRAST:
+            continue
+        stats = []
+        for problem_dir in sorted(bench_dir.iterdir()):
+            if not problem_dir.is_dir():
+                continue
+            ps_path = problem_dir / filename
+            if ps_path.exists():
+                stats.append(load_paired_stats(ps_path))
+        if stats:
+            out[contrast_name] = stats
+        else:
+            log.info(
+                "  No %s files under %s; skipping contrast %s",
+                filename,
+                bench_dir,
+                contrast_name,
+            )
+    return out
+
+
 def recompute_paired_stats_if_needed(
     results_dir: Path,
     method: str,
@@ -267,40 +330,97 @@ def run_cross_problem_dominance_test(
     method: str,
     benchmark: str,
     output_dir: Path,
+    contrast_stats: dict[str, list[Any]] | None = None,
 ) -> dict[str, Any]:
-    """Run CPDT for all relevant metrics for one (method, benchmark).
+    """Run CPDT for all relevant metrics and all available contrasts.
 
-    Saves analysis/cross_problem_dominance_{method}_{benchmark}.json.
+    The primary contrast (baseline -> isalsr) stays at the top level of the
+    saved JSON so existing consumers keep working; every contrast, including
+    the primary one, is repeated under the ``"contrasts"`` key. Holm correction
+    is applied per metric across the contrasts that carry a finite p-value
+    (contrast policy, decided 2026-08-04), so a two-arm root has a family of
+    one and ``p_value_holm`` equals the raw primary p-value.
+
+    Args:
+        paired_stats_list: Per-problem PairedStats for the primary contrast.
+        method: Method name.
+        benchmark: Benchmark name, or "all" for the pooled analysis.
+        output_dir: Directory for cross_problem_dominance_{method}_{benchmark}.json.
+        contrast_stats: Optional secondary contrasts, keyed by contrast name
+            (``"isalsr_vs_hash"``, ``"hash_vs_baseline"``). Absent contrasts
+            are skipped.
+
+    Returns:
+        The saved JSON payload as a dict.
     """
     from experiments.models.analyzer.aggregation import (
         CPDT_METRIC_ALTERNATIVES,
+        apply_holm_across_contrasts,
         compute_cross_problem_dominance,
     )
 
-    results: dict[str, Any] = {}
-    for metric_name in CPDT_METRIC_ALTERNATIVES:
-        try:
-            cpdt = compute_cross_problem_dominance(
-                paired_stats_list,
-                metric_name,
-                method=method,
-                benchmark=benchmark,
-            )
-            results[metric_name] = cpdt.to_dict()
+    inputs: dict[str, list[Any]] = {CPDT_PRIMARY_CONTRAST: paired_stats_list}
+    for contrast_name, _arm_a, _arm_b, _fname in CPDT_CONTRASTS:
+        if contrast_name == CPDT_PRIMARY_CONTRAST:
+            continue
+        stats = (contrast_stats or {}).get(contrast_name)
+        if stats:
+            inputs[contrast_name] = stats
+        else:
+            log.info("  CPDT: no data for contrast %s, skipping", contrast_name)
+
+    computed: dict[str, dict[str, Any]] = {}
+    errors: dict[str, dict[str, str]] = {}
+    for contrast_name, stats in inputs.items():
+        arm_a, arm_b = CPDT_CONTRAST_ARMS[contrast_name]
+        computed[contrast_name] = {}
+        errors[contrast_name] = {}
+        for metric_name in CPDT_METRIC_ALTERNATIVES:
+            try:
+                computed[contrast_name][metric_name] = compute_cross_problem_dominance(
+                    stats,
+                    metric_name,
+                    method=method,
+                    benchmark=benchmark,
+                    arm_a=arm_a,
+                    arm_b=arm_b,
+                )
+            except Exception as e:  # noqa: BLE001
+                errors[contrast_name][metric_name] = str(e)
+                log.warning("  CPDT %s/%s failed: %s", contrast_name, metric_name, e)
+
+    apply_holm_across_contrasts(computed)
+
+    contrasts_payload: dict[str, dict[str, Any]] = {}
+    for contrast_name in inputs:
+        per_metric: dict[str, Any] = {}
+        for metric_name in CPDT_METRIC_ALTERNATIVES:
+            cpdt = computed[contrast_name].get(metric_name)
+            if cpdt is None:
+                per_metric[metric_name] = {"error": errors[contrast_name][metric_name]}
+                continue
+            per_metric[metric_name] = cpdt.to_dict()
             log.info(
-                "  CPDT %s: N=%d wins=%d ties=%d losses=%d p_1s=%.6f p_2s=%.6f d=%.4f",
+                "  CPDT[%s] %s: N=%d wins=%d ties=%d losses=%d alt=%s "
+                "p_1s=%.6f p_2s=%.6f p_holm=%s d=%.4f",
+                contrast_name,
                 metric_name,
                 cpdt.n_problems,
                 cpdt.n_wins,
                 cpdt.n_ties,
                 cpdt.n_losses,
+                cpdt.alternative,
                 cpdt.p_value_one_sided,
                 cpdt.p_value_two_sided,
+                "n/a" if cpdt.p_value_holm is None else f"{cpdt.p_value_holm:.6f}",
                 cpdt.cohens_d,
             )
-        except Exception as e:  # noqa: BLE001
-            results[metric_name] = {"error": str(e)}
-            log.warning("  CPDT %s failed: %s", metric_name, e)
+        contrasts_payload[contrast_name] = per_metric
+
+    # Top level keeps the historical shape: metric -> result dict for the
+    # primary contrast.
+    results: dict[str, Any] = dict(contrasts_payload[CPDT_PRIMARY_CONTRAST])
+    results["contrasts"] = contrasts_payload
 
     out_path = output_dir / f"cross_problem_dominance_{method}_{benchmark}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -660,6 +780,7 @@ def run_analysis(
     all_three_axis: dict[str, dict[str, Any]] = {}
     all_cpdt: dict[str, dict[str, Any]] = {}
     all_paired_stats: dict[str, list[Any]] = {}
+    all_contrast_stats: dict[str, dict[str, list[Any]]] = {}
 
     # Per-method per-benchmark analysis
     for method in methods:
@@ -677,6 +798,11 @@ def run_analysis(
                 benchmark,
             )
 
+            # Secondary contrasts (three-arm C2 roots only)
+            contrast_stats = load_secondary_contrast_stats(results_dir, method, benchmark)
+            if contrast_stats:
+                all_contrast_stats[key] = contrast_stats
+
             if paired_stats:
                 all_paired_stats[key] = paired_stats
                 summaries = compute_and_save_benchmark_summaries(
@@ -691,7 +817,11 @@ def run_analysis(
                 # Cross-Problem Dominance Test (per benchmark)
                 log.info("  Computing CPDT for %s/%s...", method, benchmark)
                 cpdt = run_cross_problem_dominance_test(
-                    paired_stats, method, benchmark, analysis_dir
+                    paired_stats,
+                    method,
+                    benchmark,
+                    analysis_dir,
+                    contrast_stats=contrast_stats,
                 )
                 all_cpdt[key] = cpdt
             else:
@@ -728,13 +858,24 @@ def run_analysis(
     # Pooled CPDT across all benchmarks per method
     for method in methods:
         pooled_ps: list[Any] = []
+        pooled_contrasts: dict[str, list[Any]] = {}
         for benchmark in benchmarks:
             key = f"{method}_{benchmark}"
             if key in all_paired_stats:
                 pooled_ps.extend(all_paired_stats[key])
+            # Pool each secondary contrast separately: the problem sets can
+            # differ between contrasts when an arm failed on some problem.
+            for contrast_name, stats in all_contrast_stats.get(key, {}).items():
+                pooled_contrasts.setdefault(contrast_name, []).extend(stats)
         if pooled_ps:
             log.info("=== Pooled CPDT: %s (N=%d problems) ===", method, len(pooled_ps))
-            cpdt_all = run_cross_problem_dominance_test(pooled_ps, method, "all", analysis_dir)
+            cpdt_all = run_cross_problem_dominance_test(
+                pooled_ps,
+                method,
+                "all",
+                analysis_dir,
+                contrast_stats=pooled_contrasts,
+            )
             all_cpdt[f"{method}_all"] = cpdt_all
 
     # Three-axis summaries (per method per benchmark)
