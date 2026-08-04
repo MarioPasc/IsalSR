@@ -11,18 +11,22 @@ Usage:
     python -m experiments.models.analyze \
         --results-dir /path/to/results \
         --methods udfs,bingo \
-        --benchmarks nguyen,feynman
+        --benchmarks nguyen,feynman \
+        --variants baseline,hash,isalsr
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
+import dataclasses
 import json
 import logging
 import math  # noqa: E402 -- used in _safe_stats
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +56,33 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger(__name__)
+
+# Arms analysed when ``--variants`` is not given. The two-arm default keeps
+# every C1-era invocation byte-identical to its pre-three-arm behaviour.
+DEFAULT_VARIANTS: tuple[str, ...] = ("baseline", "isalsr")
+
+# Arm that never deduplicates, and therefore acts as the reference in every
+# contrast and in the overhead accounting.
+REFERENCE_VARIANT = "baseline"
+
+
+def resolve_variants(variants: Sequence[str] | None) -> list[str]:
+    """Normalise a caller-supplied arm list.
+
+    Args:
+        variants: Requested arms, or None for the two-arm default.
+
+    Returns:
+        The arms to analyse, order preserved, duplicates removed.
+    """
+    requested = list(DEFAULT_VARIANTS) if variants is None else list(variants)
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for variant in requested:
+        if variant not in seen:
+            seen.add(variant)
+            ordered.append(variant)
+    return ordered
 
 
 # ======================================================================
@@ -143,72 +174,126 @@ def load_secondary_contrast_stats(
     return out
 
 
-def recompute_paired_stats_if_needed(
-    results_dir: Path,
-    method: str,
-    benchmark: str,
+def _recompute_contrast_paired_stats(
+    bench_dir: Path,
+    arm_a: str,
+    arm_b: str,
+    filename: str,
 ) -> list[Any]:
-    """Load or recompute paired stats for all problems in a benchmark.
+    """Load or recompute one contrast's per-problem paired stats.
 
-    If paired_stats.json doesn't exist for a problem but both baseline/ and
-    isalsr/ have run_logs, computes paired stats on the fly.
+    ``arm_a`` lands in the PairedStats "baseline" slot and ``arm_b`` in the
+    "isalsr" slot, so the stored delta is already mean(arm_b) - mean(arm_a).
+
+    Args:
+        bench_dir: ``results_dir / method / benchmark``.
+        arm_a: Reference arm directory name.
+        arm_b: Comparison arm directory name.
+        filename: Per-problem file holding this contrast's paired stats.
+
+    Returns:
+        One PairedStats per problem for which the contrast could be formed.
     """
-    bench_dir = results_dir / method / benchmark
-    if not bench_dir.exists():
-        return []
-
-    all_stats = []
+    all_stats: list[Any] = []
     for problem_dir in sorted(bench_dir.iterdir()):
         if not problem_dir.is_dir():
             continue
 
-        ps_path = problem_dir / "paired_stats.json"
+        ps_path = problem_dir / filename
         if ps_path.exists():
             all_stats.append(load_paired_stats(ps_path))
             continue
 
-        # Try to recompute
-        baseline_dir = problem_dir / "baseline"
-        isalsr_dir = problem_dir / "isalsr"
-        if not baseline_dir.exists() or not isalsr_dir.exists():
+        arm_a_dir = problem_dir / arm_a
+        arm_b_dir = problem_dir / arm_b
+        if not arm_a_dir.exists() or not arm_b_dir.exists():
             continue
 
-        baseline_logs = load_all_run_logs(baseline_dir)
-        isalsr_logs = load_all_run_logs(isalsr_dir)
-        if baseline_logs and isalsr_logs:
+        arm_a_logs = load_all_run_logs(arm_a_dir)
+        arm_b_logs = load_all_run_logs(arm_b_dir)
+        if arm_a_logs and arm_b_logs:
             try:
-                log.info("  Recomputing paired stats for %s", problem_dir.name)
-                paired = compute_paired_stats(baseline_logs, isalsr_logs)
+                log.info("  Recomputing %s for %s", filename, problem_dir.name)
+                paired = compute_paired_stats(arm_a_logs, arm_b_logs)
                 save_paired_stats(paired, ps_path)
                 all_stats.append(paired)
             except ValueError as e:
                 log.warning("  Skipping %s: %s", problem_dir.name, e)
 
-    # Apply Holm correction
+    # Holm correction runs across problems within one contrast: the family is
+    # the set of problems tested for that contrast, not the union over arms.
     if all_stats:
         apply_holm_correction(all_stats)
         for ps in all_stats:
             problem_slug = ps.problem.lower().replace("-", "_")
-            ps_path = bench_dir / problem_slug / "paired_stats.json"
-            save_paired_stats(ps, ps_path)
+            save_paired_stats(ps, bench_dir / problem_slug / filename)
 
     return all_stats
+
+
+def recompute_paired_stats_if_needed(
+    results_dir: Path,
+    method: str,
+    benchmark: str,
+    variants: Sequence[str] | None = None,
+) -> list[Any]:
+    """Load or recompute paired stats for all problems in a benchmark.
+
+    If a contrast's per-problem file doesn't exist but both of its arms have
+    run_logs, computes paired stats on the fly. Contrasts whose arms are not
+    both in ``variants`` are not touched, so a two-arm invocation only ever
+    writes ``paired_stats.json``.
+
+    Args:
+        results_dir: Root results directory.
+        method: Method name.
+        benchmark: Benchmark name.
+        variants: Arms present in this campaign. Defaults to
+            ``("baseline", "isalsr")``.
+
+    Returns:
+        The primary contrast's PairedStats, one per problem.
+    """
+    bench_dir = results_dir / method / benchmark
+    if not bench_dir.exists():
+        return []
+
+    variant_list = resolve_variants(variants)
+    primary: list[Any] = []
+    for contrast_name, arm_a, arm_b, filename in CPDT_CONTRASTS:
+        if arm_a not in variant_list or arm_b not in variant_list:
+            continue
+        stats = _recompute_contrast_paired_stats(bench_dir, arm_a, arm_b, filename)
+        if contrast_name == CPDT_PRIMARY_CONTRAST:
+            primary = stats
+
+    return primary
 
 
 def recompute_aggregates_if_needed(
     results_dir: Path,
     method: str,
     benchmark: str,
+    variants: Sequence[str] | None = None,
 ) -> None:
-    """Ensure aggregate.csv exists for all variants in all problems."""
+    """Ensure aggregate.csv exists for all requested variants in all problems.
+
+    Args:
+        results_dir: Root results directory.
+        method: Method name.
+        benchmark: Benchmark name.
+        variants: Arms to aggregate. Defaults to ``("baseline", "isalsr")``.
+            An arm with no directory under a problem is skipped, not an error.
+    """
     bench_dir = results_dir / method / benchmark
     if not bench_dir.exists():
         return
 
+    variant_list = resolve_variants(variants)
     for problem_dir in sorted(bench_dir.iterdir()):
         if not problem_dir.is_dir():
             continue
-        for variant in ["baseline", "isalsr"]:
+        for variant in variant_list:
             variant_dir = problem_dir / variant
             agg_path = variant_dir / "aggregate.csv"
             if variant_dir.exists() and not agg_path.exists():
@@ -229,8 +314,22 @@ def compute_and_save_benchmark_summaries(
     method: str,
     benchmark: str,
     output_dir: Path,
+    suffix: str = "",
 ) -> list[dict[str, Any]]:
-    """Compute benchmark summaries for all metrics and save to CSV."""
+    """Compute benchmark summaries for all metrics and save to CSV.
+
+    Args:
+        paired_stats_list: Per-problem PairedStats for one contrast.
+        method: Method name.
+        benchmark: Benchmark name.
+        output_dir: Directory for the CSV.
+        suffix: Appended to the filename stem. Empty for the primary contrast,
+            so its path is unchanged; secondary contrasts pass their contrast
+            name to avoid overwriting it.
+
+    Returns:
+        One CSV row dict per metric.
+    """
     if not paired_stats_list:
         return []
 
@@ -241,7 +340,7 @@ def compute_and_save_benchmark_summaries(
 
     # Compute solution rates from run logs (benchmark_summary doesn't do this)
     # We'll add them to the first row as a reference
-    out_path = output_dir / f"benchmark_summary_{method}_{benchmark}.csv"
+    out_path = output_dir / f"benchmark_summary_{method}_{benchmark}{suffix}.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=BENCHMARK_SUMMARY_COLUMNS)
@@ -267,9 +366,28 @@ def run_cross_method(
     methods: list[str],
     benchmark: str,
     output_dir: Path,
+    variants: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """Run cross-method Friedman/Nemenyi for key metrics."""
-    results: dict[str, Any] = {"benchmark": benchmark, "methods": methods}
+    """Run cross-method Friedman/Nemenyi for key metrics.
+
+    Args:
+        results_dir: Root results directory.
+        methods: Method names.
+        benchmark: Benchmark name.
+        output_dir: Directory for cross_method_{benchmark}.json.
+        variants: Arms entering the (method x variant) matrix. Defaults to
+            ``("baseline", "isalsr")``; a three-arm campaign gives
+            ``n_methods x 3`` groups.
+
+    Returns:
+        The saved JSON payload as a dict.
+    """
+    variant_list = resolve_variants(variants)
+    results: dict[str, Any] = {
+        "benchmark": benchmark,
+        "methods": methods,
+        "variants": variant_list,
+    }
 
     key_metrics = ["r2_test", "nrmse_test", "wall_clock_total_s"]
     for metric_name in key_metrics:
@@ -283,6 +401,7 @@ def run_cross_method(
                 benchmark,
                 extractor,
                 higher_is_better=metric_name not in _LOWER_IS_BETTER,
+                variants=variant_list,
             )
             results[metric_name] = result
             log.info(
@@ -308,9 +427,23 @@ def run_reduction_comparison(
     methods: list[str],
     benchmark: str,
     output_dir: Path,
+    variants: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """Compare reduction factors across methods."""
-    comparison = compare_reduction_factors(results_dir, methods, benchmark)
+    """Compare reduction factors across methods and deduplicating arms.
+
+    Args:
+        results_dir: Root results directory.
+        methods: Method names.
+        benchmark: Benchmark name.
+        output_dir: Directory for reduction_comparison_{benchmark}.json.
+        variants: Arms to consider. Defaults to ``("baseline", "isalsr")``.
+
+    Returns:
+        The saved JSON payload as a dict.
+    """
+    comparison = compare_reduction_factors(
+        results_dir, methods, benchmark, variants=resolve_variants(variants)
+    )
 
     out_path = output_dir / f"reduction_comparison_{benchmark}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -323,6 +456,186 @@ def run_reduction_comparison(
 # ======================================================================
 # Cross-Problem Dominance Test (CPDT)
 # ======================================================================
+
+
+# Value a metric takes when an arm produced no usable model. Used only by the
+# conservative-substitution sensitivity check (EXECUTION-PLAN §6.4 / E3): a
+# non-finite arm_b mean is read as a failure of that arm rather than dropped.
+#
+#   r2_train / r2_test          0.0  R^2 of the mean predictor; also the floor
+#                                    the table generator clips R^2 to.
+#   nrmse_test                  1.0  RMSE equal to the target's standard
+#                                    deviation, i.e. the mean predictor again.
+#   empirical_reduction_factor  1.0  no merging at all (rho == 1 by definition).
+#   redundancy_rate             0.0  no redundancy detected.
+CONSERVATIVE_FAILURE_VALUES: dict[str, float] = {
+    "r2_test": 0.0,
+    "r2_train": 0.0,
+    "nrmse_test": 1.0,
+    "empirical_reduction_factor": 1.0,
+    "redundancy_rate": 0.0,
+}
+
+
+def _conservative_arm_b_mean(metric_name: str, arm_a_mean: float) -> float:
+    """Worst-case arm_b mean substituted for a non-finite one.
+
+    The substituted delta is clamped so that the problem can never count as a
+    win for arm_b. Without the clamp a "failure" value could sit on the
+    favourable side of an already-poor arm_a (an arm_a NRMSE above 1, say) and
+    the sensitivity check would be anti-conservative.
+
+    Args:
+        metric_name: Metric key.
+        arm_a_mean: The reference arm's finite mean for this problem.
+
+    Returns:
+        The substituted arm_b mean.
+    """
+    from experiments.models.analyzer.aggregation import CPDT_METRIC_ALTERNATIVES
+
+    failure = CONSERVATIVE_FAILURE_VALUES.get(metric_name, 0.0)
+    delta = failure - arm_a_mean
+    if CPDT_METRIC_ALTERNATIVES.get(metric_name, "greater") == "greater":
+        delta = min(delta, 0.0)
+    else:
+        delta = max(delta, 0.0)
+    return arm_a_mean + delta
+
+
+def substitute_conservative(
+    paired_stats_list: list[Any],
+    metric_name: str,
+) -> tuple[list[Any], list[str]]:
+    """Replace non-finite arm_b means with the worst-case value for one metric.
+
+    A problem whose *reference* arm mean is also non-finite carries no
+    information about either arm and is left alone, so it stays dropped under
+    both readings.
+
+    Args:
+        paired_stats_list: Per-problem PairedStats for one contrast. Not
+            mutated.
+        metric_name: Metric to substitute.
+
+    Returns:
+        (paired stats with the substitution applied, names of the problems
+        that were substituted).
+    """
+    substituted: list[Any] = []
+    names: list[str] = []
+
+    for ps in paired_stats_list:
+        m = ps.metrics.get(metric_name)
+        if m is None or math.isfinite(m.isalsr_mean) or not math.isfinite(m.baseline_mean):
+            substituted.append(ps)
+            continue
+        new_mean = _conservative_arm_b_mean(metric_name, m.baseline_mean)
+        new_metric = dataclasses.replace(
+            m,
+            isalsr_mean=new_mean,
+            mean_diff=new_mean - m.baseline_mean,
+        )
+        substituted.append(dataclasses.replace(ps, metrics={**ps.metrics, metric_name: new_metric}))
+        names.append(ps.problem)
+
+    return substituted, names
+
+
+def _cpdt_summary(result: Any) -> dict[str, Any]:
+    """Reduce a CPDT result to the fields the sensitivity block reports.
+
+    Args:
+        result: A CrossProblemDominanceResult.
+
+    Returns:
+        N, W/T/L, the test identity and the estimation half.
+    """
+    return {
+        "n_problems": result.n_problems,
+        "n_wins": result.n_wins,
+        "n_ties": result.n_ties,
+        "n_losses": result.n_losses,
+        "alternative": result.alternative,
+        "test_used": result.test_used,
+        "p_value_one_sided": result.p_value_one_sided,
+        "p_value_two_sided": result.p_value_two_sided,
+        "cohens_d": result.cohens_d,
+        "mean_delta": result.mean_delta,
+    }
+
+
+def compute_conservative_sensitivity(
+    inputs: dict[str, list[Any]],
+    computed: dict[str, dict[str, Any]],
+    method: str,
+    benchmark: str,
+) -> dict[str, Any]:
+    """Re-run every CPDT under the conservative NaN substitution.
+
+    The headline analysis uses pairwise deletion with the true N reported per
+    metric. This block states the sensitivity of that choice: a non-finite
+    arm_b mean is treated as a failure of arm_b instead of being dropped, so
+    the conservative N is the pairwise N plus the number of substitutions
+    (EXECUTION-PLAN §6.4, verified at E3). Both readings are reported; neither
+    replaces the other.
+
+    When no substitution applies the conservative reading is the pairwise one
+    by construction, and is copied rather than recomputed.
+
+    Args:
+        inputs: Contrast name -> per-problem PairedStats.
+        computed: Contrast name -> metric -> the pairwise-deletion CPDT result.
+        method: Method name, for labelling the recomputed results.
+        benchmark: Benchmark name, likewise.
+
+    Returns:
+        Contrast name -> metric -> {n_substituted, substituted_problems,
+        pairwise_deletion, conservative}.
+    """
+    from experiments.models.analyzer.aggregation import (
+        CPDT_METRIC_ALTERNATIVES,
+        compute_cross_problem_dominance,
+    )
+
+    block: dict[str, Any] = {}
+    for contrast_name, stats in inputs.items():
+        arm_a, arm_b = CPDT_CONTRAST_ARMS[contrast_name]
+        per_metric: dict[str, Any] = {}
+        for metric_name in CPDT_METRIC_ALTERNATIVES:
+            pairwise = computed.get(contrast_name, {}).get(metric_name)
+            if pairwise is None:
+                continue
+            substituted, names = substitute_conservative(stats, metric_name)
+            if names:
+                conservative = compute_cross_problem_dominance(
+                    substituted,
+                    metric_name,
+                    method=method,
+                    benchmark=benchmark,
+                    arm_a=arm_a,
+                    arm_b=arm_b,
+                )
+                conservative_summary = _cpdt_summary(conservative)
+            else:
+                conservative_summary = copy.deepcopy(_cpdt_summary(pairwise))
+            per_metric[metric_name] = {
+                "n_substituted": len(names),
+                "substituted_problems": names,
+                "pairwise_deletion": _cpdt_summary(pairwise),
+                "conservative": conservative_summary,
+            }
+            if names:
+                log.info(
+                    "  CPDT[%s] %s conservative substitution: N %d -> %d (%s)",
+                    contrast_name,
+                    metric_name,
+                    pairwise.n_problems,
+                    conservative_summary["n_problems"],
+                    ", ".join(names),
+                )
+        block[contrast_name] = per_metric
+    return block
 
 
 def run_cross_problem_dominance_test(
@@ -340,6 +653,11 @@ def run_cross_problem_dominance_test(
     is applied per metric across the contrasts that carry a finite p-value
     (contrast policy, decided 2026-08-04), so a two-arm root has a family of
     one and ``p_value_holm`` equals the raw primary p-value.
+
+    A ``"sensitivity_conservative"`` block reports every contrast and metric
+    twice: once under pairwise deletion (the headline reading) and once with
+    non-finite arm_b means substituted by the worst case, with the N used by
+    each (EXECUTION-PLAN §6.4 / E3).
 
     Args:
         paired_stats_list: Per-problem PairedStats for the primary contrast.
@@ -421,6 +739,9 @@ def run_cross_problem_dominance_test(
     # primary contrast.
     results: dict[str, Any] = dict(contrasts_payload[CPDT_PRIMARY_CONTRAST])
     results["contrasts"] = contrasts_payload
+    results["sensitivity_conservative"] = compute_conservative_sensitivity(
+        inputs, computed, method, benchmark
+    )
 
     out_path = output_dir / f"cross_problem_dominance_{method}_{benchmark}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -458,21 +779,21 @@ def _safe_stats(values: list[float]) -> dict[str, float]:
     }
 
 
-def compute_overhead_analysis(
-    results_dir: Path,
-    method: str,
-    benchmark: str,
-    output_dir: Path,
+def _overhead_for_variant(
+    bench_dir: Path,
+    dedup_variant: str,
+    reference_variant: str,
 ) -> dict[str, Any]:
-    """Compute per-problem and aggregate computational overhead analysis.
+    """Overhead accounting for one deduplicating arm against one reference arm.
 
-    Reads isalsr + baseline run_logs to compute overhead_pct, per_dag_canon_ms,
-    search_time_ratio, and breakdowns by DAG complexity (max_k ranges).
+    Args:
+        bench_dir: ``results_dir / method / benchmark``.
+        dedup_variant: Arm whose canonicalisation cost is being measured.
+        reference_variant: Arm supplying the matched-seed timing denominator.
+
+    Returns:
+        {per_problem, by_k_range, aggregate}.
     """
-    bench_dir = results_dir / method / benchmark
-    if not bench_dir.exists():
-        return {}
-
     per_problem: list[dict[str, Any]] = []
     # Flat lists for aggregate stats
     all_overhead_pct: list[float] = []
@@ -487,8 +808,8 @@ def compute_overhead_analysis(
         if not problem_dir.is_dir():
             continue
 
-        isalsr_dir = problem_dir / "isalsr"
-        baseline_dir = problem_dir / "baseline"
+        isalsr_dir = problem_dir / dedup_variant
+        baseline_dir = problem_dir / reference_variant
         if not isalsr_dir.exists():
             continue
 
@@ -566,9 +887,7 @@ def compute_overhead_analysis(
                 }
             )
 
-    result: dict[str, Any] = {
-        "method": method,
-        "benchmark": benchmark,
+    return {
         "per_problem": per_problem,
         "by_k_range": k_breakdown,
         "aggregate": {
@@ -578,6 +897,60 @@ def compute_overhead_analysis(
             "total_time_ratio": _safe_stats(all_total_ratio),
             "reduction_factor": _safe_stats(all_rfs),
         },
+    }
+
+
+def compute_overhead_analysis(
+    results_dir: Path,
+    method: str,
+    benchmark: str,
+    output_dir: Path,
+    variants: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Compute per-problem and aggregate computational overhead analysis.
+
+    Reads each deduplicating arm's run_logs plus the reference arm's to compute
+    overhead_pct, per_dag_canon_ms, search_time_ratio, and breakdowns by DAG
+    complexity (max_k ranges).
+
+    The top-level ``per_problem``/``by_k_range``/``aggregate`` keys describe the
+    primary deduplicating arm (``isalsr`` when requested, otherwise the first
+    non-baseline arm), which keeps the two-arm output shape. Every
+    deduplicating arm is repeated under ``"by_variant"``.
+
+    Args:
+        results_dir: Root results directory.
+        method: Method name.
+        benchmark: Benchmark name.
+        output_dir: Directory for computational_overhead_{method}_{benchmark}.json.
+        variants: Arms present in this campaign. Defaults to
+            ``("baseline", "isalsr")``.
+
+    Returns:
+        The saved JSON payload as a dict, or {} if the benchmark is absent.
+    """
+    bench_dir = results_dir / method / benchmark
+    if not bench_dir.exists():
+        return {}
+
+    variant_list = resolve_variants(variants)
+    dedup_variants = [v for v in variant_list if v != REFERENCE_VARIANT]
+    if not dedup_variants:
+        return {}
+    primary = "isalsr" if "isalsr" in dedup_variants else dedup_variants[0]
+
+    by_variant = {
+        variant: _overhead_for_variant(bench_dir, variant, REFERENCE_VARIANT)
+        for variant in dedup_variants
+    }
+
+    result: dict[str, Any] = {
+        "method": method,
+        "benchmark": benchmark,
+        "primary_variant": primary,
+        "reference_variant": REFERENCE_VARIANT,
+        **by_variant[primary],
+        "by_variant": by_variant,
     }
 
     out_path = output_dir / f"computational_overhead_{method}_{benchmark}.json"
@@ -596,11 +969,35 @@ def compute_three_axis_summary(
     reduction: dict[str, Any],
     output_dir: Path,
     cpdt_results: dict[str, Any] | None = None,
+    variants: Sequence[str] | None = None,
+    contrast_summaries: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """Combine overhead + benchmark summaries + reduction into a 3-axis summary."""
+    """Combine overhead + benchmark summaries + reduction into a 3-axis summary.
 
-    def _find_row(metric: str) -> dict[str, Any]:
-        return next((s for s in benchmark_summaries if s.get("metric") == metric), {})
+    Args:
+        method: Method name.
+        benchmark: Benchmark name.
+        overhead: Output of :func:`compute_overhead_analysis`.
+        benchmark_summaries: CSV rows for the primary contrast.
+        reduction: Output of :func:`compare_reduction_factors`.
+        output_dir: Directory for three_axis_summary_{method}_{benchmark}.json.
+        cpdt_results: Optional CPDT payload to embed.
+        variants: Arms present in this campaign. Defaults to
+            ``("baseline", "isalsr")``; the solution-rate block carries one
+            entry per arm.
+        contrast_summaries: Optional secondary-contrast CSV rows, keyed by
+            contrast name. Supplies the solution rate of an arm that is not
+            part of the primary contrast; without it that arm is omitted
+            rather than reported as zero.
+
+    Returns:
+        The saved JSON payload as a dict.
+    """
+    variant_list = resolve_variants(variants)
+
+    def _find_row(metric: str, rows: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        source = benchmark_summaries if rows is None else rows
+        return next((s for s in source if s.get("metric") == metric), {})
 
     # Axis 1: Search space reduction
     rf_row = _find_row("empirical_reduction_factor")
@@ -615,6 +1012,7 @@ def compute_three_axis_summary(
         "n_problems": rf_row.get("n_problems", 0),
         "mean_cohens_d_rf": rf_row.get("median_cohens_d", 0.0),
         "mean_cohens_d_rr": rr_row.get("median_cohens_d", 0.0),
+        "by_variant": method_reduction.get("by_variant", {}),
     }
 
     # Axis 2: Regression quality
@@ -659,18 +1057,37 @@ def compute_three_axis_summary(
         "mean_total_time_ratio": agg.get("total_time_ratio", {}).get("mean", 0.0),
         "n_runs": agg.get("overhead_pct", {}).get("n", 0),
         "by_k_range": overhead.get("by_k_range", []),
+        "by_variant": {
+            variant: block.get("aggregate", {})
+            for variant, block in overhead.get("by_variant", {}).items()
+        },
     }
 
-    # Solution rates
+    # Solution rates, one entry per arm. Each arm's rate is read from a
+    # contrast that contains it: the reference arm sits in the "baseline" slot
+    # of the primary contrast, every deduplicating arm in the "isalsr" slot of
+    # the contrast that pairs it against the reference.
     sr_row = _find_row("solution_recovered")
-    solution_rate = {
-        "baseline": sr_row.get("solution_rate_baseline", 0.0),
-        "isalsr": sr_row.get("solution_rate_isalsr", 0.0),
-    }
+    solution_rate: dict[str, float] = {}
+    if REFERENCE_VARIANT in variant_list:
+        solution_rate[REFERENCE_VARIANT] = sr_row.get("solution_rate_baseline", 0.0)
+    for contrast_name, arm_a, arm_b, _fname in CPDT_CONTRASTS:
+        if arm_a != REFERENCE_VARIANT or arm_b not in variant_list:
+            continue
+        rows = (
+            benchmark_summaries
+            if contrast_name == CPDT_PRIMARY_CONTRAST
+            else (contrast_summaries or {}).get(contrast_name)
+        )
+        if rows:
+            solution_rate[arm_b] = _find_row("solution_recovered", rows).get(
+                "solution_rate_isalsr", 0.0
+            )
 
     result: dict[str, Any] = {
         "method": method,
         "benchmark": benchmark,
+        "variants": variant_list,
         "search_space": search_space,
         "regression_quality": regression_quality,
         "computational_overhead": computational_overhead,
@@ -768,12 +1185,25 @@ def run_analysis(
     results_dir: Path,
     methods: list[str],
     benchmarks: list[str],
+    variants: Sequence[str] | None = None,
 ) -> None:
-    """Run the full analysis pipeline."""
+    """Run the full analysis pipeline.
+
+    Args:
+        results_dir: Root results directory.
+        methods: Method names.
+        benchmarks: Benchmark names.
+        variants: Arms present in this campaign. Defaults to
+            ``("baseline", "isalsr")``, which reproduces the two-arm pipeline
+            exactly. Arm directories that are absent are skipped, never fatal.
+    """
     analysis_dir = results_dir / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
+    variant_list = resolve_variants(variants)
+    log.info("Analysing arms: %s", ", ".join(variant_list))
 
     all_benchmark_summaries: dict[str, list[dict[str, Any]]] = {}
+    all_contrast_summaries: dict[str, dict[str, list[dict[str, Any]]]] = {}
     all_cross_method: dict[str, dict[str, Any]] = {}
     all_reduction: dict[str, dict[str, Any]] = {}
     all_overhead: dict[str, dict[str, Any]] = {}
@@ -789,19 +1219,30 @@ def run_analysis(
             log.info("=== Analyzing %s / %s ===", method, benchmark)
 
             # Ensure aggregates exist
-            recompute_aggregates_if_needed(results_dir, method, benchmark)
+            recompute_aggregates_if_needed(results_dir, method, benchmark, variants=variant_list)
 
             # Load or compute paired stats
             paired_stats = recompute_paired_stats_if_needed(
                 results_dir,
                 method,
                 benchmark,
+                variants=variant_list,
             )
 
             # Secondary contrasts (three-arm C2 roots only)
             contrast_stats = load_secondary_contrast_stats(results_dir, method, benchmark)
             if contrast_stats:
                 all_contrast_stats[key] = contrast_stats
+                all_contrast_summaries[key] = {
+                    contrast_name: compute_and_save_benchmark_summaries(
+                        stats,
+                        method,
+                        benchmark,
+                        analysis_dir,
+                        suffix=f"_{contrast_name}",
+                    )
+                    for contrast_name, stats in contrast_stats.items()
+                }
 
             if paired_stats:
                 all_paired_stats[key] = paired_stats
@@ -829,7 +1270,9 @@ def run_analysis(
 
             # Computational overhead analysis (reads raw run_logs)
             log.info("  Computing overhead analysis...")
-            overhead = compute_overhead_analysis(results_dir, method, benchmark, analysis_dir)
+            overhead = compute_overhead_analysis(
+                results_dir, method, benchmark, analysis_dir, variants=variant_list
+            )
             all_overhead[key] = overhead
 
     # Cross-method analysis (per benchmark, needs >= 2 methods)
@@ -837,7 +1280,9 @@ def run_analysis(
         for benchmark in benchmarks:
             log.info("=== Cross-method analysis: %s ===", benchmark)
             try:
-                cross = run_cross_method(results_dir, methods, benchmark, analysis_dir)
+                cross = run_cross_method(
+                    results_dir, methods, benchmark, analysis_dir, variants=variant_list
+                )
                 all_cross_method[benchmark] = cross
             except Exception as e:  # noqa: BLE001
                 log.warning("Cross-method analysis failed for %s: %s", benchmark, e)
@@ -848,6 +1293,7 @@ def run_analysis(
                     methods,
                     benchmark,
                     analysis_dir,
+                    variants=variant_list,
                 )
                 all_reduction[benchmark] = reduction
             except Exception as e:  # noqa: BLE001
@@ -895,6 +1341,8 @@ def run_analysis(
                 reduction,
                 analysis_dir,
                 cpdt_results=cpdt,
+                variants=variant_list,
+                contrast_summaries=all_contrast_summaries.get(key),
             )
             all_three_axis[key] = three_axis
 
@@ -936,13 +1384,23 @@ def main() -> None:
         required=True,
         help="Comma-separated benchmark names (e.g., 'nguyen,feynman')",
     )
+    parser.add_argument(
+        "--variants",
+        default=",".join(DEFAULT_VARIANTS),
+        help=(
+            "Comma-separated arm names (e.g., 'baseline,hash,isalsr'). "
+            "Defaults to the two-arm campaign; arms with no directory on disk "
+            "are skipped."
+        ),
+    )
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)
     methods = [m.strip() for m in args.methods.split(",")]
     benchmarks = [b.strip() for b in args.benchmarks.split(",")]
+    variants = [v.strip() for v in args.variants.split(",") if v.strip()]
 
-    run_analysis(results_dir, methods, benchmarks)
+    run_analysis(results_dir, methods, benchmarks, variants=variants)
 
 
 if __name__ == "__main__":
