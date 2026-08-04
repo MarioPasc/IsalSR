@@ -458,3 +458,76 @@ testing and suite enrichment. Nothing in the setup gives the competitors a
 5. **Decision-log corrections**: §0.2's "runners cache canon_hash → fitness"
    mechanism claim (F-10.3); T01 AC-6's S value shifts under the corrected
    derivation (F-7) — the mechanism finding survives, the number does not.
+
+---
+
+## 6. Decisions taken (Mario, 2026-08-04, via question dialogue)
+
+*(Rewritten 2026-08-04 after an implementer agent accidentally reverted the
+uncommitted first version with `git checkout`; content restored from the
+session record.)*
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | CPDT sidedness for the three contrasts | **Pre-registered directions only.** isalsr-vs-baseline stays one-sided (continuity with the submission); isalsr-vs-hash one-sided *only* for ρ/redundancy (direction guaranteed by construction); everything else two-sided |
+| 2 | ρ inference vs a definitional baseline (F-3) | **Descriptive vs baseline** (mean ± std, no p); the inferential ρ test is isalsr-vs-hash. The submitted table's ρ p-values disappear from the revision; the response letter explains why |
+| 3 | Shadow sketches in C2's isalsr arm (F-8) | **Decide after Stage D**: keep ON through Stage D, read `shadow_time_s` from the 12 h cells, then keep-with-disclosure vs trace-only |
+| 4 | Merge timing | **Before the `campaign/c2` tag**, once T17 closes C4; re-run the Stage C wave on the merged commit before the tag is cut |
+
+### 6.1 Per-contrast CPDT — IMPLEMENTED (commit `9b51cd2`)
+
+Mario additionally asked to persist per-contrast effect size and p-value for
+IsalSR-vs-{Baseline, Naive-Hash} and Baseline-vs-Naive-Hash. Landed:
+`CPDT_CONTRAST_POLICY` (+ `resolve_cpdt_alternative`, `cpdt_primary_p`,
+`apply_holm_across_contrasts`) in `analyzer/aggregation.py`;
+`arm_a`/`arm_b`/`p_value_holm` on `CrossProblemDominanceResult`
+(legacy-tolerant `from_dict`); `analyze.py` loads
+`paired_stats_hash_vs_baseline.json` / `paired_stats_isalsr_vs_hash.json` per
+problem and writes a `"contrasts"` block into
+`cross_problem_dominance_{method}_{benchmark}.json` while keeping the legacy
+top-level shape. 35 new tests (`test_cpdt_contrasts.py`); full `tests/unit`
+**6,457 passed, 5 skipped, 0 failed**; two-arm C1-era roots byte-identical to
+the legacy behaviour (regression tests). Two recorded caveats:
+- **Primary-contrast ρ p-values are now NaN by policy** (decision 2), so
+  `generate_tables.py:858-867` would render `$nan$` in Table 2's CPDT footer
+  until the three-arm table work reads the ρ test from the
+  `isalsr_vs_hash` contrast — assigned to the A8-remainder agent.
+- For two-sided contrasts the stored `statistic` is SciPy's statistic in the
+  sign-of-mean direction; the two-sided p is unaffected.
+
+### 6.2 C4 supervision — CLOSED (job 1761777)
+
+Verdict read from `c2_smoke_v3/c2_preflight/stage_c_certification.json`
+(2026-08-04 16:23): **overall GO; C4 PASS** — multiplicity histogram
+**{6: 204, 18: 2}** (204 fingerprints at 3 arms × 2 methods; Pagie-1 and
+Keijzer-6, the two declared deterministic grids, at 18 = 3 seeds × 6),
+`missing_fingerprint = 0`, `cross_arm_disagreement = 0`,
+`duplicate_problems_blocking = 0` (the `I.34.27` 1/(2π) restoration holds),
+`seed_collapse_blocking = 0`. T17 agent's report concurs: wave 1,260/1,260
+COMPLETED, all on `sr`, span 31 m 55 s; C1.10 1260/1260; C1.11 peak MaxRSS
+0.67 GB; aggregation 1 h 35 m inside its 6 h wall. **The sole remaining
+Stage C blocker from T17-HANDOFF §4.1 is closed.**
+
+### 6.3 Sequencing correction (follows from decisions 3 + 4)
+
+**This branch must merge before *Stage D*, not merely before the tag.**
+Decision 3 consumes `shadow_time_s` from the 12 h D1 cells — a field that
+exists only on this branch — and D1.7's overhead sanity check must run on the
+corrected accounting (pre-merge code understates wrapper cost 1.6–2.4×).
+Order: remaining blockers land → Mario reviews and merges → one Stage C
+re-cert wave on the merged commit (≈33 min at `%24`/`sr`) → Stage D.
+
+### 6.4 T17 orchestration hand-over (Mario, 2026-08-04)
+
+This session now orchestrates the remaining T17/pre-launch items. A dedicated
+implementation agent (Opus) is working, in order: **A6** (manifest.py +
+validator), **A13** (FSCRATCH inodes: tar-then-delete of the superseded
+`c2_smoke`/`c2_smoke_v2` roots only — `v3`, `~/execs/vena` and HOME are
+hands-off; ≈16k of the ≈28k shortfall), **B8** corruption half (local
+integration tests + SP-0-capped single-task Picasso probe), **A8 remainder**
+(analyze.py `--variants` plumbing, 3-arm Friedman/Nemenyi, conservative-
+substitution check, minimal 3-arm table emission — gated on commit `9b51cd2`
+being present, so it builds on the contrast machinery instead of duplicating
+it), and the **`campaign/c2` tag procedure** (prepare only; SP-0 — Mario
+tags at Stage F). A8 hand-off note: the pairwise-CPDT half of A8 is
+discharged by §6.1; what remains is the list above plus E1–E7.
