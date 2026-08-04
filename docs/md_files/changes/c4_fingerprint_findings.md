@@ -105,6 +105,74 @@ the text rather than in a footnote discovered later.
 
 ---
 
+## 3b. Finding C (blocking, found in the v2 re-run) — the data is not bit-reproducible across CPU families
+
+The Stage C **re-run** (`c2_smoke_v2/`, throttle `%24`) failed C4 differently:
+**238** distinct fingerprints over 210 `(problem, seed)` pairs, i.e. **35 pairs
+carrying more than one fingerprint** — where the first wave had **zero**.
+
+### It is not a seeding bug, a config race, or non-determinism
+
+| Ruled out | Evidence |
+|---|---|
+| Config race | `config_sha256` **identical** across every split (e.g. `1485f9da6def` on all three `I.12.4` arms) |
+| Non-deterministic generator | 8 repeated draws of the same `(problem, seed)` in one process → **1** fingerprint |
+| Runner mutating the arrays | `data_fingerprint` is computed in `orchestrator.py:697`, **before any arm touches the data** |
+
+### It is CPU architecture, and the correlation is perfect
+
+**All 35 splits partition *exactly* by node family — 0 exceptions.** The odd cell
+is the one that landed on a different family:
+
+```
+I.12.4/seed_0   2a798997845a  bingo{baseline,hash,isalsr} + udfs{hash,isalsr}   → sr (AMD)
+                cf001e447874  udfs/baseline                                     → sd (Intel)
+```
+
+Minority cells by arm: `udfs/baseline` 33, `bingo/baseline` 5, `udfs/hash` 2 —
+i.e. it is whichever arm happened to be scheduled on the minority architecture,
+not a property of the arm.
+
+The first wave showed 0 disagreements only because `%8` kept it on a narrower
+slice of the pool; `%24` spread it across `sd` and `sr` and exposed this.
+
+### The magnitude, measured rather than assumed
+
+`slurm/c2_smoke/arch_probe.sh` ran the identical generator pinned to `sd005`
+(Intel Xeon Gold 6230R) and `sr004` (AMD EPYC 7H12), same numpy 2.4.6:
+
+| Problem | Fingerprint | max \|Δy\| | max ULP |
+|---|---|---|---|
+| I.12.4 | DIFFER | **5.551×10⁻¹⁷** | **1** |
+| I.6.20a, Nguyen-1, Nguyen-2, Liv-14, Vladislavleva-2 | DIFFER | 0 on the sampled head | 0 |
+| I.14.3, Nguyen-5 | MATCH | 0 | 0 |
+
+**The difference is one unit in the last place** — libm/SIMD rounding in the
+transcendental evaluation, at 5.6×10⁻¹⁷ against a machine epsilon of 2.2×10⁻¹⁶.
+Its effect on R², NRMSE or any reported metric is **nil**. Its effect on a
+*byte-exact* fingerprint is total, which is why C4 fails.
+
+### The decision — Mario's
+
+| Option | Effect | Cost |
+|---|---|---|
+| **1. Pin the node family for C2** (`--constraint=sr`) | C4 passes exactly; the paired arms provably see identical data | Narrows the pool; interacts with §3.3's 256 GB Bingo–IsalSR request (`sr` = 439 GB/node → 1 such task per node) |
+| **2. Relax the fingerprint** to a tolerance hash (e.g. 12 significant digits) | Keeps the whole pool and the measured 476-core concurrency | C4 stops certifying byte-exact identity, which was the entire point of P3 |
+
+**Recommendation: option 1, and it closes B6 as a side effect.** Pinning is
+independently required by the plan's own reasoning: **wall clock is a reported
+quantity** (`S`, the overhead percentages, Table 2's cost column), and Intel `sd`
+at 2.1 GHz versus AMD `sr` at 2.6 GHz turns any timing comparison across a mixed
+pool into a measurement of the scheduler. The `picasso-sbatch` skill states the
+same rule. One constraint flag therefore fixes C4 **and** removes the timing
+confound **and** resolves the open B6 decision.
+
+Do **not** take option 2 on the grounds that 1 ULP is harmless. It is harmless
+*to the metrics*, and the honest way to say so is to pin the pool and keep the
+strict check, not to weaken the check until it stops reporting.
+
+---
+
 ## 4. What changed in the code
 
 `experiments/scripts/c2_certify.py` — `check_c4` now separates three properties
