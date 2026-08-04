@@ -531,3 +531,35 @@ being present, so it builds on the contrast machinery instead of duplicating
 it), and the **`campaign/c2` tag procedure** (prepare only; SP-0 — Mario
 tags at Stage F). A8 hand-off note: the pairwise-CPDT half of A8 is
 discharged by §6.1; what remains is the list above plus E1–E7.
+
+### 6.5 Blocker closure — VERIFIED (2026-08-04, 8 commits `6a8b60b..63d0771`)
+
+Independently re-verified by the orchestrator (not taken from the agent's
+report): full `tests/unit` **6,555 passed, 5 skipped, 0 failed**; manifest +
+resume-corruption suites 52 passed; three-arm/Holm/footer/conservative subset
+60 passed; working tree clean; **no `campaign/*` tag exists** (procedure
+documented in `slurm/c2_tag_procedure.md` only); live `quota` re-read:
+FSCRATCH **155.4k/250k = 94.6k headroom** (≥60k criterion PASSES; only
+15.9k of the drop attributable to the smoke-root archival — the earlier
+248.6k reading was likely stale), superseded `c2_smoke`/`c2_smoke_v2` roots
+tarred (7,932 members each, verified) then removed, `c2_smoke_v3` intact.
+
+| Item | State |
+|---|---|
+| A6 manifest + strict validator | CLOSED (46 tests; truncated manifest → exit 1) |
+| A13 FSCRATCH inodes | **PASSES**; HOME *space* quota still over (0.34/0.28 TB, 2 days grace) — Mario's lane; ≥15k-file mail to `soporte@scbi.uma.es` still outstanding |
+| B8 resume + corruption | CLOSED — local integration tests (6) + Picasso probe jobs 1762279/1762282/1762284: fresh → skip → corrupt-detect-delete-rerun, all observed |
+| A8 remainder | CLOSED — `--variants` end-to-end, 3-arm Friedman/Nemenyi, conservative-substitution check, 3-arm tables incl. the ρ-footer fix (no `$nan$`); Holm-by-3 asserted (52 tests) |
+| `campaign/c2` tag | Procedure only; not cut (SP-0) |
+
+**Needs Mario's confirmation (none blocking):**
+1. Conservative-substitution failure levels chosen by the implementer:
+   R² → 0, NRMSE → 1, ρ → 1, redundancy → 0, plus a clamp so substitution can
+   never favour the dedup arm. Consistent with T08's runtime scoring policy
+   (R² = 0 / NRMSE = 1); endorse, confirm.
+2. ρ's Holm family is 1 (its other two contrasts are descriptive by decision
+   2) — statistically correct, stated so the tables are read right.
+3. Table 1/S still print the primary contrast's raw one-sided R² p rather
+   than `p_value_holm` — narrative choice for the review-answer lane.
+4. `c2_smoke/worker.sh`'s ≥2-seed guard is unusable for SP-0 probes (seed 0
+   only); a dedicated probe worker exists, but the friction will recur.
