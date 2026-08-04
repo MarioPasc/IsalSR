@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -103,7 +104,7 @@ def completed_cell(tmp_path_factory) -> str:
 
 def test_fresh_run_writes_valid_run_log(completed_cell: str) -> None:
     path = _run_log_path(completed_cell)
-    payload = json.loads(open(path).read())
+    payload = json.loads(Path(path).read_text())
     assert payload["metadata"]["problem"] == _PROBLEM
     assert payload["metadata"]["seed"] == _SEED
     assert os.path.getsize(path) > 0
@@ -118,7 +119,7 @@ def test_intact_cell_is_skipped(completed_cell: str, caplog) -> None:
     """An intact completed cell must be skipped, not silently re-run."""
     path = _run_log_path(completed_cell)
     before_mtime = os.path.getmtime(path)
-    before_bytes = open(path, "rb").read()
+    before_bytes = Path(path).read_bytes()
 
     with caplog.at_level("INFO"):
         assert _invoke(completed_cell) == 0
@@ -127,7 +128,7 @@ def test_intact_cell_is_skipped(completed_cell: str, caplog) -> None:
     assert "Skipping" in messages, f"no skip logged; got: {messages[-500:]}"
     assert "Corrupt" not in messages
     assert os.path.getmtime(path) == before_mtime, "skipped cell was rewritten"
-    assert open(path, "rb").read() == before_bytes
+    assert Path(path).read_bytes() == before_bytes
 
 
 def test_skip_does_not_depend_on_a_second_process(completed_cell: str) -> None:
@@ -152,10 +153,9 @@ def _truncate_mid_json(path: str) -> int:
     int
         The truncated size in bytes.
     """
-    raw = open(path, "rb").read()
+    raw = Path(path).read_bytes()
     half = len(raw) // 2
-    with open(path, "wb") as handle:
-        handle.write(raw[:half])
+    Path(path).write_bytes(raw[:half])
     return half
 
 
@@ -168,7 +168,7 @@ def test_truncated_run_log_is_detected_deleted_and_rerun(tmp_path_factory, caplo
     truncated_size = _truncate_mid_json(path)
     assert truncated_size < good_size
     with pytest.raises(json.JSONDecodeError):
-        json.loads(open(path).read())
+        json.loads(Path(path).read_text())
 
     with caplog.at_level("WARNING"):
         assert _invoke(out) == 0
@@ -177,7 +177,7 @@ def test_truncated_run_log_is_detected_deleted_and_rerun(tmp_path_factory, caplo
     assert "Corrupt run_log detected" in messages, f"no detection logged: {messages[-500:]}"
 
     # Re-run, not merely repaired in place: the file parses again and is whole.
-    payload = json.loads(open(path).read())
+    payload = json.loads(Path(path).read_text())
     assert payload["metadata"]["problem"] == _PROBLEM
     assert os.path.getsize(path) > truncated_size
 
@@ -187,7 +187,7 @@ def test_empty_run_log_is_treated_as_corrupt(tmp_path_factory, caplog) -> None:
     out = str(tmp_path_factory.mktemp("b8_empty"))
     assert _invoke(out) == 0
     path = _run_log_path(out)
-    open(path, "wb").close()
+    Path(path).write_bytes(b"")
     assert os.path.getsize(path) == 0
 
     with caplog.at_level("WARNING"):
@@ -195,7 +195,7 @@ def test_empty_run_log_is_treated_as_corrupt(tmp_path_factory, caplog) -> None:
 
     messages = " ".join(r.getMessage() for r in caplog.records)
     assert "Corrupt run_log detected" in messages
-    assert json.loads(open(path).read())["metadata"]["problem"] == _PROBLEM
+    assert json.loads(Path(path).read_text())["metadata"]["problem"] == _PROBLEM
 
 
 def test_structurally_valid_but_schema_wrong_is_rejected(tmp_path_factory, caplog) -> None:
@@ -207,12 +207,11 @@ def test_structurally_valid_but_schema_wrong_is_rejected(tmp_path_factory, caplo
     out = str(tmp_path_factory.mktemp("b8_schema"))
     assert _invoke(out) == 0
     path = _run_log_path(out)
-    with open(path, "w") as handle:
-        json.dump({"not": "a run log"}, handle)
+    Path(path).write_text(json.dumps({"not": "a run log"}))
 
     with caplog.at_level("WARNING"):
         assert _invoke(out) == 0
 
     messages = " ".join(r.getMessage() for r in caplog.records)
     assert "Corrupt run_log detected" in messages
-    assert json.loads(open(path).read())["metadata"]["problem"] == _PROBLEM
+    assert json.loads(Path(path).read_text())["metadata"]["problem"] == _PROBLEM
