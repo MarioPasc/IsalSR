@@ -17,7 +17,7 @@ import time
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -32,6 +32,7 @@ from DAG_search.dag_search import DAGRegressor  # noqa: E402
 from experiments.models.alphabet_guard import validate_udfs_operators
 from experiments.models.base_runner import ModelRunner
 from experiments.models.fallback_ledger import FallbackLedger
+from experiments.models.stage_d_trace import StageDTracer
 from experiments.models.udfs.adapter import compgraph_to_labeled_dag
 from experiments.models.udfs.config import UDFSConfig
 from experiments.models.udfs.runner import TrajectorySnapshot, UDFSRawResult
@@ -108,6 +109,23 @@ def udfs_host_native_records(cgraph: Any) -> list[HostNativeRecord]:
     ]
 
 
+class _KeyResolution(NamedTuple):
+    """Outcome of resolving one candidate's deduplication key.
+
+    Attributes:
+        canon_hash: The live, process-local key, or ``None`` on failure.
+        representation: The string the key was taken of, or ``None`` on an atlas
+            hit (where no string is computed) or on failure.
+        t_canon_s: Seconds spent resolving the key.
+        fallback: One of ``none``, ``atlas_hit``, ``timeout``, ``canon_raised``.
+    """
+
+    canon_hash: int | None
+    representation: str | None
+    t_canon_s: float
+    fallback: str
+
+
 class _CanonicalDeduplicator:
     """Tracks canonical strings and deduplication statistics.
 
@@ -143,6 +161,11 @@ class _CanonicalDeduplicator:
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
         self.ledger: FallbackLedger | None = ledger
+        # Stage-D detailed trace (EXECUTION-PLAN §4.4 D2).  Constructed from the
+        # environment; inert unless ISALSR_STAGE_D_TRACE is set, which the worker
+        # does on exactly one cell.  Every hook below is one attribute read when
+        # disabled, and no file is created.
+        self.tracer: StageDTracer = StageDTracer.from_env()
         self.key_mode = key_mode
         # Shadow distinct-cardinality sketches over the full candidate stream.
         # HyperLogLog(p=14) is ~16 KB each and constant in stream length; an
@@ -286,13 +309,32 @@ class _CanonicalDeduplicator:
     def _resolve_canonical_hash(self, labeled_dag: Any, host: Any = None) -> int | None:
         """Resolve the canonical hash for a DAG: atlas fast-path or online fallback.
 
-        Returns the canonical hash, or None if canonicalization failed.
+        Thin wrapper over :meth:`_resolve_key` kept for callers that need only
+        the key (``experiments/scripts/verify_udfs_dedup.py``).
+
+        Args:
+            labeled_dag: The adapter's ``LabeledDAG`` for the candidate.
+            host: The originating UDFS ``CompGraph``, needed by the
+                ``"host_native"`` key mode.
+
+        Returns:
+            The deduplication key, or ``None`` if key resolution failed.
+        """
+        return self._resolve_key(labeled_dag, host).canon_hash
+
+    def _resolve_key(self, labeled_dag: Any, host: Any = None) -> _KeyResolution:
+        """Resolve this arm's deduplication key: atlas fast-path or online fallback.
+
         Updates atlas/fallback timing stats as a side effect.
 
         Args:
             labeled_dag: The adapter's ``LabeledDAG`` for the candidate.
             host: The originating UDFS ``CompGraph``, needed by the
                 ``"host_native"`` key mode.
+
+        Returns:
+            The key, the representation string that produced it (``None`` on an
+            atlas hit or a failure), the seconds spent, and the fallback path.
         """
         t0 = time.perf_counter()
         canon_hash: int | None = None
@@ -307,7 +349,7 @@ class _CanonicalDeduplicator:
                 self.canon_time_total += dt
                 if self.ledger is not None:
                     self.ledger.record_atlas_hit(labeled_dag)
-                return canon_hash
+                return _KeyResolution(canon_hash, None, dt, "atlas_hit")
             self.atlas_misses += 1
 
         # Online fallback: compute this arm's representation string (canonical
@@ -318,20 +360,54 @@ class _CanonicalDeduplicator:
         try:
             canonical = self.representation_string(labeled_dag, host)
         except Exception as _exc:  # noqa: BLE001
-            if self.ledger is not None:
-                from isalsr.core.canonical import CanonicalTimeoutError
+            from isalsr.core.canonical import CanonicalTimeoutError
 
-                if isinstance(_exc, CanonicalTimeoutError):
+            is_timeout = isinstance(_exc, CanonicalTimeoutError)
+            if self.ledger is not None:
+                if is_timeout:
                     self.ledger.record_timeout(labeled_dag)
                 else:
                     self.ledger.record_canon_raised(labeled_dag)
             self.canon_fallback_time += time.perf_counter() - t0_canon
-            self.canon_time_total += time.perf_counter() - t0
-            return None
+            dt_canon = time.perf_counter() - t0
+            self.canon_time_total += dt_canon
+            return _KeyResolution(None, None, dt_canon, "timeout" if is_timeout else "canon_raised")
 
         self.canon_fallback_time += time.perf_counter() - t0_canon
-        self.canon_time_total += time.perf_counter() - t0
-        return hash(canonical)
+        dt_canon = time.perf_counter() - t0
+        self.canon_time_total += dt_canon
+        return _KeyResolution(hash(canonical), canonical, dt_canon, "none")
+
+    def _traced_evaluate(
+        self,
+        cgraph: Any,
+        x: Any,
+        loss_fkt: Any,
+        opt_mode: str,
+        loss_thresh: Any,
+    ) -> Any:
+        """Call the host's evaluator, charging its wall time to the Stage-D tracer.
+
+        The two ``perf_counter`` calls run only while the tracer has selected the
+        current candidate for sampling, so with tracing off this costs one
+        attribute read on top of the direct call it replaces.
+
+        Args:
+            cgraph: The UDFS ``CompGraph`` under evaluation.
+            x: The design matrix passed through unchanged.
+            loss_fkt: The loss functional passed through unchanged.
+            opt_mode: The constant-optimisation mode passed through unchanged.
+            loss_thresh: The early-exit threshold passed through unchanged.
+
+        Returns:
+            Whatever the original ``evaluate_cgraph`` returned.
+        """
+        if not self.tracer.sampling:
+            return self._original_evaluate(cgraph, x, loss_fkt, opt_mode, loss_thresh)
+        t0 = time.perf_counter()
+        result = self._original_evaluate(cgraph, x, loss_fkt, opt_mode, loss_thresh)
+        self.tracer.note_eval_time(time.perf_counter() - t0)
+        return result
 
     def wrap_evaluate_cgraph(self, original_fn: Any) -> Any:
         """Create a wrapper around evaluate_cgraph with canonical dedup."""
@@ -339,6 +415,12 @@ class _CanonicalDeduplicator:
 
         def wrapped(cgraph, X, loss_fkt, opt_mode="grid_zoom", loss_thresh=None):  # noqa: N803
             self.n_total += 1
+
+            # Stage-D trace: open a candidate.  Returns False (and does nothing
+            # else) unless the tracer is enabled AND this candidate is on the
+            # deterministic 1-in-N sampling grid.
+            tracer = self.tracer
+            tracer.begin()
 
             # record_pre is called inside compgraph_to_labeled_dag, before
             # _normalize_const_edges, to measure RTF precondition violations.
@@ -353,17 +435,12 @@ class _CanonicalDeduplicator:
                 if self.ledger is not None:
                     self.ledger.record_conversion_failure()
                 # Evaluate normally
-                result = self._original_evaluate(
-                    cgraph,
-                    X,
-                    loss_fkt,
-                    opt_mode,
-                    loss_thresh,
-                )
+                result = self._traced_evaluate(cgraph, X, loss_fkt, opt_mode, loss_thresh)
                 consts, loss = result
                 if np.isfinite(loss) and loss < self._best_loss:
                     self._best_loss = loss
                 self._maybe_snapshot()
+                tracer.record(fallback="conversion_failure")
                 return result
             self.conversion_time_total += time.perf_counter() - t_conv
 
@@ -387,21 +464,17 @@ class _CanonicalDeduplicator:
             # timer: this is instrumentation, not arm cost.
             self.record_shadow(labeled_dag, cgraph)
 
-            canon_hash = self._resolve_canonical_hash(labeled_dag, cgraph)
+            key = self._resolve_key(labeled_dag, cgraph)
+            canon_hash = key.canon_hash
 
             if canon_hash is None:
                 # Canonicalization failed — evaluate normally
-                result = self._original_evaluate(
-                    cgraph,
-                    X,
-                    loss_fkt,
-                    opt_mode,
-                    loss_thresh,
-                )
+                result = self._traced_evaluate(cgraph, X, loss_fkt, opt_mode, loss_thresh)
                 consts, loss = result
                 if np.isfinite(loss) and loss < self._best_loss:
                     self._best_loss = loss
                 self._maybe_snapshot()
+                tracer.record(dag=labeled_dag, t_canon=key.t_canon_s, fallback=key.fallback)
                 return result
 
             is_duplicate = canon_hash in self.canonical_seen
@@ -410,6 +483,15 @@ class _CanonicalDeduplicator:
                 n_consts = cgraph.n_consts
                 dummy_consts = np.zeros(n_consts) if n_consts > 0 else np.array([])
                 self._maybe_snapshot()
+                tracer.record(
+                    dag=labeled_dag,
+                    representation=key.representation,
+                    representation_kind=self.key_mode,
+                    representation_hash=canon_hash,
+                    t_canon=key.t_canon_s,
+                    fallback=key.fallback,
+                    dedup_hit=True,
+                )
                 return dummy_consts, np.inf
 
             # Counters are unconditional: with suppression off the arm still
@@ -418,17 +500,20 @@ class _CanonicalDeduplicator:
             if not is_duplicate:
                 self.canonical_seen.add(canon_hash)
                 self.n_unique += 1
-            result = self._original_evaluate(
-                cgraph,
-                X,
-                loss_fkt,
-                opt_mode,
-                loss_thresh,
-            )
+            result = self._traced_evaluate(cgraph, X, loss_fkt, opt_mode, loss_thresh)
             consts, loss = result
             if np.isfinite(loss) and loss < self._best_loss:
                 self._best_loss = loss
             self._maybe_snapshot()
+            tracer.record(
+                dag=labeled_dag,
+                representation=key.representation,
+                representation_kind=self.key_mode,
+                representation_hash=canon_hash,
+                t_canon=key.t_canon_s,
+                fallback=key.fallback,
+                dedup_hit=is_duplicate,
+            )
             return result
 
         return wrapped
@@ -578,6 +663,18 @@ class IsalSRUDFSRunner(ModelRunner):
         if ledger.enabled:
             log.info("FallbackLedger: %s", ledger.to_dict())
         self.last_ledger: FallbackLedger = ledger
+        # Stage-D D2: flush the trace and write the four derived artefacts.
+        # No-op unless ISALSR_STAGE_D_TRACE was set for this cell.
+        dedup.tracer.close(
+            ledger=ledger,
+            run={
+                "method": "udfs",
+                "variant": self.variant,
+                "key_mode": self.KEY_MODE,
+                "problem": config.get("problem_name"),
+                "seed": seed,
+            },
+        )
         self.last_shadow = dedup.shadow_counts()
         if self.last_shadow:
             log.info(
