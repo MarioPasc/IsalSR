@@ -581,3 +581,54 @@ Cell enumeration (12): Pagie-1 × {baseline, hash, isalsr} × {UDFS, Bingo} (6) 
 UDFS 3 × 16 GB, Bingo non-isalsr 6 × 32 GB, Bingo isalsr 3 × 256 GB.
 C5 (`smoke_vs_C1.md` §3) is drafted by the agent from `c2_smoke_v3` against
 the frozen §2 expectations and **signed by Mario** before Stage D submits.
+
+### 7.1 Stage D implementation — COMPLETE, nothing submitted (2026-08-04)
+
+All seven deliverables built and committed on this branch. **No Picasso
+submission and no deploy happened**; SP-0 holds and the post-merge sequence is
+`slurm/c2_stage_d/RUNBOOK.md`, unexecuted.
+
+| # | Deliverable | Where | Evidence |
+|---|---|---|---|
+| 1 | Stage D harness | `slurm/c2_stage_d/{launcher,worker,aggregate_worker}.sh`, `experiments/scripts/stage_d_task_spec.py` | 35 registry tests; `bash -n` clean |
+| 2 | D1 certifier | `experiments/scripts/stage_d_certify.py` | 66 tests; 154 with `test_c2_certify`+`test_manifest` |
+| 3 | D2 trace + D3 replay | `experiments/models/stage_d_trace.py`, `experiments/scripts/stage_d_mode1_replay.py` | 85 tests (46/33/6) |
+| 4 | C5 draft | `c2_preflight/smoke_vs_C1.md` | 10 quantities against 1,260 run logs; **DRAFT, awaiting signature** |
+| 5 | Headline tables → Holm | `experiments/figures/models/generate_tables.py` | 24 tests; 112 across the four table suites |
+| 6 | Runbook | `slurm/c2_stage_d/RUNBOOK.md` | 8 steps, unexecuted |
+| 7 | Design record | `docs/md_files/changes/stage_d_design.md` | this table |
+
+**Decisions taken inside the lock** (none contradict §7): registry is the sole
+cell source, consumed by worker (`D_KEY='value'` eval) and certifier (Python);
+three arrays because `--mem` is per job; RSS period 60 s, sound because `VmHWM`
+is monotone — validated locally, peak 190.2 MB retained while `VmRSS` fell to
+10.4 MB; D1.2 peak = `max(sacct MaxRSS, timeseries VmHWM)`, recommendation
+`ceil_to_8GB(peak / 0.70)`; D1.6 ρ one-sided at ≥ 0.90 × C1, R² two-sided at
+|Δδ| ≤ 0.15; D2 sampling rate 100, from 571.7 B/record measured live.
+
+**Three findings Mario should read before merging:**
+
+1. **C5 §3.5 — a real deviation.** Bingo ρ at 900 s sits **1.1–1.7 % below**
+   C1, where §2 expects a rise. The dangerous cause is falsified directly:
+   SP-4 finds **0** SUB/DIV tokens in 292 canonical strings, so the
+   decomposition *is* reaching the canonicaliser. The remaining cause is the
+   48× budget gap (ρ is cumulative). Handed to D1.6, which is 12 h vs 12 h.
+2. **`c2_smoke_v3` carries 58 of 60 spec fields** — `conversion_time_s` and
+   `shadow_time_s` do not exist pre-merge. This is the concrete instance of
+   §6.3 and is why RUNBOOK step 2 re-runs Stage C on the merged commit.
+3. **`wl_subtree_unified/` is a directory of dangling symlinks.** Only
+   `analysis/` resolves; absolute per-problem values were recomputed from
+   `wl_subtree_hard/models_hard/`. The certifier's D1.6 reconstructs C1 ρ from
+   the CPDT deltas and cross-checks it against `three_axis_summary` (gap
+   5.1×10⁻⁴ bingo, 0.0 udfs).
+
+**Unprompted observation.** `ρ_hash = 1.0000` on **all 210** UDFS smoke cells
+against `ρ_isalsr = 1.6552`, while Bingo's hash arm does merge (1.7247 vs
+1.7814). That is §4.4 D3's anticipated null result appearing on one host only —
+a more informative answer to R1.4 than either uniform outcome, and §10.1 should
+record that we knew before the campaign ran.
+
+**Verification.** Full `tests/unit` re-run after every landing; ruff clean on
+all touched files. The 26 failures seen in one intermediate run were a mid-edit
+snapshot (`NameError: StageDTracer` before its import landed) and clear on
+re-run — not a regression.
