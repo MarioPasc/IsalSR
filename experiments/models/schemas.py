@@ -98,6 +98,22 @@ class TimeResults:
     evaluation_time_s: float
     overhead_time_s: float
 
+    # Per-candidate work the dedup wrapper performs inside the wall-clock budget
+    # but which was outside every timer until this field existed, so it was
+    # silently booked as search time.  Both default to 0.0, which is also what a
+    # baseline arm reports (no wrapper, no wrapper cost) and what a pre-C2
+    # artifact deserialises to.
+    #
+    #: Adapter conversion host object -> ``LabeledDAG`` (plus the normalisation
+    #: coupled to it).  Genuine method cost: the representation cannot be keyed
+    #: without it, so it is part of ``overhead_time_s``.
+    conversion_time_s: float = 0.0
+    #: T04 shadow cardinality sketches.  Audit instrumentation, not method cost:
+    #: subtracted from search time but deliberately NOT added to
+    #: ``overhead_time_s``, so the overhead figure stays a statement about the
+    #: representation rather than about the measurement apparatus.
+    shadow_time_s: float = 0.0
+
 
 @dataclass(frozen=True)
 class SearchSpaceResults:
@@ -194,6 +210,18 @@ class SearchSpaceResults:
     #: on the fly.  Not a fallback -- recorded here because it partitions the
     #: same stream and the five rates are otherwise not interpretable.
     n_atlas_hits: int | None = None
+
+    # ------------------------------------------------------------------ #
+    # Effective-population disclosure (Bingo only)
+    # ------------------------------------------------------------------ #
+    # Bingo's population-level dedup rejects a duplicate by marking it +inf and
+    # setting genetic_age = 10^7 rather than removing it, so the nominal
+    # population size overstates the number of individuals actually competing.
+    # These two scalars summarise the per-generation count of penalised members
+    # and make that shortfall auditable from the run log.  0.0 = does not apply
+    # (baseline, UDFS) or no generation was ever observed.
+    penalised_in_population_mean: float = 0.0
+    penalised_in_population_max: float = 0.0
 
 
 @dataclass(frozen=True)

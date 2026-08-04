@@ -168,6 +168,14 @@ class _CanonicalDeduplicator:
         self.n_unique = 0
         self.n_skipped = 0
         self.canon_time_total = 0.0
+        # Adapter conversion cost (host CompGraph -> LabeledDAG).  Inside the
+        # wall-clock budget and part of the method, so it must be subtracted
+        # from search time and charged as overhead.
+        self.conversion_time_total = 0.0
+        # Shadow sketch cost.  Inside the wall-clock budget but pure audit
+        # instrumentation: subtracted from search time, never charged as
+        # overhead.  Stays exactly 0.0 when the sketches are disabled.
+        self.shadow_time_total = 0.0
         self._snapshot_freq = snapshot_freq
         self._t0 = t0
         self._best_loss = float("inf")
@@ -238,18 +246,22 @@ class _CanonicalDeduplicator:
         """
         if not self._shadow:
             return
+        # Timed from here, not from the call site: with the sketches disabled the
+        # method returns above having done no work, so ``shadow_time_total``
+        # stays exactly 0.0 rather than accumulating call overhead.
+        t0 = time.perf_counter()
         for order, sketch in self._shadow.items():
             try:
                 sketch.add(fixed_order_hash(dag, order))
             except Exception:  # noqa: BLE001
                 self.n_shadow_failures += 1
-        if host is None or self._shadow_host_native is None:
-            return
-        self._host_native_offered = True
-        try:
-            self._shadow_host_native.add(host_native_hash(udfs_host_native_records(host)))
-        except Exception:  # noqa: BLE001
-            self.n_shadow_failures += 1
+        if host is not None and self._shadow_host_native is not None:
+            self._host_native_offered = True
+            try:
+                self._shadow_host_native.add(host_native_hash(udfs_host_native_records(host)))
+            except Exception:  # noqa: BLE001
+                self.n_shadow_failures += 1
+        self.shadow_time_total += time.perf_counter() - t0
 
     def shadow_counts(self) -> dict[str, float]:
         """Return the shadow distinct-cardinality estimates by RunLog field name.
@@ -330,9 +342,13 @@ class _CanonicalDeduplicator:
 
             # record_pre is called inside compgraph_to_labeled_dag, before
             # _normalize_const_edges, to measure RTF precondition violations.
+            t_conv = time.perf_counter()
             try:
                 labeled_dag = compgraph_to_labeled_dag(cgraph, ledger=self.ledger)
             except Exception:  # noqa: BLE001
+                # A refused candidate still consumed the budget, so the failed
+                # conversion is charged like a successful one.
+                self.conversion_time_total += time.perf_counter() - t_conv
                 # Conversion failed: count in ledger (full-rate, O(1))
                 if self.ledger is not None:
                     self.ledger.record_conversion_failure()
@@ -349,6 +365,7 @@ class _CanonicalDeduplicator:
                     self._best_loss = loss
                 self._maybe_snapshot()
                 return result
+            self.conversion_time_total += time.perf_counter() - t_conv
 
             # Record post-normalisation state (before canonicalisation).
             if self.ledger is not None:
@@ -538,7 +555,16 @@ class IsalSRUDFSRunner(ModelRunner):
                 best_loss = float(min(losses))
             n_top = len(regressor.results.get("graphs", []))
 
-        search_only = wall_clock - dedup.canon_time_total
+        # Every block the wrapper runs inside the budget is removed, not just the
+        # canonicalisation: conversion and the shadow sketches were previously
+        # booked as search time.
+        search_only = max(
+            0.0,
+            wall_clock
+            - dedup.canon_time_total
+            - dedup.conversion_time_total
+            - dedup.shadow_time_total,
+        )
 
         log.info(
             "IsalSR UDFS: total=%d unique=%d skipped=%d canon=%.2fs atlas_hits=%d misses=%d",
@@ -575,6 +601,8 @@ class IsalSRUDFSRunner(ModelRunner):
             n_skipped=dedup.n_skipped,
             canonicalization_time_s=dedup.canon_time_total,
             search_only_time_s=search_only,
+            conversion_time_s=dedup.conversion_time_total,
+            shadow_time_s=dedup.shadow_time_total,
             atlas_hits=dedup.atlas_hits,
             atlas_misses=dedup.atlas_misses,
             atlas_lookup_time_s=dedup.atlas_lookup_time,

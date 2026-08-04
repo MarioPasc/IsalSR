@@ -87,6 +87,8 @@ def _run_log(method: str, arm: str, seed: int) -> dict[str, Any]:
                 "time_to_r2_0999_s": None,
                 "evaluation_time_s": 10.0,
                 "overhead_time_s": 1.0,
+                "conversion_time_s": 0.3 if dedup else 0.0,
+                "shadow_time_s": 0.2 if dedup else 0.0,
             },
             "search_space": {
                 "total_dags_explored": 190,
@@ -100,6 +102,8 @@ def _run_log(method: str, arm: str, seed: int) -> dict[str, Any]:
                 "shadow_distinct_topological_commutative": None,
                 "shadow_distinct_host_native": None,
                 "n_shadow_failures": None,
+                "penalised_in_population_mean": 2.0 if dedup else 0.0,
+                "penalised_in_population_max": 5.0 if dedup else 0.0,
                 **ledger,
             },
         },

@@ -239,6 +239,14 @@ class _CanonicalDeduplicator:
         self.n_skipped: int = 0
         self.n_rejected_duplicates: int = 0  # Population-level rejections
         self.canon_time_total: float = 0.0
+        # Adapter conversion cost (host AGraph -> LabeledDAG).  Inside the
+        # wall-clock budget and part of the method, so it must be subtracted
+        # from search time and charged as overhead.
+        self.conversion_time_total: float = 0.0
+        # Shadow sketch cost.  Inside the wall-clock budget but pure audit
+        # instrumentation: subtracted from search time, never charged as
+        # overhead.  Stays exactly 0.0 when the sketches are disabled.
+        self.shadow_time_total: float = 0.0
         # Atlas-specific stats
         self.atlas_hits: int = 0
         self.atlas_misses: int = 0
@@ -293,18 +301,22 @@ class _CanonicalDeduplicator:
         """
         if not self._shadow:
             return
+        # Timed from here, not from the call site: with the sketches disabled the
+        # method returns above having done no work, so ``shadow_time_total``
+        # stays exactly 0.0 rather than accumulating call overhead.
+        t0 = time.perf_counter()
         for order, sketch in self._shadow.items():
             try:
                 sketch.add(fixed_order_hash(dag, order))
             except Exception:  # noqa: BLE001
                 self.n_shadow_failures += 1
-        if host is None or self._shadow_host_native is None:
-            return
-        self._host_native_offered = True
-        try:
-            self._shadow_host_native.add(host_native_hash(bingo_host_native_records(host)))
-        except Exception:  # noqa: BLE001
-            self.n_shadow_failures += 1
+        if host is not None and self._shadow_host_native is not None:
+            self._host_native_offered = True
+            try:
+                self._shadow_host_native.add(host_native_hash(bingo_host_native_records(host)))
+            except Exception:  # noqa: BLE001
+                self.n_shadow_failures += 1
+        self.shadow_time_total += time.perf_counter() - t0
 
     def shadow_counts(self) -> dict[str, float]:
         """Return the shadow distinct-cardinality estimates by RunLog field name.
@@ -498,9 +510,13 @@ class IsalSREvaluation(Evaluation):
             # Convert AGraph → LabeledDAG
             # record_pre is called inside agraph_to_labeled_dag, before
             # _normalize_const_edges, to measure RTF precondition violations.
+            t_conv = time.perf_counter()
             try:
                 dag = agraph_to_labeled_dag(indv, ledger=self.dedup.ledger)
             except Exception:  # noqa: BLE001
+                # A refused candidate still consumed the budget, so the failed
+                # conversion is charged like a successful one.
+                self.dedup.conversion_time_total += time.perf_counter() - t_conv
                 # Conversion failed: count in ledger (full-rate, O(1))
                 if self.dedup.ledger is not None:
                     self.dedup.ledger.record_conversion_failure()
@@ -510,6 +526,7 @@ class IsalSREvaluation(Evaluation):
                     if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                         self._best_fitness = indv.fitness
                 continue
+            self.dedup.conversion_time_total += time.perf_counter() - t_conv
 
             # Record post-normalisation state (before canonicalisation).
             # violated_post should be 0 if _normalize_const_edges worked correctly.
@@ -788,9 +805,24 @@ class IsalSRBingoRunner(ModelRunner):
         except Exception:  # noqa: BLE001
             log.debug("Failed to extract Bingo IsalSR results", exc_info=True)
 
-        search_only = wall_clock - dedup.canon_time_total
+        # Every block the wrapper runs inside the budget is removed, not just the
+        # canonicalisation: conversion and the shadow sketches were previously
+        # booked as search time.
+        search_only = max(
+            0.0,
+            wall_clock
+            - dedup.canon_time_total
+            - dedup.conversion_time_total
+            - dedup.shadow_time_total,
+        )
         snapshots = evaluation.snapshots  # type: ignore[union-attr]
         convergence_data = evaluation.convergence_data  # type: ignore[union-attr]
+
+        # Effective-population disclosure: how many population members were
+        # sitting at the +inf duplicate penalty, per generation.
+        penalised = [n for _gen, n, _size in evaluation.n_penalised_per_gen]  # type: ignore[union-attr]
+        penalised_mean = float(np.mean(penalised)) if penalised else 0.0
+        penalised_max = float(max(penalised)) if penalised else 0.0
 
         log.info(
             "IsalSR Bingo: total=%d unique=%d skipped=%d pop_rejected=%d "
@@ -832,6 +864,10 @@ class IsalSRBingoRunner(ModelRunner):
             n_skipped=dedup.n_skipped,
             canonicalization_time_s=dedup.canon_time_total,
             search_only_time_s=search_only,
+            conversion_time_s=dedup.conversion_time_total,
+            shadow_time_s=dedup.shadow_time_total,
+            penalised_in_population_mean=penalised_mean,
+            penalised_in_population_max=penalised_max,
             atlas_hits=dedup.atlas_hits,
             atlas_misses=dedup.atlas_misses,
             atlas_lookup_time_s=dedup.atlas_lookup_time,

@@ -89,6 +89,15 @@ class BingoRawResult(RawRunResult):
     n_skipped: int = 0
     canonicalization_time_s: float = 0.0
     search_only_time_s: float = 0.0
+    # Wrapper work inside the wall-clock budget that is not canonicalisation:
+    # the adapter conversion (method cost) and the shadow sketches (audit
+    # instrumentation).  0.0 on the baseline arm, which runs neither.
+    conversion_time_s: float = 0.0
+    shadow_time_s: float = 0.0
+    # Population members held at the +inf duplicate penalty, summarised over
+    # generations.  0.0 on the baseline arm, which applies no penalty.
+    penalised_in_population_mean: float = 0.0
+    penalised_in_population_max: float = 0.0
     # Atlas-specific (populated when --atlas-dir is used)
     atlas_hits: int = 0
     atlas_misses: int = 0
