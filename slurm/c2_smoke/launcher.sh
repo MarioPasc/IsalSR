@@ -64,7 +64,35 @@ AGG_WALL="${C2_AGG_WALL:-0-06:00:00}"
 # so the wall-clock-homogeneity argument for pinning does not apply here.  Every
 # run records its own cpu_model (A7), so B5/B6 get the node census as a
 # by-product and the arm balance is reportable.
-CONSTRAINT="${C2_CONSTRAINT:-cpu}"
+# 🔴 PINNED to the AMD `sr` family (2026-08-04). Was `cpu` (any node), which is
+# what exposed the C4 failure: data generation is NOT bit-reproducible across
+# CPU families, so a cell on an Intel `sd` node and its paired cell on an AMD
+# `sr` node produced data differing by ~1 ULP (5.55e-17) and therefore different
+# `data_fingerprint`s. 35 of 210 (problem, seed) pairs split, and all 35
+# partitioned EXACTLY by node family. Pinning removes it at the source.
+#
+# Two independent reasons, either of which would suffice:
+#   1. C4 -- the paired arms must provably see identical data.
+#   2. Wall clock is a REPORTED quantity (S, the overhead percentages, Table 2's
+#      cost column). Intel `sd` at 2.1 GHz against AMD `sr` at 2.6 GHz turns any
+#      timing comparison across a mixed pool into a measurement of the
+#      scheduler. This is also the `picasso-sbatch` skill's standing rule and it
+#      closes the open B6 decision.
+#
+# Why `sr` and not another family (measured 2026-08-04):
+#   sr  154 nodes x 128 c = 19,712 cores, 450 GB/node, AMD, no avx512  <- chosen
+#   sd  123 x  52 =  6,396 cores, 187 GB, Intel, avx512
+#   bc   32 x 256 =  8,192 cores, 700 GB, AMD, avx512
+#   bl   24 x 128 =  3,072 cores, 1855 GB, AMD, no avx512
+# `sr` is the largest pool by a factor of 2.4 and is itself more than double the
+# QOS entitlement (cpu=9000), so the pin does not bind the entitlement. Its
+# 450 GB/node also covers Bingo-IsalSR even at §3.3's 256 GB request (1 task per
+# node). And the engine is built `isa_level=x86-64-v3, avx512f=0`, i.e. exactly
+# the ISA `sr` provides -- B6b already certified it imports and runs there.
+#
+# ACCEPTED COST (Mario, 2026-08-04): a pinned pool queues slower than `cpu`.
+# That is the intended trade -- comparability over turnaround.
+CONSTRAINT="${C2_CONSTRAINT:-sr}"
 
 METHODS=(udfs bingo)
 ARMS=(baseline hash isalsr)

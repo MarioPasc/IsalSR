@@ -102,12 +102,22 @@ FEYNMAN_BENCHMARKS: list[dict[str, Any]] = [
         _x[0] / _x[1],
     ),
     _make_feynman(
+        # CORRECTED 2026-08-04. This was ``hbar * omega``, which folded the
+        # 1/(2*pi) into the symbol name and DROPPED it from the target. The AI
+        # Feynman database defines I.34.27 as ``(h/(2*pi))*omega`` with h and
+        # omega both free on [1,5], and without the constant this problem is
+        # literally ``x_0*x_1`` on [1,5]^2 -- byte-for-byte the same data as
+        # I.12.1 (``mu * N_s``), which is also in this tier. Stage C's criterion
+        # C4 caught it: the two shared a data_fingerprint at every seed, so the
+        # suite contained a duplicate and CPDT -- which treats each problem as
+        # one paired observation -- counted the same observation twice, since C1.
+        # See docs/md_files/changes/c4_fingerprint_findings.md.
         "I.34.27",
-        "hbar * omega",
+        "h * omega / (2 * pi)",
         2,
         [(1.0, 5.0), (1.0, 5.0)],
-        lambda hbar, omega: hbar * omega,
-        _x[0] * _x[1],
+        lambda h, omega: h * omega / (2.0 * math.pi),
+        _x[0] * _x[1] / (2 * sympy.pi),
     ),
     _make_feynman(
         "I.39.10",

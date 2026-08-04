@@ -705,8 +705,13 @@ C1 is **reference only**. No C1 number enters a C2 table. Its two uses:
    engine did). Restrict C1 to seeds 1…20 for the comparison (§6.3).
    If R² *did* move materially, that is a finding: investigate before writing it up.
    **Two exclusions, both mandatory, both because the compared object changed and
-   not the method.** Five D1 problems whose definitions were corrected (T05, §3):
-   `I.39.10, I.12.4, II.3.24, II.11.27, III.17.37`. And, for **Bingo only**, the
+   not the method.** **Six** D1 problems whose definitions were corrected — five
+   by T05 (§3): `I.39.10, I.12.4, II.3.24, II.11.27, III.17.37`, plus
+   **`I.34.27`, corrected 2026-08-04**: it was implemented as `hbar * omega`,
+   which dropped the `1/(2π)` of the AI Feynman definition and made it
+   byte-for-byte identical to `I.12.1`. C1 therefore ran a *different function*
+   under this name, so its C1 row is not comparable. (Note that `I.12.1` itself
+   is **unchanged** and stays in the continuity table.) And, for **Bingo only**, the
    22 D1 problems C1 configured without `sqrt` and `pow`, whose operator set A4b
    made uniform: Bingo now searches a strictly larger primitive set there, so a
    C1↔C2 difference on those rows confounds the alphabet, the engine **and** the

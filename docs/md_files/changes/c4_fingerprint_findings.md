@@ -2,7 +2,24 @@
 
 **Date**: 2026-08-04
 **Found by**: Stage C certification, job 1758604 (`c2_certify.py`, verdict NO-GO)
-**Status**: one blocking finding needs **Mario's decision**; one is expected and needs **disclosure**
+**Status**: ✅ **BOTH DECISIONS TAKEN (Mario, 2026-08-04) AND IMPLEMENTED.**
+
+> ### Resolution
+>
+> **Finding A → option A.** The `1/(2π)` is restored in `I.34.27`
+> (`benchmarks/datasets/feynman.py`), matching the AI Feynman database. The two
+> problems are now distinct; `N` stays at 70. **`I.34.27` joins §7's
+> continuity-table exclusions** — C1 ran a different function under that name.
+> Regression tests: `tests/unit/test_benchmark_suite_distinctness.py` (5 tests,
+> verified to fail 3/5 against the old definition).
+>
+> **Finding C → pin the node family.** `slurm/c2_smoke/launcher.sh` now defaults
+> to `--constraint=sr` (AMD EPYC 7H12; 154 nodes × 128 c = **19,712 cores**, the
+> largest pool and >2× the `cpu=9000` entitlement). This closes **B6**. The
+> accepted cost is slower queue access than an unpinned `cpu` request —
+> comparability over turnaround.
+>
+> **Finding B** stays as documented: a disclosure obligation, not a defect.
 
 ---
 

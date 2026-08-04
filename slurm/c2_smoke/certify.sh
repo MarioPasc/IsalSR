@@ -22,6 +22,10 @@ export ISALSR_REPO_DIR="${ISALSR_REPO_DIR:-/mnt/home/users/tic_163_uma/mpascual/
 RESULTS_ROOT="${C2_RESULTS_DIR:-/mnt/home/users/tic_163_uma/mpascual/fscratch/results/isalsr/c2_smoke}"
 LOGS_DIR="${C2_LOGS_DIR:-/mnt/home/users/tic_163_uma/mpascual/execs/isalsr/c2_smoke/logs}"
 ACCOUNT="tic_163_uma"
+# Deliberately NOT pinned, unlike launcher.sh. The certifier only reads files
+# already on disk: it generates no data and produces no timed quantity, so
+# neither of the two reasons for pinning the wave applies to it. Leaving it on
+# any CPU node just gets the verdict back sooner.
 CONSTRAINT="${C2_CONSTRAINT:-cpu}"
 
 # The 2 h wall is what killed 1753134.  The certifier alone is far cheaper than
