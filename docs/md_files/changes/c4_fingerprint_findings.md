@@ -2,7 +2,15 @@
 
 **Date**: 2026-08-04
 **Found by**: Stage C certification, job 1758604 (`c2_certify.py`, verdict NO-GO)
-**Status**: ✅ **BOTH DECISIONS TAKEN (Mario, 2026-08-04) AND IMPLEMENTED.**
+**Status**: ✅ **BOTH DECISIONS TAKEN, IMPLEMENTED, AND VERIFIED ON PICASSO.**
+
+> **Stage C re-certified GO on `c2_smoke_v3` (job 1761777): 19/19 criteria pass,
+> 0 blocking failures.** C4 now reports `cross_arm_disagreement 0`,
+> `duplicate_problems_blocking 0`, `seed_collapse_blocking 0`,
+> `wrong_multiplicity 0`, with a multiplicity histogram of **`{6: 204, 18: 2}`**
+> — 204 fingerprints at the correct multiplicity of 6 (3 arms × 2 methods) and
+> the two declared deterministic grids at 18 (× 3 seeds). 1,260/1,260 tasks were
+> placed on `sr`.
 
 > ### Resolution
 >

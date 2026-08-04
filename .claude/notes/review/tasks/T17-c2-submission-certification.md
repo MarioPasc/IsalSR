@@ -582,6 +582,46 @@ Bingo's is already `d = 0.034`. Full entry in `EXECUTION-PLAN.md` §11.1.
   confident **wrong** verdict rather than none. Shipped colon-separated; the
   worker now asserts it decoded ≥3 seeds.
 
+### 2026-08-04 (later) — ✅ **Stage C certifies GO, 19/19**
+
+Both C4 decisions were taken by Mario and implemented, and the stage was re-run
+from the top per §5 (a partial re-run certifies nothing).
+
+| Change | Effect |
+|---|---|
+| `I.34.27` restored to `h·ω/(2π)` | the `I.12.1` duplicate is gone; `N` stays 70; I.34.27 joins §7's continuity exclusions |
+| `--constraint=sr` | data generation is bit-identical across the pool; closes **B6** |
+
+**`c2_smoke_v3`: 1,260/1,260 COMPLETED, 1,260/1,260 placed on `sr`**, span
+14:16:45 → 14:48:40 = **31 m 55 s**. Aggregation 1 h 35 under the new 6 h wall,
+and the certifier ran inside it.
+
+```
+VERDICT: GO   (0 blocking failures)   — 19/19 criteria PASS
+```
+
+- **C1.10 → 1260/1260.** The train/test metric switch is gone at full scale.
+- **C4 → PASS.** `cross_arm_disagreement 0`, `duplicate_problems_blocking 0`,
+  `seed_collapse_blocking 0`, `wrong_multiplicity 0`. Multiplicity histogram
+  **`{6: 204, 18: 2}`** — 204 fingerprints at the correct multiplicity
+  (3 arms × 2 methods) and the two declared deterministic grids at 18.
+- **C1.11 → 1,260 observations.** Peak `MaxRSS` 0.67 GB; still does not size
+  production, which is D1.2's job at 12 h.
+
+**Unexpected, and worth carrying:** pinning made the wave *faster* — **592
+achieved cores against 476 unpinned**, because `sr` nodes carry 128 cores to
+`sd`'s 52 and a 1-core task packs more readily. C2 projects to **≈7.1 days**.
+Do not generalise it: this is 1-core 900 s tasks, and D1.2 must re-check at 12 h
+where Bingo–IsalSR at §3.3's 256 GB is one task per 450 GB node.
+
+**What Stage C no longer blocks.** Stage D (§4.4) is now the gate, then Stage E
+and Stage F. Still open and outside this ticket: **A6** (`manifest.py` does not
+exist), **A8** (three-arm analyzer), **A13** (FSCRATCH headroom for the campaign),
+**B8**'s deliberate-corruption half, and the `campaign/c2` tag, which must sit on
+the final commit.
+
+---
+
 #### Stage C re-run submitted
 
 Per §5 (*"a single C1.x criterion fails → fix, re-run the whole stage; partial
