@@ -1,8 +1,28 @@
-# Correction of five AI Feynman problem definitions (2026-08-02)
+# Correction of AI Feynman problem definitions (2026-08-02, extended 2026-08-04)
 
-**Internal engineering record. Not reviewer-facing.**
 Decision: Mario, 2026-08-02. Found while building `benchmarks/datasets/feynman_catalogue.py`
-under T05. Nothing about this goes into the manuscript or the response letter.
+under T05.
+
+> ### ⚠ The "not reviewer-facing" framing was withdrawn on 2026-08-04
+>
+> This file originally read *"Internal engineering record. Not reviewer-facing.
+> Nothing about this goes into the manuscript or the response letter."* **Three of
+> the five corrected problems — `I.39.10`, `I.12.4`, `II.3.24` — are printed with
+> their expressions in Table 5 of the supplementary material**, and R2.5 asks
+> about that table by name. Once the code runs the corrected definitions, Table 5
+> either prints them too or the manuscript misdescribes what was executed; and a
+> reviewer diffing the submitted against the revised supplementary sees the change
+> regardless of what we choose to say about it.
+>
+> So the three are now stated plainly in the R2.5 answer, together with the
+> fourth correction found on 2026-08-04 (`I.34.27`, §1b). `II.11.27` and
+> `III.17.37` are **not** in Table 5 — they belong to the hard tier — and the
+> reasoning about them stays internal, since nothing in the shipped artefacts
+> exposes it.
+>
+> What remains internal in every case: the ticket ids, the dates, the order in
+> which things were found, and who found them. The manuscript states what the
+> problems *are*; it does not narrate its own review history.
 
 ---
 
@@ -25,6 +45,33 @@ verified) and PMLB's `feynman_*` `metadata.yaml` files. **The two sources agree 
 
 The first three are transcription errors of the named equation. The last two are
 unrelated equations carrying a Feynman id.
+
+## 1b. A sixth, found on 2026-08-04 by Stage C's criterion C4
+
+| Suite id | Was | Should be | Defect |
+|---|---|---|---|
+| I.34.27 | `hbar·omega` | `h·omega/(2π)` | the `1/(2π)` was folded into the symbol name and then **dropped from the target** |
+
+This one is different in kind from the other five, and worse. The other five
+encode *some* wrong function; this one encodes a function that **another problem
+in the same tier already encodes**. With the constant gone the target is
+`x_0·x_1` on `[1,5]²`, and `I.12.1` (`mu·N_s`) is `x_0·x_1` on `[1,5]²`. Given
+the same seed the two generate **byte-identical** `X_train`, `y_train`,
+`X_test`, `y_test` — verified by `data_fingerprint`, not inferred.
+
+**Consequence, and why it is not cosmetic.** CPDT treats each problem as one
+paired observation and tests over `N` problems. Two of the `N` were the same
+problem, so one observation was counted twice and `N` was overstated by one, in
+C1 (`N=42`) and in every planned C2 figure until the fix. `I.12.1` itself is
+correct and unchanged; only `I.34.27` moves.
+
+**How it was found.** Not by reading the definitions — they look unrelated, one
+being friction and the other a photon energy. C4 compares the `data_fingerprint`
+of every `(problem, seed)` cell and flagged the two ids as sharing one. The
+guard is now permanent: `tests/unit/test_benchmark_suite_distinctness.py` fails
+if any two problems in the registry ever generate identical data again.
+
+**Reviewer-facing**, via R2.5 — see the box at the top of this file.
 
 ## 2. What was done
 
