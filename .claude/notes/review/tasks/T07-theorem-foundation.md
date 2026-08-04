@@ -1079,6 +1079,76 @@ unresolved references, 0 warnings; `rcomment` blocks verified untouched.
 **Nothing pushed to Overleaf**, and no file under `article/` was edited — only
 `reviews/` and `reviews/internal_copy_reviewed_article/`.
 
+### 2026-08-03 — inbound from T18: the domain of condition (iv), and the base/pair equivalence
+
+T18 found five DAGs on which the implementation's isomorphism predicate and the
+canonical string disagreed. The diagnosis lands here, because the defect was in
+the **statement of Definition 3.9(iv)**, not in the code's fidelity to it.
+
+**What the manuscript already had right.** Condition (iv) is written *"for every
+`Pow` node `v` with ordered input list `σ₁(v) = (u₁,u₂)`"* — a **pair**. So the
+paper never asserted the whole-list rule for arbitrary in-degree. The
+implementation did, and that is what over-separated. The code has been corrected
+to the paper, not the reverse.
+
+**What was genuinely missing, and is now stated.** Three gaps, all pre-existing
+and none caused by T16 — the same species as the `𝒟_m` clarification at §T16
+impact above:
+
+1. **Definition 3.1 does not force in-degree to match arity.** It admits any
+   acyclic `E`, so a `Pow` node may have three in-neighbours and
+   Eq. (operand_order) has no pair to read. Every operand-order statement in the
+   paper is silently conditional on `|σ(v)| = 2`.
+2. **Condition (iv)'s domain was never named.** Outside expression DAGs it is
+   either vacuous or, on the reading of the Remark below it, *stronger than the
+   invariant of Theorem 3.15* — which is exactly the five-DAG discrepancy.
+3. **Rule 1 and condition (iv) speak about different objects.** Rule 1
+   (Definition 3.8, `methodology.tex:777`) excludes `c` when `σ(c)[0] ≠ u` —
+   the base alone. Condition (iv) demands the whole pair. The completeness proof
+   (`supplementary.tex:285–286`) already *uses* the base-only form. The step from
+   one to the other was never justified; it was the implicit hinge of the (⇒)
+   direction that R2.1 is about.
+
+**The bridging lemma**, now written into the Remark rather than added as a new
+numbered environment: on expression DAGs, `σ₂(φ(v)) = (φ(u₁), φ(u₂))` is
+**equivalent** to `σ₂(φ(v))[0] = φ(σ₁(v)[0])`. One direction is immediate; for
+the other, condition (i) sends `N⁻(v)` onto `N⁻(φ(v))`, so
+`{φ(u₁),φ(u₂)} = {σ₂(φ(v))[0], σ₂(φ(v))[1]}`, and injectivity of `φ` leaves the
+exponent no other image. Gap 3 closes: Rule 1 constrains precisely as much as
+condition (iv) requires, no more and no less.
+
+Why the restriction is load-bearing and not cosmetic: `Σ_SR` writes the base
+explicitly (a `Vℓ`/`vℓ` token creates the node with its first in-edge) and every
+later in-edge with a `C`/`c` token at a position the canonical traversal picks.
+Read over graphs with surplus in-edges, condition (iv) separates DAGs that no
+string can distinguish — strictly finer than Theorem 3.15's invariant.
+
+**Edits made** (annotated copy only; `article/` verified untouched, nothing
+pushed):
+
+| Location | Change |
+|---|---|
+| `methodology.tex`, paragraph after Definition 3.1 | defines *expression DAG*; states that evaluation is defined there and nowhere else, and that host output always qualifies |
+| `methodology.tex`, Definition 3.9(iv) | one blue clause naming the class the condition is stated on |
+| `methodology.tex`, Remark 3.11 (*Necessity of condition (iv)*) | "match `σ` **exactly**" replaced by the base/pair equivalence with its proof, plus the `Σ_SR`-encoding reason the restriction matters |
+
+**No new numbered environment**, deliberately: `remark` shares the `theorem`
+counter, so inserting one would renumber 3.13/3.14/3.15 — which the reviewers
+quote as literals. Verified from the rebuilt PDF: Definitions 3.1–3.9, Remarks
+3.10–3.12, Theorem 3.13, Lemma 3.14, Theorem 3.15, Definition 3.16, Lemma 3.17,
+Corollary 3.18 — **identical to before**. Both documents compile with 0 errors
+and 0 undefined references; 0 `\color{red}` remain.
+
+**No consequence for the letter.** The R2.1 answer's claim that condition (iv)
+"compares ordered input lists" stays true, and `supplementary.tex:286`'s use of
+the base-only form is now *exact* rather than a weakening. No number changes
+anywhere; `is_isomorphic` has no production caller.
+
+**Left for Ezequiel.** Whether to promote the equivalence from a remark to a
+numbered lemma (it would renumber, so it needs a deliberate pass over every
+literal the reviewers quote), and the T18.4 wording fork recorded in
+`T18-canonical-completeness-operand-order.md` §8.
+
 ---
 
 ## 7bis. Hand-over to Ezequiel — what is left, and what is now settled

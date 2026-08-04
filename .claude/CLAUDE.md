@@ -255,6 +255,19 @@ python -m pip install -e . --no-build-isolation           # SILENTLY FAILS
    sets the first operand. V/v creates the first edge; C/c creates the second.
    Evaluator uses `ordered_inputs()`, NOT `sorted(in_neighbors())`.
    D2S/canonical only create binary ops via V/v from the FIRST operand.
+   **What Σ_SR encodes is `ordered_inputs(v)[0]` and nothing further (T18,
+   2026-08-03).** Surplus in-edges are emitted by C/c in canonical-traversal
+   order, so their positions are not recoverable from the string.
+   `is_isomorphic` therefore compares position 0 only. This loses nothing where
+   it matters: with in-degree ≤ 2, agreement at position 0 plus edge-set
+   preservation forces the rest, so the two readings can differ only at a binary
+   node of **in-degree ≥ 3** — which `dag_evaluator` refuses outright and no host
+   adapter can emit (each op node gets exactly `arity` `add_edge` calls, and
+   duplicates are refused, so in-degree ≤ arity always). Do not restore the
+   whole-list comparison: it made `is_isomorphic` strictly finer than the
+   canonical string and produced five spurious gate-3 round-trip failures.
+   Standing check: gate 3's `dags_with_oversaturated_binary`.
+   Write-up: `src/isalsr/core/README.md` §7.3.
 9. **CONST creation edge repair (revised 2026-07-27, T15).** CONST nodes ignore in-edges
    (evaluation-neutral) but need a "creation edge" for D2S reachability.
    `normalize_const_creation()` adds `x_i -> c` **only for CONST nodes with in-degree 0**,

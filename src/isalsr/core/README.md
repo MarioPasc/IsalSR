@@ -169,6 +169,9 @@ w*_D = lexmin{ w in argmin |D2S(D, x_1)| }
 
 Computed from x_1 only (fixed, distinguished start node).
 Complete labeled-DAG invariant: w*_D = w*_D' iff D ~ D'.
+**Read section 7.3 before relying on that sentence**: `~` is labeled-DAG
+isomorphism *plus* the first-operand designation on `{Sub, Div, Pow}`, and taking
+`~` to mean anything finer produces spurious round-trip failures.
 
 Three algorithm families:
 - `canonical_string()`: Exhaustive search. Guaranteed optimal (lexmin of shortest). O(k!).
@@ -218,6 +221,71 @@ Empirical measurement (28,890 entries across Nguyen and Feynman benchmarks):
 - 99.88% agreement between pruned and exhaustive
 - 0.09% same-length lexicographic differences (different tie-breaking)
 - 0.03% length mismatches (pruned is longer than exhaustive)
+
+### 7.3 What the invariant separates: the first-operand designation (T18)
+
+Section 7's "complete labeled-DAG invariant" needs one qualifier, because a bare
+labeled DAG is *not* the object Sigma_SR represents. Both `Sub(sin x, cos x)` and
+`Sub(cos x, sin x)` have the same nodes, the same labels and the same edge set;
+they are the same labeled DAG and different functions. What distinguishes them is
+which in-edge is the **first operand**, and that is exactly the extra structure the
+string carries.
+
+**Definition (first-operand designation).** For a DAG `D` with in-edge insertion
+order, let `phi_D(v) = ordered_inputs(v)[0]` for every node `v` whose label lies in
+`BINARY_OPS = {Sub, Div, Pow}` with in-degree >= 1. Two labeled DAGs are
+**Sigma_SR-equivalent** iff some label- and edge-preserving bijection `sigma`
+(matching VAR nodes by `var_index`) also satisfies `sigma(phi_D(v)) = phi_D'(sigma(v))`
+for every such `v`.
+
+**Why `phi` and nothing more.** `V`/`v` may create a binary op only from its first
+operand -- Critical Invariant 8 / B9, enforced in
+`dag_to_string._find_new_out_neighbor`, at the four `ordered_inputs(c)[0] ==
+ptr_in` admissibility sites in `canonical.py` (lines 648, 726, 1032, 1101) and at
+their `input_order_[c][0] == ptr_in` counterparts in
+`native/src/canonical.cpp`. Every *further* in-edge of that
+node is emitted by `C`/`c` in canonical-traversal order. So the string determines
+`phi_D` and the edge set, and determines nothing else about the in-edge ordering.
+Any predicate that separates DAGs on more than that is strictly finer than the
+canonical string and will report round-trip failures that are artefacts of the
+predicate.
+
+**Lemma (where the two readings can differ at all).** Let `~_full` require a
+label- and edge-preserving bijection `sigma` (VAR matched by `var_index`) that
+agrees with the **entire** `ordered_inputs` list on every binary node, and let
+`~_first` require agreement on position 0 only. Then `~_full` implies `~_first`
+always, and the converse holds whenever every binary node of `D` has in-degree
+<= 2.
+
+*Proof.* The forward direction is immediate. For the converse, let `sigma`
+witness `~_first` and let `v` be binary with in-degree `d <= 2`. For `d = 0`
+there is nothing to compare, and for `d = 1` position 0 is the whole list. For
+`d = 2`, write `ordered_inputs(v) = [a1, a2]` and `ordered_inputs(sigma v) =
+[b1, b2]`. Position 0 gives `sigma(a1) = b1`; `sigma` preserves edges, so
+`{sigma(a1), sigma(a2)} = {b1, b2}`; and `sigma` is injective, so
+`sigma(a2) = b2`. Hence `sigma` witnesses `~_full`. QED
+
+So the two readings can diverge **only** at a binary node of in-degree >= 3. The
+condition is weaker than well-formedness -- it tolerates the *under*-saturated
+nodes that host adapters routinely emit, because `add_edge` refuses a duplicate
+edge and `f(x, x)` therefore arrives with in-degree 1.
+
+**On well-formed DAGs the qualifier is vacuous.** Call `D` *arity-well-formed* when
+every unary op has in-degree 1, every binary op in-degree exactly 2, every variadic
+op in-degree >= 2, every VAR in-degree 0 and every CONST in-degree <= 1. This is
+precisely the class `dag_evaluator` accepts; outside it, evaluation raises
+`EvaluationError`. On that class, fixing `phi_D(v)` leaves one in-edge, so the full
+`ordered_inputs(v)` is forced and Sigma_SR-equivalence coincides with
+"isomorphic and semantically identical". The two notions can differ only at an
+*over-saturated* binary node (in-degree > 2), which denotes no expression at all.
+
+**Consequence for `is_isomorphic`.** `LabeledDAG.is_isomorphic` implements
+Sigma_SR-equivalence. Until 2026-08-03 it compared the whole `ordered_inputs` list
+for binary ops, which made it finer than the canonical string on over-saturated
+nodes -- and, inconsistently, still ignored the same surplus ordering on unary and
+variadic nodes, where the evaluator reads `sorted(in_neighbors)`. That mismatch,
+not the C++ port and not the canonicaliser, produced the five gate-3 round-trip
+failures of ticket T18. See `tests/unit/test_t18_operand_order_completeness.py`.
 
 ## 8. Search Space Reduction
 

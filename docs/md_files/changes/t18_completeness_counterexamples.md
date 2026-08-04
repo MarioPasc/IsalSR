@@ -1,5 +1,16 @@
 # T18 — canonical-string completeness: the five counterexamples, in full
 
+> **RESOLVED 2026-08-03.** The five pairs are **not** completeness failures. Every
+> one is isomorphic as a labeled DAG *and* preserves the first-operand
+> designation; the only difference is the order of the **surplus** in-edges of an
+> over-saturated binary node (a `POW`/`DIV`/`SUB` with 3–4 in-edges), which
+> Σ_SR does not encode and `dag_evaluator` refuses outright — all ten DAGs raise
+> `EvaluationError`. The defect was in `LabeledDAG.is_isomorphic`, which compared
+> the whole `ordered_inputs` list instead of position 0. After the fix, gate 3 is
+> **10,000 DAGs / 20,000 comparisons / 0 mismatches / 0 errors**.
+> Analysis and decision: `.claude/notes/review/tasks/T18-canonical-completeness-operand-order.md` §8.
+> The per-case detail below is retained as the evidence trail and is unchanged.
+
 **Commit**: `2365c823d5faa48751206c8bcaafa360d9844d8a`
 **Reproduce**: `python experiments/scripts/equivalence_gate.py --gate 3 --backend-a python --backend-b cpp --out gate3.json`, then `python -m experiments.scripts.t18_completeness_counterexamples`
 

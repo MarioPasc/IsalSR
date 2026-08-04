@@ -447,14 +447,24 @@ class LabeledDAG:
 
         Two labeled DAGs are isomorphic iff there exists a bijection between
         their node sets that preserves: (a) all directed edges, (b) all node
-        labels, (c) operand order for non-commutative binary ops (SUB, DIV,
-        POW). Variable nodes (VAR) are matched by their var_index, ensuring
-        x_1 maps to x_1, x_2 maps to x_2, etc. (variables are distinguishable).
+        labels, (c) the *first operand* of every non-commutative binary op
+        (SUB, DIV, POW). Variable nodes (VAR) are matched by their var_index,
+        ensuring x_1 maps to x_1, x_2 maps to x_2, etc. (variables are
+        distinguishable).
 
         Condition (c) is necessary because sin(x)-cos(x) and cos(x)-sin(x)
         have the same graph structure but different evaluation semantics.
-        The canonical string encodes operand order (Bug Fix B9), so the
-        isomorphism check must be consistent.
+        The canonical string encodes the first-operand designation (Bug Fix
+        B9), so the isomorphism check must be consistent.
+
+        Condition (c) is stated on the first operand alone, not on the whole
+        ``_input_order`` list (T18, 2026-08-03). On a binary op with in-degree
+        two -- the only shape ``dag_evaluator`` accepts -- the two are
+        equivalent, so nothing is weakened on well-formed DAGs. On an
+        over-saturated binary op they differ, and the surplus positions are
+        neither evaluated nor representable in Sigma_SR; requiring them made
+        this predicate strictly finer than the canonical string, which
+        produced the five spurious round-trip failures of T18.
         """
         if not isinstance(other, LabeledDAG):
             return False
@@ -541,7 +551,27 @@ class LabeledDAG:
         )
 
         def _check_operand_order() -> bool:
-            """Verify operand order for non-commutative binary ops."""
+            """Verify the first-operand designation on non-commutative binary ops.
+
+            Only ``_input_order[v][0]`` is compared (T18, 2026-08-03). That is
+            exactly the part of the in-edge ordering that Sigma_SR encodes:
+            ``V``/``v`` may create a binary op only from its first operand
+            (Critical Invariant 8 / B9), enforced identically in
+            ``dag_to_string._find_new_out_neighbor`` and at the four
+            ``ordered_inputs(c)[0] == ptr_in`` sites in ``canonical``. Every
+            further in-edge is emitted by ``C``/``c`` in canonical-traversal
+            order, so its position carries no information the canonical string
+            could recover.
+
+            No strength is lost on well-formed DAGs. When a binary op has
+            in-degree exactly two -- the only case ``dag_evaluator`` will
+            evaluate -- agreement at position 0 forces agreement at position 1,
+            because the mapping already preserves the edge set and one edge
+            remains. Comparing positions >= 1 only bites on *over-saturated*
+            binary nodes (in-degree > 2), which no evaluator accepts and which
+            the previous implementation separated while silently ignoring the
+            same surplus ordering on unary and variadic nodes.
+            """
             from isalsr.core.node_types import BINARY_OPS
 
             for u, v in mapping.items():
@@ -552,9 +582,11 @@ class LabeledDAG:
                 other_inputs = od._input_order[v]
                 if len(self_inputs) != len(other_inputs):
                     return False
-                for si, oi in zip(self_inputs, other_inputs, strict=True):
-                    if si in mapping and mapping[si] != oi:
-                        return False
+                if not self_inputs:
+                    continue
+                first = self_inputs[0]
+                if first in mapping and mapping[first] != other_inputs[0]:
+                    return False
             return True
 
         def _backtrack(idx: int) -> bool:

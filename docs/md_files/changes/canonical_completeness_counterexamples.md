@@ -4,7 +4,14 @@
 **Found during**: T17 / EXECUTION-PLAN Stage B check **B4** (equivalence gate re-run on a Picasso
 compute node), job `1751918`
 **Reproduced**: identically on the workstation, `experiments/scripts/equivalence_gate.py --gate 3`
-**Status**: **open — escalated to T07 (theorem foundation) and to Mario. Does not block Stage C.**
+**Status**: **RESOLVED 2026-08-03 under ticket T18.** Not a completeness failure: the
+five pairs differ only in the order of the *surplus* in-edges of an over-saturated
+binary node, which Σ_SR does not encode and `dag_evaluator` refuses. The defect was
+in `LabeledDAG.is_isomorphic` (it compared the whole `ordered_inputs` list rather
+than the first operand). Gate 3 now reports 10,000 DAGs / 0 mismatches / 0 errors.
+See `.claude/notes/review/tasks/T18-canonical-completeness-operand-order.md` §8 and
+`docs/md_files/changes/t18_completeness_counterexamples.md`. The analysis below is
+retained as the evidence trail; its §"two different functions" reading is superseded.
 
 ---
 
