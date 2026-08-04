@@ -23,7 +23,9 @@
 #   C2_SACCT_CSV     optional -- JobID,MaxRSS rows for the C1.11 memory profile
 #   C2_EXPECTED      optional -- expected cell count (default 1260)
 #   C2_MAX_TIME      optional -- per-run search budget in seconds (default 900)
-#   C2_CERT_SEEDS    optional -- comma-separated Stage C seeds (default 0,101,102)
+#   C2_CERT_SEEDS    optional -- COLON-separated Stage C seeds (default 0:101:102).
+#                    Colon, not comma: sbatch --export is comma-separated, so a
+#                    comma in a value silently truncates it to the first seed.
 # =============================================================================
 set -euo pipefail
 
@@ -34,7 +36,19 @@ RESULTS_DIR="${C2_RESULTS_DIR:?ERROR: C2_RESULTS_DIR not set}"
 SACCT_CSV="${C2_SACCT_CSV:-}"
 EXPECTED="${C2_EXPECTED:-1260}"
 MAX_TIME="${C2_MAX_TIME:-900}"
-CERT_SEEDS="${C2_CERT_SEEDS:-0,101,102}"
+CERT_SEEDS_RAW="${C2_CERT_SEEDS:-0:101:102}"
+CERT_SEEDS="${CERT_SEEDS_RAW//:/,}"
+
+# Assert the decode rather than trusting the transport.  If a comma ever
+# survives into --export, this arrives as a single seed and the certifier would
+# reconcile a 1,260-cell root against a 420-cell expectation -- a wrong verdict,
+# not a missing one.  Fail loudly instead.
+N_SEEDS_DECODED=$(awk -F, '{print NF}' <<<"${CERT_SEEDS}")
+if [[ "${N_SEEDS_DECODED}" -lt 3 ]]; then
+    echo "[FATAL] C2_CERT_SEEDS decoded to ${N_SEEDS_DECODED} seed(s): '${CERT_SEEDS}'." >&2
+    echo "        Expected >=3.  sbatch --export ate a comma; ship the list colon-separated." >&2
+    exit 1
+fi
 
 for mod in openmpi_gcc/5.0.9_gcc7 openmpi_gcc/5.0.9_gcc15 openmpi_gcc/5.0.9_gcc14; do
     module load "$mod" 2>/dev/null && break

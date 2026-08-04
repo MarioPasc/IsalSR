@@ -33,6 +33,16 @@ EXPECTED="${C2_EXPECTED:-1260}"
 MAX_TIME="${C2_MAX_TIME:-900}"
 CERT_SEEDS="${C2_CERT_SEEDS:-0,101,102}"
 
+# 🔴 sbatch --export is COMMA-separated, so a comma inside a VALUE starts the
+# next variable.  Exporting C2_CERT_SEEDS=0,101,102 delivers C2_CERT_SEEDS=0 and
+# two junk assignments -- the same defect that cost 265 of the 1,260 Stage C
+# tasks (EXECUTION-PLAN §11.1, 2026-08-03).  Here it would be quieter and worse:
+# the certifier would build its expected-cell set from ONE seed, so C1.15/C2/C4
+# would reconcile 420 cells against a 1,260-cell root and the verdict would be
+# meaningless rather than absent.  Ship colon-separated; the worker translates
+# and ASSERTS the decode rather than trusting the transport.
+CERT_SEEDS_EXPORT="${CERT_SEEDS//,/:}"
+
 DRY_RUN=false
 USE_SACCT=true
 for arg in "$@"; do
@@ -94,7 +104,7 @@ SBATCH_ARGS=(
     --account="${ACCOUNT}"
     --output="${LOGS_DIR}/c2s_certify_%j.out"
     --error="${LOGS_DIR}/c2s_certify_%j.err"
-    --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_RESULTS_DIR=${RESULTS_ROOT},C2_SACCT_CSV=${SACCT_CSV},C2_EXPECTED=${EXPECTED},C2_MAX_TIME=${MAX_TIME},C2_CERT_SEEDS=${CERT_SEEDS}"
+    --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_RESULTS_DIR=${RESULTS_ROOT},C2_SACCT_CSV=${SACCT_CSV},C2_EXPECTED=${EXPECTED},C2_MAX_TIME=${MAX_TIME},C2_CERT_SEEDS=${CERT_SEEDS_EXPORT}"
     "${SCRIPT_DIR}/certify_worker.sh"
 )
 
