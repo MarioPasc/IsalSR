@@ -38,7 +38,9 @@ CPUS="${D_CPUS:-1}"
 AGG_WALL="${D_AGG_WALL:-0-08:00:00}"
 RSS_INTERVAL="${D_RSS_INTERVAL:-60}"
 
-PY="${ISALSR_PYTHON:-${HOME}/.conda/envs/isalsr/bin/python}"
+# Resolve python the way c2_smoke/launcher.sh does: the workstation-style
+# ~/.conda path does not exist on Picasso (fscratch/conda_envs does).
+PY="${ISALSR_PYTHON:-$(conda run -n isalsr which python 2>/dev/null || echo python3)}"
 
 MODE="submit"
 ONLY_GROUP=""
