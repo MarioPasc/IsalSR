@@ -469,3 +469,126 @@ put baseline and dedup-arm "DAGs explored" in the same column without reconcilin
 |---|---|---|---|---|
 | 2026-08-03 | A | A3, A4, A4b, A5, A11, A13 | see table above | `c2_preflight/` |
 | 2026-08-03 | B | B1, B2, B3, B4, B6b, B7 | PASS (B4 on cross-engine; gate 3 escalated) | `c2_preflight/stage_b/`, jobs 1751916–18 |
+| 2026-08-04 | C | C1.1–C1.17, C2, C4 certified | **NO-GO ×2, both fixed or escalated** — see below | jobs 1758604, 1758634 |
+
+---
+
+### 2026-08-04 — Stage C certified; two blocking failures, both root-caused
+
+The aggregation job of 2026-08-03 (**1753134**) **TIMED OUT at its 2 h wall**
+after the ~1h40 `--postprocess only` loop, so it never reached the certifier.
+Every artefact survived (1,260 run logs, 1,260 `status.json`, 420
+`aggregate.csv`, 420 paired-stats files, `status_ledger.csv`), so the recovery
+was to run the certifier alone: new `slurm/c2_smoke/certify.sh` +
+`certify_worker.sh`, derived from `aggregate_worker.sh` so the mpi4py module
+probe and `PYTHONMALLOC` survive.
+
+#### The verdict
+
+**17 of 19 criteria PASS.** C1.1 1260/1260 · C1.2 all 56 fields · C1.3 **0
+non-finite** · C1.4 70/70 · C1.5 70/70 · C1.6 420/420 ρ≥1, **100 % ρ>1** ·
+C1.7 **0/420 violations** · C1.8 420/420 · C1.9 840/840 counters live ·
+C1.12 **0 SLURM time-kills** · C1.13 **0 forbidden labels** · C1.14 1260/1260
+`native` · C1.15 1,260 reconciled · C1.16 **420/420** at `n_seeds == 3` ·
+C1.17 420/420 × 14 rows · C2 1,260 ledger rows.
+
+#### 🔴 C1.10 FAILED 808/1,260 — `trajectory.csv` reported two quantities
+
+`best_r2` carried **train** R² on every intermediate row and **test** R² on the
+final row alone, so the series decreased whenever `r2_test < r2_train`. A scan
+of all 1,260 trajectories put **100 % of the violations at the final row and
+nowhere else**, on both hosts (UDFS 241, Bingo 218).
+
+This is the **same defect class** as the `n_dags_explored` mix-up fixed on
+2026-08-03 — intermediate rows measuring one population, the final row another
+— which is exactly why it survived: that fix corrected the counter column and
+left this one. **Both translators now report train metrics on the final row.**
+
+**No reported number changes.** Test metrics remain authoritative in
+`run_log.json`'s `results.regression`; the convergence scripts read
+`best_r2_train` from the `.npz`, and `time_to_r2_099_s` / `time_to_r2_0999_s`
+are computed from the snapshots. This column has no analysis consumer.
+`tests/unit/test_trajectory_metric_consistency.py`: 5 tests, **verified to fail
+4/5 against the pre-fix translators** before being accepted.
+
+#### 🔴 C4 FAILED 203/210 — but the property it protects PASSES
+
+The shortfall decomposes exactly, nothing left over:
+
+```
+210 expected − 4 (Pagie-1, Keijzer-6: 3 seeds → 1 fingerprint each)
+             − 3 (I.12.1 ≡ I.34.27, one pair × 3 seeds)          = 203 ✓
+```
+
+**`cross_arm_disagreement = 0` on 1,260/1,260.** All three arms and both
+methods saw byte-identical data for every `(problem, seed)`. **The paired
+design is not void** — what failed was the auxiliary "all mutually distinct"
+assertion, which conflated two unrelated situations.
+
+- 🔴 **`I.12.1` and `I.34.27` are the same problem.** Both reduce to
+  `sympy_expression = x_0*x_1` on `[1,5]²` and generate byte-identical data;
+  our `feynman.py` dropped the `1/(2π)` the AI Feynman catalogue specifies.
+  They are in **D1**, so `N` has been inflated by one since C1 and CPDT counts
+  one observation twice. **Mario's decision, not an agent's** — restore the
+  constant (recommended; I.34.27 then joins §7's continuity exclusions) or drop
+  a problem and report `N = 69`.
+- **Pagie-1 and Keijzer-6 are seed-invariant by construction** — deterministic
+  grids, the published protocol, and the **only 2 of 70** that are (measured).
+  Now a declared exemption carrying its justification in the source. **To
+  disclose:** for those two, the campaign's seeds replicate the *search* RNG
+  only, not the data.
+
+Write-up: `docs/md_files/changes/c4_fingerprint_findings.md`.
+
+#### ⚠ C1.11 said PASS while sizing memory from 3 % of the campaign
+
+`certify.sh` emitted `sacct`'s `JobID` (`<array_id>_<task>`) while the
+certifier joins on `status.json`'s `slurm_job_id` (= `$SLURM_JOB_ID`, the
+**per-task** id). Those coincide only for **task 1 of each array**, so the join
+matched **42 of 1,260** rows and binned 1,218 as `unmatched` — and still said
+PASS. The same trap the plan already warns about for `sacct -X`, in a second
+disguise: not blank, just silently sparse. Fixed to `JobIDRaw`; the join now
+covers **1,162** rows. Peak `MaxRSS` over the full wave **0.67 GB**. **This
+does not size production — D1.2 at 12 h does.**
+
+#### The schedule finding: 245 cores was our own throttle
+
+`launcher.sh:46` set `C2_THROTTLE=8`, i.e. 42 × 8 = a **336-task ceiling we
+imposed**; the measured 245 is **73 % fill of our own cap**. Live state today:
+**7,612–7,728 idle CPUs** and QOS `long_uma` at **`cpu=9000` per user**. So the
+"C2 takes 17.1 days and misses 2026-09-03" conclusion does not follow from the
+data. **Every §8.3 trade costs science; this one costs a shell variable.**
+
+#### 12 h → 8 h budget: rejected on evidence
+
+Replaying C1's **5,955** trajectories truncated at 8 h (zero compute): UDFS is
+budget-insensitive (35/14/1 → 35/13/2), **Bingo erodes badly** — 22/23/5 →
+**19/23/8**, sign-test p 7.6×10⁻⁴ → **2.6×10⁻²**, mean δᵢ **−69 %**; at 6 h it
+inverts. The seed cut costs precision; a budget cut costs **effect size**, and
+Bingo's is already `d = 0.034`. Full entry in `EXECUTION-PLAN.md` §11.1.
+
+#### Also closed
+
+- **The 10 stale `n_seeds: 30` configs are now 20.** All 14 verified, with the
+  A4b operator-set invariant **re-checked after the edit** (1 non-empty set per
+  method). Done **between waves** — the certifier reads no config, which is
+  what made the moment safe.
+- **Aggregation wall 2 h → 6 h** (`C2_AGG_WALL`), the defect that cost the
+  first verdict. C2's 8,400 runs need ≥24 h; the cost scales with runs.
+- **A `--dry-run` caught a defect I had introduced**: `C2_CERT_SEEDS=0,101,102`
+  in `--export`, the *same* comma-truncation that killed 265 Stage C tasks. It
+  would have been quieter and worse here — the certifier would have built its
+  expected-cell set from one seed and reconciled 420 against 1,260, emitting a
+  confident **wrong** verdict rather than none. Shipped colon-separated; the
+  worker now asserts it decoded ≥3 seeds.
+
+#### Stage C re-run submitted
+
+Per §5 (*"a single C1.x criterion fails → fix, re-run the whole stage; partial
+re-runs certify nothing"*), the C1.10 fix is in the **during-run** path, so the
+on-disk trajectories cannot be repaired retroactively. Re-run submitted to a
+**fresh root** `c2_smoke_v2/` (never merged with `c2_smoke/`) at
+**`C2_THROTTLE=24`** — 42 arrays, **1,260 tasks**, `--test-only` clean 42/42 —
+so it validates the fix end to end **and** re-measures achieved concurrency
+against the throttle finding in one wave. FSCRATCH headroom checked live first:
+17.4k inodes against ~6.1k needed.
