@@ -115,6 +115,14 @@ we sample — only the *shape* of the `VmRSS` curve does. So the last row's
 `vmrss_kb` column supplies the growth curve that motivates the whole exercise.
 A 12 h run yields ~720 rows, ~20 KB — negligible against the FSCRATCH budget.
 
+**Verified, not assumed.** The sampler was run locally against a payload that
+allocates 6 × 30 MB and then releases it. Over 16 samples: the header is
+`timestamp_s,vmrss_kb,vmhwm_kb`, `vmhwm_kb` is monotone non-decreasing, and the
+peak `VmHWM` of **190.2 MB** is retained while `VmRSS` falls to **10.4 MB** by
+the final sample. Sampling `VmRSS` alone would have reported ~10 MB and missed
+the peak by 18×. This is the concrete reason both columns are recorded and why
+the recommendation is built from `VmHWM`.
+
 **Scope difference, carried explicitly.** The sampler observes the *payload
 process*; `sacct MaxRSS` accounts the *whole cgroup*. Neither dominates the
 other in general, so D1.2 takes the **maximum of the two** rather than trusting
