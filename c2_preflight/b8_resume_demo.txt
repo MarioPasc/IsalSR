@@ -59,3 +59,54 @@ tests/integration/test_resume_corruption.py — 6 tests, all passing (6.31 s):
 The last two extend past the demonstration: a zero-byte file and a
 syntactically valid JSON object that is not a RunLog. Both are cases an
 existence check or a bare `json.loads` would wave through.
+
+
+==========================================================================
+PICASSO HALF — the same three behaviours, observed on the cluster
+==========================================================================
+
+Harness  : slurm/t02_b8_probe/{worker.sh,launcher.sh,drive.sh}
+           (modelled on slurm/c2_smoke/worker.sh; the c2_smoke worker
+           refuses a single-seed list, so the probe fixes the cell instead
+           of decoding an array index)
+Node     : sr004, AMD EPYC 7H12 64-Core  (constraint `sr`, per B6)
+Commit   : 0b85404e0128c92a5137f466d2a7c448e2f554d1  (Picasso checkout HEAD)
+Cell     : bingo / nguyen / Nguyen-1 / baseline / seed 0
+Run log  : ~/execs/isalsr/t02_b8_probe/results/bingo/nguyen/nguyen_1/baseline/seed_00/run_log.json
+
+SP-0 compliance
+---------------
+  tasks submitted     3   (1 per phase; cap 60 per submission)
+  seeds               0 only, never 1..20
+  max_time            300 s  (cap 1800)  -- asserted in worker.sh, not trusted
+  output root         ~/execs/isalsr/t02_b8_probe/  -- asserted in worker.sh
+  campaign roots      untouched
+  wall-clock cost     15 s of compute across the three tasks
+
+Observations
+------------
+  Phase 1 — fresh          job 1762279  task 1   rc=0   6 s
+    PRE  run_log: ABSENT
+    POST run_log: 3951 bytes, parses as JSON
+    orchestrator: "Running Nguyen-1 seed=0 variant=baseline"
+    result: R2=1.0000, total_dags=41037
+
+  Phase 2 — resubmit intact    job 1762282  task 1   rc=0   3 s
+    PRE  run_log: EXISTS, 3951 bytes, parses as JSON
+    orchestrator: "Skipping Nguyen-1 seed=0 variant=baseline (already exists)"
+    POST run_log: 3951 bytes, unchanged
+    => SKIP OBSERVED
+
+  Corruption (login node, no job)
+    run_log truncated 3951 -> 1975 bytes, cut mid-object inside the
+    hyperparameters block: tail reads `00,\n  "snapshot_frequency": 10\n }`
+
+  Phase 3 — resubmit corrupt   job 1762284  task 1   rc=0   6 s
+    PRE  run_log: EXISTS, 1975 bytes, DOES NOT PARSE (corrupt)
+    orchestrator: "Corrupt run_log detected for Nguyen-1 seed=0 variant=baseline, re-running"
+                  "Running Nguyen-1 seed=0 variant=baseline"
+    POST run_log: 3951 bytes, parses as JSON
+    => DETECT + DELETE + RE-RUN OBSERVED
+
+All three B8 behaviours are observed on Picasso, not inferred. The probe
+produces no number for the paper.
