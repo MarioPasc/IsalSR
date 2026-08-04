@@ -114,6 +114,11 @@ Two observations bearing on it:
   filesystem's quota accounting is updated asynchronously and the 248.6k reading
   was stale, i.e. real usage was already below 248.6k before any action.
 
+The post-action value was **re-read a second time**, minutes later and after
+three probe jobs had run, and returned 155.4k unchanged. So the *after* figure is
+stable; it is the *before* figure whose provenance is uncertain. That asymmetry
+is itself consistent with the staleness explanation.
+
 **Consequence**: the 94.6k figure should not be treated as a durable measurement.
 This is not a new concern — Stage F item 6 already requires quota headroom to be
 "re-read live on the day, not from an earlier capture". This capture reinforces
