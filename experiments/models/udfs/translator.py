@@ -199,9 +199,14 @@ class UDFSTranslator(ResultTranslator):
                 )
             )
 
-        # Final row with full test metrics
-        r2_test = r_squared(self._y_test, r.y_pred_test)
-        nrmse_test = nrmse(self._y_test, r.y_pred_test)
+        # Final row -- TRAIN metrics, like every row above it.  See the matching
+        # comment in bingo/translator.py: switching this column to r2_test on the
+        # last row alone made `best_r2` two quantities in one series and broke
+        # monotonicity on 459 of Stage C's 1,260 cells (241 of them UDFS), always
+        # at the final row and nowhere else.  Test metrics remain authoritative
+        # in run_log.json's `results.regression`; no analyzer reads this column.
+        r2_train_final = r_squared(self._y_train, r.y_pred_train)
+        nrmse_train_final = nrmse(self._y_train, r.y_pred_train)
         expr_str = str(r.best_sympy) if r.best_sympy is not None else ""
         complexity = _count_sympy_nodes(r.best_sympy) if r.best_sympy is not None else 0
         cache_rate = 0.0
@@ -212,8 +217,8 @@ class UDFSTranslator(ResultTranslator):
             TrajectoryRow(
                 timestamp_s=r.wall_clock_s,
                 iteration=r.total_evals,
-                best_r2=r2_test,
-                best_nrmse=nrmse_test,
+                best_r2=r2_train_final,
+                best_nrmse=nrmse_train_final,
                 n_dags_explored=r.n_total_dags,
                 n_unique_canonical=r.n_unique_canonical,
                 current_expr=expr_str,

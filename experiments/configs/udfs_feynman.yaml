@@ -4,7 +4,7 @@
 experiment:
   name: udfs_feynman
   method: udfs
-  n_seeds: 30
+  n_seeds: 20
 
 benchmarks:
   feynman:

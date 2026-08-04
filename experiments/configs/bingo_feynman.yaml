@@ -4,7 +4,7 @@
 experiment:
   name: bingo_feynman
   method: bingo
-  n_seeds: 30
+  n_seeds: 20
 
 benchmarks:
   feynman:

@@ -68,9 +68,18 @@ if ${USE_SACCT}; then
     JOB_IDS_FILE="${LOGS_DIR}/job_ids.txt"
     if [[ -s "${JOB_IDS_FILE}" ]]; then
         echo "Building C1.11 memory profile from $(wc -l < "${JOB_IDS_FILE}") arrays..."
+        # 🔴 Emit JobIDRaw, NOT JobID.  The certifier joins sacct rows onto cells
+        # through status.json's `slurm_job_id`, which is $SLURM_JOB_ID -- the
+        # per-task id, unique to each array element.  sacct's JobID column is
+        # instead "<array_id>_<task>", which equals $SLURM_JOB_ID only for task 1
+        # of each array.  Emitting JobID therefore joined exactly 42 of 1,260
+        # rows (one per array) and silently binned the other 1,218 as
+        # "unmatched", so C1.11 -- whose only job is to size production --mem --
+        # reported a profile built from 3 % of the campaign and still said PASS.
+        # JobIDRaw is the per-task numeric id and matches status.json exactly.
         {
             echo "JobID,MaxRSS"
-            sacct -j "$(paste -sd, "${JOB_IDS_FILE}")" -n -P -o JobID,MaxRSS \
+            sacct -j "$(paste -sd, "${JOB_IDS_FILE}")" -n -P -o JobIDRaw,MaxRSS \
                 | awk -F'|' '$1 ~ /\.batch$/ && $2 != "" {print $1","$2}'
         } > "${SACCT_CSV}"
         echo "  ${SACCT_CSV}: $(( $(wc -l < "${SACCT_CSV}") - 1 )) rows"

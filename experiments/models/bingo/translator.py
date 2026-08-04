@@ -210,9 +210,23 @@ class BingoTranslator(ResultTranslator):
                 )
             )
 
-        # Final row with full test metrics
-        r2_test = r_squared(self._y_test, r.y_pred_test)
-        nrmse_test = nrmse(self._y_test, r.y_pred_test)
+        # Final row -- TRAIN metrics, like every row above it.
+        #
+        # This column used to switch to r2_test on the last row only, which made
+        # `best_r2` two different quantities in one series and produced a
+        # decrease wherever test R2 < train R2 -- 459 of Stage C's 1,260 cells,
+        # 100 % of them at the final row and nowhere else (C1.10, 2026-08-04).
+        # It is the same defect class as the n_dags_explored mix-up fixed above:
+        # intermediate rows measuring one population, the final row another.
+        #
+        # Test metrics are NOT lost -- they are the authoritative copy in
+        # run_log.json's `results.regression` (r2_test / nrmse_test), which is
+        # what every analyzer and figure reads.  No consumer reads this column:
+        # the convergence scripts read `best_r2_train` from the .npz, and
+        # time_to_r2_099_s / time_to_r2_0999_s are computed in this file from
+        # the snapshots.  So no reported number changes.
+        r2_train_final = r_squared(self._y_train, r.y_pred_train)
+        nrmse_train_final = nrmse(self._y_train, r.y_pred_train)
         sym_form = get_symbolic_form(r.best_agraph, r.best_sympy)
         complexity = 0
         if r.best_agraph is not None:
@@ -224,8 +238,8 @@ class BingoTranslator(ResultTranslator):
             TrajectoryRow(
                 timestamp_s=r.wall_clock_s,
                 iteration=r.n_generations,
-                best_r2=r2_test,
-                best_nrmse=nrmse_test,
+                best_r2=r2_train_final,
+                best_nrmse=nrmse_train_final,
                 n_dags_explored=r.n_total_dags,
                 n_unique_canonical=r.n_unique_canonical,
                 current_expr=sym_form,
