@@ -387,6 +387,41 @@ def _fmt_cpdt_d(d: float) -> str:
     return f"${d:+.2f}$" if math.isfinite(d) else _UNDEFINED_CELL
 
 
+def _cpdt_primary_p(entry: Mapping[str, object], *, table: str, method: str) -> float:
+    """Holm-adjusted p of a primary-contrast CPDT entry, with a raw fallback.
+
+    With three arms the CPDT runs three contrasts (isalsr vs baseline, hash vs
+    baseline, isalsr vs hash) and Holm-corrects across them, so the headline
+    tables must print the corrected value. A legacy two-arm payload carries no
+    ``p_value_holm``; there the Holm family has size 1 and the corrected value
+    equals the raw one-sided p by construction, so falling back is exact and is
+    only logged.
+
+    Args:
+        entry: One metric block of a ``cross_problem_dominance_*.json`` payload,
+            e.g. its ``r2_test`` entry.
+        table: Table name, for the fallback log record.
+        method: Method name, for the fallback log record.
+
+    Returns:
+        The Holm-adjusted p when the payload carries a finite one, otherwise the
+        raw one-sided p, otherwise NaN.
+    """
+    holm = entry.get("p_value_holm")
+    if isinstance(holm, (int, float)) and not isinstance(holm, bool) and math.isfinite(holm):
+        return float(holm)
+
+    log.warning(
+        "%s (%s): the CPDT payload carries no Holm-adjusted p; printing the raw "
+        "one-sided p instead. Expected only for a legacy two-arm input, where the "
+        "two are equal by construction (Holm family of size 1).",
+        table,
+        method,
+    )
+    raw = entry.get("p_value_one_sided", float("nan"))
+    return float(raw) if isinstance(raw, (int, float)) else float("nan")
+
+
 def _cpdt_rho_cells(cpdt: Mapping[str, object]) -> tuple[str, str]:
     """Effect-size and p-value cells for the reduction-factor CPDT footer.
 
@@ -502,7 +537,7 @@ def generate_table1(
             cpdt = _load_cpdt(results_dir, method, benchmark)
             if cpdt and "r2_test" in cpdt and "error" not in cpdt["r2_test"]:
                 cpdt_r2 = cpdt["r2_test"]
-                cpdt_p = cpdt_r2["p_value_one_sided"]
+                cpdt_p = _cpdt_primary_p(cpdt_r2, table="Table 1", method=method)
                 cpdt_d = cpdt_r2["cohens_d"]
             else:
                 # Fallback: Holm-corrected count
@@ -573,6 +608,7 @@ def generate_table1(
         "$d_{\\mathrm{CPDT}}$/$p_{\\mathrm{CPDT}}$: Cross-Problem Dominance Test "
         "(one-sided paired test across problems, treating each problem's mean $R^2$ "
         "as one observation; $^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$). "
+        "$p_{\\mathrm{CPDT}}$ is Holm-adjusted across the three CPDT contrasts. "
         "$T_{\\mathrm{canon}}$/$T_{\\mathrm{eval}}$: per-DAG "
         "canonicalization/evaluation cost (ms). "
         "OH: overhead. $S$: speedup.}\n"
@@ -692,6 +728,8 @@ def generate_table2(
                 t = cr["n_ties"]
                 lo = cr["n_losses"]
                 d_val = float(cr["cohens_d"])
+                # Supplementary detail table: the RAW one-sided p lives here by
+                # policy; Tables 1 and S carry the Holm-adjusted value.
                 p_val = float(cr["p_value_one_sided"])
                 wt_str = f"W{w}/T{t}/L{lo}"
                 rows.append(
@@ -720,6 +758,9 @@ def generate_table2(
             f"$p$: Holm-adjusted. "
             f"Bottom rows: Cross-Problem Dominance Test (CPDT) — one-sided paired "
             f"test across problems. W/T/L: wins/ties/losses. "
+            f"The CPDT $p$ in those rows is the raw one-sided value, uncorrected; "
+            f"the main tables report it Holm-adjusted across the three CPDT "
+            f"contrasts. "
             f"$^{{*}}p<0.05$, $^{{**}}p<0.01$, $^{{***}}p<0.001$.}}\n"
             f"\\label{{tab:r2_per_problem_{method}}}\n"
             f"\\begin{{tabular}}{{@{{}}l {arm_spec} r r r@{{}}}}\n"
@@ -1011,7 +1052,7 @@ def generate_table_supplementary(
                 n_p = cr["n_problems"]
                 w, t_cnt, lo = cr["n_wins"], cr["n_ties"], cr["n_losses"]
                 d_val = float(cr["cohens_d"])
-                p_val = float(cr["p_value_one_sided"])
+                p_val = _cpdt_primary_p(cr, table="Table S", method=method)
                 # CPDT for rho: inferential only on the hash -> isalsr
                 # contrast, descriptive against a baseline that never merges.
                 rf_d_cell, rf_p_cell = _cpdt_rho_cells(cpdt)
@@ -1039,7 +1080,8 @@ def generate_table_supplementary(
             f"Cohen's $d$: per-problem paired effect size with 95\\% bootstrap CI. "
             f"$p$: Holm-adjusted. "
             f"Bottom rows: Cross-Problem Dominance Test (CPDT) — "
-            f"one-sided paired test treating each problem's mean as one observation "
+            f"one-sided paired test treating each problem's mean as one observation, "
+            f"Holm-adjusted across the three CPDT contrasts "
             f"($^{{*}}p<0.05$, $^{{**}}p<0.01$, $^{{***}}p<0.001$). "
             f"$\\rho$: empirical reduction factor. Its CPDT $p$ is the "
             f"Naive-Hash versus \\IsalSR{{}} contrast, the only one for which a "
