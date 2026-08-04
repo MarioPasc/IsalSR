@@ -66,7 +66,7 @@ mkdir -p "${LOGS_DIR}"
 spec() { PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" "${PY}" \
              -m experiments.scripts.stage_d_task_spec "$@"; }
 
-GROUPS=$(spec --groups)
+GROUP_LIST=$(spec --groups)   # GROUPS is a reserved bash array; assigning to it fails under set -e
 
 echo "=========================================================="
 echo "C2 Stage D launcher"
@@ -86,7 +86,7 @@ _clean_job_id() { sed -e 's/\x1b\[[0-9;]*m//g' | tr -d '[:space:]' | tail -c 16;
 
 JOB_IDS=()
 
-for GROUP in ${GROUPS}; do
+for GROUP in ${GROUP_LIST}; do
     if [[ -n "${ONLY_GROUP}" && "${GROUP}" != "${ONLY_GROUP}" ]]; then
         continue
     fi
