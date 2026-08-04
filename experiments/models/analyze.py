@@ -194,6 +194,10 @@ def compute_and_save_benchmark_summaries(
 # Cross-method analysis
 # ======================================================================
 
+# Metrics for which a smaller value is a better result. The critical-difference
+# machinery ranks larger values first, so these must be negated before ranking.
+_LOWER_IS_BETTER: frozenset[str] = frozenset({"nrmse_test", "wall_clock_total_s"})
+
 
 def run_cross_method(
     results_dir: Path,
@@ -210,7 +214,13 @@ def run_cross_method(
         if extractor is None:
             continue
         try:
-            result = cross_method_friedman(results_dir, methods, benchmark, extractor)
+            result = cross_method_friedman(
+                results_dir,
+                methods,
+                benchmark,
+                extractor,
+                higher_is_better=metric_name not in _LOWER_IS_BETTER,
+            )
             results[metric_name] = result
             log.info(
                 "  Friedman (%s): chi2=%.4f p=%.6f",

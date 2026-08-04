@@ -175,11 +175,21 @@ def _paired_test(
 
     Returns ``(nan, nan)`` when fewer than three seeds are paired. Returning
     ``(0.0, 1.0)`` there would be indistinguishable from a genuine null result.
+    An exception raised by SciPy returns ``p = nan`` for the same reason; the
+    NaN then propagates through the table formatter instead of masquerading as
+    a decided null.
+
+    A vector of identical paired values is a genuine null and returns
+    ``(0.0, 1.0)`` explicitly, since no test is defined on it. Ties inside the
+    signed-rank test are kept via ``zero_method="zsplit"`` rather than dropped,
+    matching the CPDT tie policy (Pratt 1959; Demsar 2006).
     """
     bl_a, is_a = _pair_by_seed(bl, is_)
     if len(bl_a) < 3:
         return float("nan"), float("nan")
     diff = is_a - bl_a
+    if np.all(diff == 0):
+        return 0.0, 1.0
     sd = np.std(diff, ddof=1)
     d = float(np.mean(diff) / sd) if sd > 1e-10 else 0.0
     try:
@@ -187,10 +197,10 @@ def _paired_test(
         if sw_p > 0.05:
             _, p = sp_stats.ttest_rel(bl_a, is_a)
         else:
-            res = sp_stats.wilcoxon(bl_a, is_a)
+            res = sp_stats.wilcoxon(bl_a, is_a, zero_method="zsplit")
             p = res.pvalue
     except Exception:  # noqa: BLE001
-        p = 1.0
+        p = float("nan")
     return d, float(p)
 
 

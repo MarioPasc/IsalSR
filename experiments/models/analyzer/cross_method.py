@@ -35,8 +35,13 @@ def load_cross_method_results(
     methods: list[str],
     benchmark: str,
     metric_extractor,
-) -> dict[str, dict[str, np.ndarray]]:
+) -> dict[str, dict[str, dict[str, float]]]:
     """Load per-problem mean metric values for all methods and variants.
+
+    The mean is taken over **finite** values only. A problem with no logs, or
+    with no finite value for the metric, is recorded as ``nan`` rather than
+    dropped, so that problem identity is preserved and the caller can align
+    the paired columns by name instead of by list position.
 
     Args:
         results_dir: Base results directory.
@@ -45,9 +50,9 @@ def load_cross_method_results(
         metric_extractor: Function RunLog -> float to extract metric.
 
     Returns:
-        {method: {variant: array of shape (n_problems,)}}
+        {method: {variant: {problem_name: mean_value}}}
     """
-    results: dict[str, dict[str, np.ndarray]] = {}
+    results: dict[str, dict[str, dict[str, float]]] = {}
 
     for method in methods:
         results[method] = {}
@@ -58,7 +63,7 @@ def load_cross_method_results(
             continue
 
         for variant in ["baseline", "isalsr"]:
-            problem_means = []
+            problem_means: dict[str, float] = {}
             for problem_dir in sorted(method_dir.iterdir()):
                 if not problem_dir.is_dir():
                     continue
@@ -67,51 +72,83 @@ def load_cross_method_results(
                     continue
 
                 logs = load_all_run_logs(variant_dir)
-                if logs:
-                    values = [metric_extractor(rl) for rl in logs]
-                    problem_means.append(float(np.mean(values)))
+                values = [float(metric_extractor(rl)) for rl in logs]
+                finite = [v for v in values if np.isfinite(v)]
+                problem_means[problem_dir.name] = float(np.mean(finite)) if finite else float("nan")
 
-            results[method][variant] = np.array(problem_means)
+            results[method][variant] = problem_means
 
     return results
 
 
 def build_cross_method_matrix(
-    results: dict[str, dict[str, np.ndarray]],
+    results: dict[str, dict[str, dict[str, float]]],
     methods: list[str],
-) -> tuple[np.ndarray, list[str]]:
+) -> tuple[np.ndarray, list[str], list[str], list[str]]:
     """Build the (n_problems x n_groups) matrix for Friedman test.
 
     Groups are ordered as: method1_baseline, method1_isalsr, method2_baseline, ...
+
+    Rows are the sorted intersection of problem names across all
+    (method, variant) groups, and any row still holding a non-finite value is
+    dropped. The Friedman test ranks within complete blocks (Demsar 2006, JMLR
+    7:1-30), so complete-case analysis over problems is the correct
+    construction: a problem present for one arm and absent for the other would
+    otherwise shift every subsequent row of the paired columns.
 
     Args:
         results: Output of load_cross_method_results.
         methods: Ordered method names.
 
     Returns:
-        (data_matrix, group_names)
+        (data_matrix, group_names, problem_names, dropped_problems)
     """
-    group_names = []
-    columns = []
+    group_names: list[str] = []
+    group_maps: list[dict[str, float]] = []
 
     for method in methods:
         for variant in ["baseline", "isalsr"]:
             key = f"{method}_{variant}"
             group_names.append(key)
             if method in results and variant in results[method]:
-                columns.append(results[method][variant])
+                group_maps.append(dict(results[method][variant]))
             else:
                 raise ValueError(f"Missing data for {key}")
 
-    # Verify all columns have the same length
-    n_problems = len(columns[0])
-    for i, col in enumerate(columns):
-        if len(col) != n_problems:
-            raise ValueError(
-                f"Column {group_names[i]} has {len(col)} problems, expected {n_problems}"
-            )
+    all_names: set[str] = set()
+    for gm in group_maps:
+        all_names |= set(gm)
+    common = sorted(set.intersection(*(set(gm) for gm in group_maps))) if group_maps else []
 
-    return np.column_stack(columns), group_names
+    missing = sorted(all_names - set(common))
+    if missing:
+        log.warning(
+            "Cross-method: %d problem(s) absent from at least one group, excluded: %s",
+            len(missing),
+            ", ".join(missing),
+        )
+
+    kept: list[str] = []
+    non_finite: list[str] = []
+    rows: list[list[float]] = []
+    for name in common:
+        row = [gm[name] for gm in group_maps]
+        if all(np.isfinite(v) for v in row):
+            kept.append(name)
+            rows.append(row)
+        else:
+            non_finite.append(name)
+
+    if non_finite:
+        log.warning(
+            "Cross-method: %d problem(s) dropped for non-finite means: %s",
+            len(non_finite),
+            ", ".join(non_finite),
+        )
+
+    dropped = missing + non_finite
+    matrix = np.array(rows, dtype=float).reshape(len(rows), len(group_names))
+    return matrix, group_names, kept, dropped
 
 
 def cross_method_friedman(
@@ -119,18 +156,29 @@ def cross_method_friedman(
     methods: list[str],
     benchmark: str,
     metric_extractor,
+    higher_is_better: bool = True,
 ) -> dict[str, Any]:
     """Run cross-method Friedman test + Nemenyi post-hoc.
+
+    The matrix is built by complete-case analysis over problems: only problems
+    present for every (method, variant) group and finite everywhere enter the
+    test, because Friedman ranks within complete blocks (Demsar 2006, JMLR
+    7:1-30). Dropped problems are reported in the output.
 
     Args:
         results_dir: Base results directory.
         methods: Method names.
         benchmark: Benchmark name.
         metric_extractor: Function RunLog -> float.
+        higher_is_better: Direction of the metric. When False the matrix is
+            negated before ranking, so rank 1 is still the best group. The
+            Friedman chi-square and the Nemenyi p-values are invariant under
+            negation; only the rank orientation changes.
 
     Returns:
         Dict with: chi2, p_value, group_names, avg_ranks, cd_value,
-        nemenyi_pairwise (if significant).
+        nemenyi_pairwise, higher_is_better, n_problems_dropped,
+        dropped_problems.
     """
     results = load_cross_method_results(
         results_dir,
@@ -139,13 +187,19 @@ def cross_method_friedman(
         metric_extractor,
     )
 
-    data_matrix, group_names = build_cross_method_matrix(results, methods)
+    data_matrix, group_names, problem_names, dropped = build_cross_method_matrix(results, methods)
+    if not higher_is_better:
+        data_matrix = -data_matrix
     n_problems, n_groups = data_matrix.shape
 
     output: dict[str, Any] = {
         "n_problems": n_problems,
         "n_groups": n_groups,
         "group_names": group_names,
+        "problem_names": problem_names,
+        "higher_is_better": higher_is_better,
+        "n_problems_dropped": len(dropped),
+        "dropped_problems": dropped,
     }
 
     if n_groups < 3:

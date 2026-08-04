@@ -448,6 +448,21 @@ def compute_cross_problem_dominance(
     across seeds, then tests H_0: E[delta] <= 0 (or >= 0 for "less") via
     Shapiro-Wilk -> one-sample t-test or Wilcoxon signed-rank.
 
+    Tie policy:
+        A problem with ``|delta_i| <= 1e-6`` is a tie. Ties are snapped to
+        exactly zero *before* the test, so the tested vector and the reported
+        W/T/L counts are the same object; the raw deltas would otherwise let
+        floating-point noise enter the test as signed evidence. Ties are then
+        kept in the signed-rank test via ``zero_method="zsplit"``, which ranks
+        the zeros and splits their rank sum evenly between the positive and
+        negative sums. Dropping them (scipy's default ``"wilcox"``) discards
+        the observations that carry the "no difference" evidence and inflates
+        significance whenever the non-tied deltas lean one way. ``"zsplit"`` is
+        conservative for the one-sided alternative used here. See Pratt (1959),
+        JASA 54(287):655-667, on zero handling in the signed-rank test, and
+        Demsar (2006), JMLR 7:1-30, on splitting ties evenly in paired
+        comparisons of learners.
+
     Args:
         paired_stats_list: PairedStats for each problem (already computed).
         metric_name: Which metric to test.
@@ -506,36 +521,41 @@ def compute_cross_problem_dominance(
 
     d_arr = np.array(deltas)
 
-    n_wins = int(np.sum(d_arr > _CPDT_TIE_THRESHOLD))
-    n_losses = int(np.sum(d_arr < -_CPDT_TIE_THRESHOLD))
-    n_ties = n - n_wins - n_losses
+    # Snap sub-threshold deltas to exact zero so the tested vector and the
+    # reported W/T/L counts are derived from the same numbers.
+    d_test = np.where(np.abs(d_arr) <= _CPDT_TIE_THRESHOLD, 0.0, d_arr)
+
+    n_wins = int(np.sum(d_test > 0))
+    n_losses = int(np.sum(d_test < 0))
+    n_ties = int(np.sum(d_test == 0))
 
     # Normality test
-    _sw_stat, sw_p = shapiro_wilk(d_arr)
+    _sw_stat, sw_p = shapiro_wilk(d_test)
     normal = sw_p > alpha
 
     # Statistical test
-    if np.all(d_arr == 0):
+    if np.all(d_test == 0):
         stat = 0.0
         p_one = 1.0
         p_two = 1.0
         test_used = "all_zeros"
     elif normal:
         test_used = "t_one_sample"
-        res_one = sp_stats.ttest_1samp(d_arr, 0.0, alternative=alternative)
-        res_two = sp_stats.ttest_1samp(d_arr, 0.0, alternative="two-sided")
+        res_one = sp_stats.ttest_1samp(d_test, 0.0, alternative=alternative)
+        res_two = sp_stats.ttest_1samp(d_test, 0.0, alternative="two-sided")
         stat = float(res_one.statistic)
         p_one = float(res_one.pvalue)
         p_two = float(res_two.pvalue)
     else:
         test_used = "wilcoxon_signed_rank"
-        res_one = sp_stats.wilcoxon(d_arr, alternative=alternative)
-        res_two = sp_stats.wilcoxon(d_arr, alternative="two-sided")
+        res_one = sp_stats.wilcoxon(d_test, alternative=alternative, zero_method="zsplit")
+        res_two = sp_stats.wilcoxon(d_test, alternative="two-sided", zero_method="zsplit")
         stat = float(res_one.statistic)
         p_one = float(res_one.pvalue)
         p_two = float(res_two.pvalue)
 
-    # Effect size
+    # Effect sizes stay on the raw deltas: snapping moves the mean by at most
+    # the tie threshold and is a test-decision rule, not an estimation rule.
     d_effect = cohens_d_paired(d_arr)
     d_ci_lo, d_ci_hi = cohens_d_ci_bootstrap(d_arr, seed=bootstrap_seed)
     mean_d, ci_lo, ci_hi = mean_diff_ci(d_arr)

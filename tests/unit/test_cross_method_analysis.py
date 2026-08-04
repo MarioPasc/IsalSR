@@ -20,33 +20,43 @@ from experiments.models.analyzer.statistical_tests import (
 
 
 class TestBuildCrossMethodMatrix:
+    """Rows are keyed by problem name (fairness audit, 2026-08-04).
+
+    The groups used to be bare arrays, so a problem present for one arm and
+    absent for another shifted every subsequent row of that column against the
+    others. Groups are now name -> value maps and the matrix is the sorted
+    intersection of the names.
+    """
+
     def test_correct_shape(self):
         results = {
             "udfs": {
-                "baseline": np.array([0.9, 0.8, 0.7]),
-                "isalsr": np.array([0.95, 0.85, 0.75]),
+                "baseline": {"P0": 0.9, "P1": 0.8, "P2": 0.7},
+                "isalsr": {"P0": 0.95, "P1": 0.85, "P2": 0.75},
             },
             "bingo": {
-                "baseline": np.array([0.85, 0.75, 0.65]),
-                "isalsr": np.array([0.90, 0.80, 0.70]),
+                "baseline": {"P0": 0.85, "P1": 0.75, "P2": 0.65},
+                "isalsr": {"P0": 0.90, "P1": 0.80, "P2": 0.70},
             },
         }
-        matrix, names = build_cross_method_matrix(results, ["udfs", "bingo"])
+        matrix, names, problems, dropped = build_cross_method_matrix(results, ["udfs", "bingo"])
         assert matrix.shape == (3, 4)
         assert names == ["udfs_baseline", "udfs_isalsr", "bingo_baseline", "bingo_isalsr"]
+        assert problems == ["P0", "P1", "P2"]
+        assert dropped == []
 
     def test_column_order(self):
         results = {
             "udfs": {
-                "baseline": np.array([1.0, 2.0]),
-                "isalsr": np.array([3.0, 4.0]),
+                "baseline": {"P0": 1.0, "P1": 2.0},
+                "isalsr": {"P0": 3.0, "P1": 4.0},
             },
             "bingo": {
-                "baseline": np.array([5.0, 6.0]),
-                "isalsr": np.array([7.0, 8.0]),
+                "baseline": {"P0": 5.0, "P1": 6.0},
+                "isalsr": {"P0": 7.0, "P1": 8.0},
             },
         }
-        matrix, _ = build_cross_method_matrix(results, ["udfs", "bingo"])
+        matrix, _, _, _ = build_cross_method_matrix(results, ["udfs", "bingo"])
         np.testing.assert_array_equal(matrix[:, 0], [1.0, 2.0])  # udfs_baseline
         np.testing.assert_array_equal(matrix[:, 1], [3.0, 4.0])  # udfs_isalsr
         np.testing.assert_array_equal(matrix[:, 2], [5.0, 6.0])  # bingo_baseline
