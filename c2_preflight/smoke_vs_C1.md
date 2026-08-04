@@ -1,8 +1,13 @@
 # C5 — Comparison of the Stage C smoke against the submitted campaign C1
 
-**Status: DRAFT — pending Mario's signature.**
-An unexplained anomaly in §3 blocks Stage D (EXECUTION-PLAN §4.3, C5). This
-document is drafted by the implementation agent; the sign-off is Mario's.
+**Status: SIGNED — C5 accepted; Stage D unblocked.**
+Every §3 row is either MEETS or (§3.5) DEVIATES-with-explanation: the
+dangerous cause is falsified directly by SP-4 (0 forbidden labels in the
+smoke's canonical strings) and the residual cause — the 48× budget gap — is
+explicitly handed to D1.6 for confirmation at the full 12 h budget. Drafted by
+the implementation agent; signed by Mario Pascual González (authorization
+given 2026-08-04 in the orchestration session: "Merge the branches, sign
+C5"), recorded by the orchestrating agent.
 
 | Field | Value |
 |---|---|
@@ -12,6 +17,7 @@ document is drafted by the implementation agent; the sign-off is Mario's.
 | C1 raw tree | `.../real_benchmarks/wl_subtree_hard/models_hard/` (see §3.0) |
 | C1 budget | 43,200 s per cell, 30 seeds, 2 arms (no hash arm existed) |
 | Drafted | 2026-08-04 |
+| Signed | 2026-08-04 (Mario, via session authorization; §3.5 residual to D1.6) |
 
 ---
 
