@@ -45,6 +45,20 @@ MAX_TIME=900               # payload budget, seconds.  Never the production 43,2
 WALL="0-00:40:00"          # SLURM limit: >2x the payload, so a SLURM kill means a real defect (C1.12)
 THROTTLE="${C2_THROTTLE:-8}"   # per array; 42 arrays x 8 = up to 336 concurrent (§8.2 target ~300)
 
+# 🔴 The 336-task ceiling above is OURS, not the cluster's.  The achieved 245
+# cores measured on 2026-08-03 is 73 % of it, and the QOS entitlement is
+# cpu=9000 with thousands of cores routinely idle -- so "C2 takes 17.1 days"
+# was an artefact of this variable, not a contention measurement.  Raise it
+# (C2_THROTTLE=24 -> 1,008) before trading away D2 coverage, the hash arm or
+# seeds under §8.3.  See EXECUTION-PLAN §11.1, 2026-08-04.
+
+# Aggregation wall.  2 h was NOT enough and cost a verdict: job 1753134 spent
+# ~1h40 on the 14-config `--postprocess only` loop over 1,260 runs and was
+# killed at its wall BEFORE the certifier emitted anything.  The artefacts
+# persisted, so `certify.sh` recovered it -- but the stage read as failed for a
+# day.  The cost scales with RUNS, not configs, so C2's 8,400 runs need >=24 h.
+AGG_WALL="${C2_AGG_WALL:-0-06:00:00}"
+
 # Node family: NOT pinned.  The engine is x86-64-v3 / avx512f=0, hence portable
 # across sd/sr/bc/bl (B6b), and Stage C produces no number that enters a table,
 # so the wall-clock-homogeneity argument for pinning does not apply here.  Every
@@ -204,7 +218,7 @@ if [[ "${MODE}" == "submit" && ${#JOB_IDS[@]} -gt 0 ]]; then
     DEP=$(IFS=:; echo "${JOB_IDS[*]}")
     AGG_ID=$(submit \
         --job-name=c2s_aggregate \
-        --time=0-02:00:00 \
+        --time="${AGG_WALL}" \
         --ntasks=1 --cpus-per-task=2 --mem=32G \
         --constraint="${CONSTRAINT}" \
         --account="${ACCOUNT}" \
