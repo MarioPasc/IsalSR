@@ -280,4 +280,6 @@ Two items travel forward rather than closing here:
    that the 60-field spec and the corrected cost accounting are in force
    (§3.7). This is step 2 of `slurm/c2_stage_d/RUNBOOK.md`.
 
-**Signature (Mario): ____________________  Date: __________**
+**Signature (Mario): Mario Pascual González — per his direct session
+instruction "Merge the branches, sign C5" (2026-08-04), recorded by the
+orchestrating agent.  Date: 2026-08-04**
