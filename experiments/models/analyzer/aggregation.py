@@ -9,6 +9,7 @@ Reference: docs/design/experimental_design/isalsr_experimental_design.md, Sectio
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 
 import numpy as np
@@ -430,7 +431,141 @@ CPDT_METRIC_ALTERNATIVES: dict[str, str] = {
     "redundancy_rate": "greater",
 }
 
+# Contrast policy, decided 2026-08-04 (Mario Pascual Gonzalez).
+#
+# Campaign C2 has three arms: baseline, hash ("Naive-Hash") and isalsr. The
+# alternative hypothesis is not a property of the metric alone -- it depends on
+# which pair of arms is being contrasted. Keyed by (arm_a, arm_b) with
+# delta = mean(arm_b) - mean(arm_a); the value is the SciPy ``alternative``, or
+# ``None`` when the contrast is reported descriptively (no p-value).
+#
+#   baseline -> isalsr : the submitted primary contrast. Directional for the
+#       quality metrics (the claim is one-sided by pre-registration).
+#   hash -> isalsr     : two-sided for quality, because neither direction is
+#       pre-registered -- the naive hash is a competing representation, not a
+#       null. One-sided "greater" for the redundancy metrics: a sound
+#       fixed-order hash can only merge a subset of what the canonical string
+#       merges, so rho_isalsr >= rho_hash holds by construction of the two maps.
+#   baseline -> hash   : two-sided for quality, same reason.
+#
+# The redundancy metrics against ``baseline`` carry NO p-value: the baseline
+# arm never merges, so rho == 1 and the empirical reduction factor == 1 by
+# construction. Testing "isalsr merges more than a representation that cannot
+# merge" is tautological, and a p-value there would misrepresent a definitional
+# identity as an inferential finding.
+CPDT_CONTRAST_POLICY: dict[tuple[str, str], dict[str, str | None]] = {
+    ("baseline", "isalsr"): {
+        "r2_test": "greater",
+        "r2_train": "greater",
+        "nrmse_test": "less",
+        "empirical_reduction_factor": None,
+        "redundancy_rate": None,
+    },
+    ("hash", "isalsr"): {
+        "r2_test": "two-sided",
+        "r2_train": "two-sided",
+        "nrmse_test": "two-sided",
+        "empirical_reduction_factor": "greater",
+        "redundancy_rate": "greater",
+    },
+    ("baseline", "hash"): {
+        "r2_test": "two-sided",
+        "r2_train": "two-sided",
+        "nrmse_test": "two-sided",
+        "empirical_reduction_factor": None,
+        "redundancy_rate": None,
+    },
+}
+
+# Marker written into ``test_used`` for a contrast that is reported without a
+# p-value because the comparison is definitional rather than inferential.
+CPDT_DESCRIPTIVE_TEST = "descriptive_definitional_baseline"
+
+# Value written into ``alternative`` for such a contrast.
+CPDT_DESCRIPTIVE_ALTERNATIVE = "descriptive"
+
 _CPDT_TIE_THRESHOLD = 1e-6
+
+
+def resolve_cpdt_alternative(
+    metric_name: str,
+    arm_a: str = "baseline",
+    arm_b: str = "isalsr",
+) -> str | None:
+    """Resolve the alternative hypothesis for one contrast and metric.
+
+    Args:
+        metric_name: Metric key, e.g. ``"r2_test"``.
+        arm_a: Reference arm.
+        arm_b: Comparison arm; delta = mean(arm_b) - mean(arm_a).
+
+    Returns:
+        ``"greater"``, ``"less"``, ``"two-sided"``, or ``None`` when the
+        contrast is descriptive. Contrasts absent from the policy table fall
+        back to ``CPDT_METRIC_ALTERNATIVES`` for backward compatibility.
+    """
+    policy = CPDT_CONTRAST_POLICY.get((arm_a, arm_b))
+    if policy is None or metric_name not in policy:
+        return CPDT_METRIC_ALTERNATIVES.get(metric_name, "greater")
+    return policy[metric_name]
+
+
+def cpdt_primary_p(result: CrossProblemDominanceResult) -> float:
+    """Primary p-value of a CPDT result under its own alternative.
+
+    Two-sided contrasts report the two-sided p; directional contrasts report
+    the one-sided p. Descriptive contrasts have no primary p and return NaN.
+
+    Args:
+        result: A computed CPDT result.
+
+    Returns:
+        The p-value the contrast is judged on, or NaN if there is none.
+    """
+    if result.test_used == CPDT_DESCRIPTIVE_TEST:
+        return float("nan")
+    if result.alternative == "two-sided":
+        return result.p_value_two_sided
+    return result.p_value_one_sided
+
+
+def apply_holm_across_contrasts(
+    results: dict[str, dict[str, CrossProblemDominanceResult]],
+    alpha: float = 0.05,
+) -> None:
+    """Holm-adjust CPDT p-values across contrasts, per metric, in place.
+
+    The family is defined per metric as the set of contrasts that actually
+    carry a finite p-value (contrast policy, decided 2026-08-04). For the
+    quality metrics that is the three pairwise contrasts; for the redundancy
+    metrics it is the single ``hash -> isalsr`` contrast, so Holm is the
+    identity there. Descriptive entries keep ``p_value_holm = None``: they were
+    never tested, so including them in the family would inflate the correction.
+
+    Args:
+        results: contrast name -> metric name -> result. Mutated in place.
+        alpha: Significance level handed to the Holm procedure.
+    """
+    metric_names: list[str] = []
+    for per_metric in results.values():
+        for metric_name in per_metric:
+            if metric_name not in metric_names:
+                metric_names.append(metric_name)
+
+    for metric_name in metric_names:
+        family: list[tuple[str, float]] = []
+        for contrast_name, per_metric in results.items():
+            result = per_metric.get(metric_name)
+            if result is None:
+                continue
+            p = cpdt_primary_p(result)
+            if math.isfinite(p):
+                family.append((contrast_name, p))
+        if not family:
+            continue
+        adjusted = holm_bonferroni([p for _, p in family], alpha=alpha)
+        for (contrast_name, _), p_adj in zip(family, adjusted, strict=True):
+            results[contrast_name][metric_name].p_value_holm = float(p_adj)
 
 
 def compute_cross_problem_dominance(
@@ -441,12 +576,38 @@ def compute_cross_problem_dominance(
     alpha: float = 0.05,
     alternative: str | None = None,
     bootstrap_seed: int = 42,
+    arm_a: str = "baseline",
+    arm_b: str = "isalsr",
 ) -> CrossProblemDominanceResult:
     """Cross-problem dominance test: one paired observation per problem.
 
-    For each problem P_i, computes delta_i = mean(isalsr) - mean(baseline)
+    For each problem P_i, computes delta_i = mean(arm_b) - mean(arm_a)
     across seeds, then tests H_0: E[delta] <= 0 (or >= 0 for "less") via
-    Shapiro-Wilk -> one-sample t-test or Wilcoxon signed-rank.
+    Shapiro-Wilk -> one-sample t-test or Wilcoxon signed-rank. For a two-sided
+    contrast the primary p-value is the two-sided one; the one-sided p-value is
+    still recorded, taken in the direction of the observed mean delta (it is
+    therefore descriptive, not a second test).
+
+    Contrast policy (decided 2026-08-04): when ``alternative`` is not given it
+    is resolved from ``CPDT_CONTRAST_POLICY`` for the pair ``(arm_a, arm_b)``. A
+    policy entry of ``None`` marks a definitional baseline: the result is still
+    produced (W/T/L, effect size, CIs, per-problem deltas) but the p-values are
+    NaN and ``test_used`` is ``CPDT_DESCRIPTIVE_TEST``.
+
+    Tie policy:
+        A problem with ``|delta_i| <= 1e-6`` is a tie. Ties are snapped to
+        exactly zero *before* the test, so the tested vector and the reported
+        W/T/L counts are the same object; the raw deltas would otherwise let
+        floating-point noise enter the test as signed evidence. Ties are then
+        kept in the signed-rank test via ``zero_method="zsplit"``, which ranks
+        the zeros and splits their rank sum evenly between the positive and
+        negative sums. Dropping them (scipy's default ``"wilcox"``) discards
+        the observations that carry the "no difference" evidence and inflates
+        significance whenever the non-tied deltas lean one way. ``"zsplit"`` is
+        conservative for the one-sided alternative used here. See Pratt (1959),
+        JASA 54(287):655-667, on zero handling in the signed-rank test, and
+        Demsar (2006), JMLR 7:1-30, on splitting ties evenly in paired
+        comparisons of learners.
 
     Args:
         paired_stats_list: PairedStats for each problem (already computed).
@@ -454,16 +615,25 @@ def compute_cross_problem_dominance(
         method: Method name (for labeling).
         benchmark: Benchmark name or "all" for pooled.
         alpha: Significance level for normality test.
-        alternative: "greater" or "less". If None, uses CPDT_METRIC_ALTERNATIVES.
+        alternative: "greater", "less" or "two-sided". If None, resolved from
+            the contrast policy for (arm_a, arm_b).
         bootstrap_seed: Seed for bootstrap CI.
+        arm_a: Reference arm name.
+        arm_b: Comparison arm name; delta = mean(arm_b) - mean(arm_a).
 
     Returns:
         CrossProblemDominanceResult.
     """
     from scipy import stats as sp_stats
 
+    descriptive = False
     if alternative is None:
-        alternative = CPDT_METRIC_ALTERNATIVES.get(metric_name, "greater")
+        resolved = resolve_cpdt_alternative(metric_name, arm_a, arm_b)
+        if resolved is None:
+            descriptive = True
+            alternative = CPDT_DESCRIPTIVE_ALTERNATIVE
+        else:
+            alternative = resolved
 
     names: list[str] = []
     deltas: list[float] = []
@@ -502,40 +672,62 @@ def compute_cross_problem_dominance(
             mean_delta=float("nan"),
             mean_delta_ci_lower=float("nan"),
             mean_delta_ci_upper=float("nan"),
+            arm_a=arm_a,
+            arm_b=arm_b,
         )
 
     d_arr = np.array(deltas)
 
-    n_wins = int(np.sum(d_arr > _CPDT_TIE_THRESHOLD))
-    n_losses = int(np.sum(d_arr < -_CPDT_TIE_THRESHOLD))
-    n_ties = n - n_wins - n_losses
+    # Snap sub-threshold deltas to exact zero so the tested vector and the
+    # reported W/T/L counts are derived from the same numbers.
+    d_test = np.where(np.abs(d_arr) <= _CPDT_TIE_THRESHOLD, 0.0, d_arr)
+
+    n_wins = int(np.sum(d_test > 0))
+    n_losses = int(np.sum(d_test < 0))
+    n_ties = int(np.sum(d_test == 0))
 
     # Normality test
-    _sw_stat, sw_p = shapiro_wilk(d_arr)
+    _sw_stat, sw_p = shapiro_wilk(d_test)
     normal = sw_p > alpha
 
+    # For a two-sided contrast the one-sided p is reported in the direction of
+    # the observed mean delta; it is a description of the sample, not a second
+    # pre-registered test, so it is never the value Holm corrects.
+    if alternative == "two-sided":
+        alt_one = "greater" if float(np.mean(d_test)) >= 0.0 else "less"
+    else:
+        alt_one = alternative
+
     # Statistical test
-    if np.all(d_arr == 0):
+    if descriptive:
+        # Definitional baseline: no p-value is meaningful. Everything else
+        # (counts, effect size, CIs) is still estimated below.
+        stat = float("nan")
+        p_one = float("nan")
+        p_two = float("nan")
+        test_used = CPDT_DESCRIPTIVE_TEST
+    elif np.all(d_test == 0):
         stat = 0.0
         p_one = 1.0
         p_two = 1.0
         test_used = "all_zeros"
     elif normal:
         test_used = "t_one_sample"
-        res_one = sp_stats.ttest_1samp(d_arr, 0.0, alternative=alternative)
-        res_two = sp_stats.ttest_1samp(d_arr, 0.0, alternative="two-sided")
+        res_one = sp_stats.ttest_1samp(d_test, 0.0, alternative=alt_one)
+        res_two = sp_stats.ttest_1samp(d_test, 0.0, alternative="two-sided")
         stat = float(res_one.statistic)
         p_one = float(res_one.pvalue)
         p_two = float(res_two.pvalue)
     else:
         test_used = "wilcoxon_signed_rank"
-        res_one = sp_stats.wilcoxon(d_arr, alternative=alternative)
-        res_two = sp_stats.wilcoxon(d_arr, alternative="two-sided")
+        res_one = sp_stats.wilcoxon(d_test, alternative=alt_one, zero_method="zsplit")
+        res_two = sp_stats.wilcoxon(d_test, alternative="two-sided", zero_method="zsplit")
         stat = float(res_one.statistic)
         p_one = float(res_one.pvalue)
         p_two = float(res_two.pvalue)
 
-    # Effect size
+    # Effect sizes stay on the raw deltas: snapping moves the mean by at most
+    # the tie threshold and is a test-decision rule, not an estimation rule.
     d_effect = cohens_d_paired(d_arr)
     d_ci_lo, d_ci_hi = cohens_d_ci_bootstrap(d_arr, seed=bootstrap_seed)
     mean_d, ci_lo, ci_hi = mean_diff_ci(d_arr)
@@ -563,4 +755,6 @@ def compute_cross_problem_dominance(
         mean_delta=mean_d,
         mean_delta_ci_lower=ci_lo,
         mean_delta_ci_upper=ci_hi,
+        arm_a=arm_a,
+        arm_b=arm_b,
     )

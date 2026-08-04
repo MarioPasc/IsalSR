@@ -38,28 +38,57 @@ log = logging.getLogger(__name__)
 # Data extraction helpers
 # ======================================================================
 
+# Arm directory -> column prefix. ``hash`` is the Naive-Hash deduplication arm
+# of the three-arm C2 campaign; a two-arm root simply has no such directory and
+# every ``hs_*`` key stays absent, so the tables fall back to two columns.
+_VARIANT_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("baseline", "bl"),
+    ("hash", "hs"),
+    ("isalsr", "is"),
+)
+
+# Arms that deduplicate, and therefore carry search-space and overhead fields.
+_DEDUP_PREFIXES: frozenset[str] = frozenset({"hs", "is"})
+
+
+def _has_hash_arm(data: Mapping[str, Mapping[str, Mapping[int, float]]]) -> bool:
+    """Report whether any problem in a benchmark has Naive-Hash run logs.
+
+    Args:
+        data: Output of :func:`_load_paired_metrics`.
+
+    Returns:
+        True when at least one problem carries hash-arm R^2 values.
+    """
+    return any(d.get("hs_r2_test") for d in data.values())
+
 
 def _load_paired_metrics(
     results_dir: Path,
     method: str,
     benchmark: str,
 ) -> dict[str, dict[str, list[float]]]:
-    """Load per-seed metrics for both variants, keyed by problem.
+    """Load per-seed metrics for every arm present, keyed by problem.
 
     Returns:
         {problem: {
-            "bl_r2_test": [...], "is_r2_test": [...],
-            "bl_r2_train": [...], "is_r2_train": [...],
-            "bl_nrmse_test": [...], "is_nrmse_test": [...],
-            "bl_wall": [...], "is_wall": [...],
-            "bl_search": [...], "is_search": [...],
-            "bl_complexity": [...], "is_complexity": [...],
-            "bl_solution": [...], "is_solution": [...],
+            "bl_r2_test": [...], "is_r2_test": [...], "hs_r2_test": [...],
+            "bl_r2_train": [...], "is_r2_train": [...], ...
+            "bl_nrmse_test": [...], "is_nrmse_test": [...], ...
+            "bl_wall": [...], "is_wall": [...], ...
+            "bl_search": [...], "is_search": [...], ...
+            "bl_complexity": [...], "is_complexity": [...], ...
+            "bl_solution": [...], "is_solution": [...], ...
             "is_rf": [...], "is_redundancy": [...],
             "is_overhead_pct": [...], "is_per_dag_ms": [...],
             "is_canon_ms": [...], "is_eval_ms": [...],
             "is_max_k": [...],
         }}
+
+        The ``hs_*`` keys are present only for a three-arm results root; the
+        deduplication keys (``rf``, ``redundancy``, ``overhead_pct``,
+        ``per_dag_ms``, ``canon_ms``, ``eval_ms``, ``max_k``) exist for both
+        ``is_`` and ``hs_``.
     """
     bench_dir = results_dir / method / benchmark
     data: dict[str, dict[str, dict[int, float]]] = {}
@@ -80,7 +109,7 @@ def _load_paired_metrics(
             continue
         d: dict[str, dict[int, float]] = defaultdict(dict)
 
-        for variant, prefix in [("baseline", "bl"), ("isalsr", "is")]:
+        for variant, prefix in _VARIANT_PREFIXES:
             vdir = prob_dir / variant
             if not vdir.exists():
                 continue
@@ -104,20 +133,20 @@ def _load_paired_metrics(
                     else float(rec.solution_recovered)
                 )
 
-                if variant == "isalsr":
+                if prefix in _DEDUP_PREFIXES:
                     ss = rl.search_space
                     t = rl.time
-                    d["is_rf"][s] = ss.empirical_reduction_factor
-                    d["is_redundancy"][s] = ss.redundancy_rate
+                    d[f"{prefix}_rf"][s] = ss.empirical_reduction_factor
+                    d[f"{prefix}_redundancy"][s] = ss.redundancy_rate
                     w = t.wall_clock_total_s
                     n = ss.total_dags_explored
                     if w > 0:
-                        d["is_overhead_pct"][s] = t.overhead_time_s / w * 100
+                        d[f"{prefix}_overhead_pct"][s] = t.overhead_time_s / w * 100
                     if n > 0:
-                        d["is_per_dag_ms"][s] = t.canonicalization_runtime_s / n * 1000
-                        d["is_eval_ms"][s] = t.evaluation_time_s / n * 1000
-                    d["is_canon_ms"][s] = t.canonicalization_runtime_s
-                    d["is_max_k"][s] = float(ss.max_internal_nodes_seen)
+                        d[f"{prefix}_per_dag_ms"][s] = t.canonicalization_runtime_s / n * 1000
+                        d[f"{prefix}_eval_ms"][s] = t.evaluation_time_s / n * 1000
+                    d[f"{prefix}_canon_ms"][s] = t.canonicalization_runtime_s
+                    d[f"{prefix}_max_k"][s] = float(ss.max_internal_nodes_seen)
 
         if d:
             data[prob_dir.name] = dict(d)
@@ -175,11 +204,21 @@ def _paired_test(
 
     Returns ``(nan, nan)`` when fewer than three seeds are paired. Returning
     ``(0.0, 1.0)`` there would be indistinguishable from a genuine null result.
+    An exception raised by SciPy returns ``p = nan`` for the same reason; the
+    NaN then propagates through the table formatter instead of masquerading as
+    a decided null.
+
+    A vector of identical paired values is a genuine null and returns
+    ``(0.0, 1.0)`` explicitly, since no test is defined on it. Ties inside the
+    signed-rank test are kept via ``zero_method="zsplit"`` rather than dropped,
+    matching the CPDT tie policy (Pratt 1959; Demsar 2006).
     """
     bl_a, is_a = _pair_by_seed(bl, is_)
     if len(bl_a) < 3:
         return float("nan"), float("nan")
     diff = is_a - bl_a
+    if np.all(diff == 0):
+        return 0.0, 1.0
     sd = np.std(diff, ddof=1)
     d = float(np.mean(diff) / sd) if sd > 1e-10 else 0.0
     try:
@@ -187,10 +226,10 @@ def _paired_test(
         if sw_p > 0.05:
             _, p = sp_stats.ttest_rel(bl_a, is_a)
         else:
-            res = sp_stats.wilcoxon(bl_a, is_a)
+            res = sp_stats.wilcoxon(bl_a, is_a, zero_method="zsplit")
             p = res.pvalue
     except Exception:  # noqa: BLE001
-        p = 1.0
+        p = float("nan")
     return d, float(p)
 
 
@@ -302,8 +341,30 @@ def _load_cpdt(
         return json.load(f)
 
 
+# Cell printed where a CPDT p-value does not exist. Two distinct reasons, both
+# rendered as an em-dash rather than a number: the contrast is descriptive by
+# policy (rho against a baseline that never merges), or the test could not run.
+_NO_P_CELL = "---"
+
+# Cell printed for a quantity that is undefined because too few observations
+# remain. Matches the dagger convention used by the per-problem rows.
+_UNDEFINED_CELL = "$\\dagger$"
+
+
 def _fmt_cpdt_p(p: float) -> str:
-    """Format a CPDT p-value for LaTeX with significance stars."""
+    """Format a CPDT p-value for LaTeX with significance stars.
+
+    A non-finite p is an absent test, not a number: it is rendered as a dagger
+    so that ``nan`` can never reach the typeset table.
+
+    Args:
+        p: The p-value to render.
+
+    Returns:
+        A LaTeX cell.
+    """
+    if not math.isfinite(p):
+        return _UNDEFINED_CELL
     if p < 0.001:
         return "$<$0.001$^{***}$"
     sig = ""
@@ -312,6 +373,92 @@ def _fmt_cpdt_p(p: float) -> str:
     elif p < 0.05:
         sig = "$^{*}$"
     return f"${p:.3f}${sig}"
+
+
+def _fmt_cpdt_d(d: float) -> str:
+    """Format a CPDT Cohen's d, never emitting ``nan``.
+
+    Args:
+        d: Effect size.
+
+    Returns:
+        A LaTeX cell.
+    """
+    return f"${d:+.2f}$" if math.isfinite(d) else _UNDEFINED_CELL
+
+
+def _cpdt_primary_p(entry: Mapping[str, object], *, table: str, method: str) -> float:
+    """Holm-adjusted p of a primary-contrast CPDT entry, with a raw fallback.
+
+    With three arms the CPDT runs three contrasts (isalsr vs baseline, hash vs
+    baseline, isalsr vs hash) and Holm-corrects across them, so the headline
+    tables must print the corrected value. A legacy two-arm payload carries no
+    ``p_value_holm``; there the Holm family has size 1 and the corrected value
+    equals the raw one-sided p by construction, so falling back is exact and is
+    only logged.
+
+    Args:
+        entry: One metric block of a ``cross_problem_dominance_*.json`` payload,
+            e.g. its ``r2_test`` entry.
+        table: Table name, for the fallback log record.
+        method: Method name, for the fallback log record.
+
+    Returns:
+        The Holm-adjusted p when the payload carries a finite one, otherwise the
+        raw one-sided p, otherwise NaN.
+    """
+    holm = entry.get("p_value_holm")
+    if isinstance(holm, (int, float)) and not isinstance(holm, bool) and math.isfinite(holm):
+        return float(holm)
+
+    log.warning(
+        "%s (%s): the CPDT payload carries no Holm-adjusted p; printing the raw "
+        "one-sided p instead. Expected only for a legacy two-arm input, where the "
+        "two are equal by construction (Holm family of size 1).",
+        table,
+        method,
+    )
+    raw = entry.get("p_value_one_sided", float("nan"))
+    return float(raw) if isinstance(raw, (int, float)) else float("nan")
+
+
+def _cpdt_rho_cells(cpdt: Mapping[str, object]) -> tuple[str, str]:
+    """Effect-size and p-value cells for the reduction-factor CPDT footer.
+
+    Under the contrast policy decided 2026-08-04, rho is inferential only on
+    the ``hash -> isalsr`` contrast: the baseline arm never merges, so rho is 1
+    by construction there and its p-value is withheld. The footer therefore
+    reports the tested contrast when a hash arm exists, and falls back to the
+    descriptive primary contrast -- effect size only, no p -- when it does not.
+
+    Args:
+        cpdt: A decoded ``cross_problem_dominance_*.json`` payload.
+
+    Returns:
+        (Cohen's d cell, p-value cell). Neither ever contains ``nan``.
+    """
+    contrasts = cpdt.get("contrasts")
+    tested = None
+    if isinstance(contrasts, Mapping):
+        candidate = contrasts.get("isalsr_vs_hash")
+        if isinstance(candidate, Mapping):
+            entry = candidate.get("empirical_reduction_factor")
+            if isinstance(entry, Mapping) and "error" not in entry:
+                tested = entry
+
+    if tested is not None:
+        holm = tested.get("p_value_holm")
+        p = (
+            holm
+            if isinstance(holm, (int, float))
+            else tested.get("p_value_one_sided", float("nan"))
+        )
+        return _fmt_cpdt_d(float(tested.get("cohens_d", float("nan")))), _fmt_cpdt_p(float(p))
+
+    primary = cpdt.get("empirical_reduction_factor")
+    if isinstance(primary, Mapping) and "error" not in primary:
+        return _fmt_cpdt_d(float(primary.get("cohens_d", float("nan")))), _NO_P_CELL
+    return _UNDEFINED_CELL, _NO_P_CELL
 
 
 # ======================================================================
@@ -328,20 +475,30 @@ def generate_table1(
     """Unified summary table merging three-axis and overhead breakdown.
 
     One row per (method x benchmark). Columns cover search space reduction,
-    regression quality, and computational overhead in a single view.
+    regression quality, and computational overhead in a single view. On a
+    three-arm results root the $R^2$ cell carries BL/HS/IS and the $\\rho$ cell
+    carries IS/HS; on a two-arm root both cells are unchanged.
     """
     rows: list[str] = []
+    loaded = {
+        (method, benchmark): _load_paired_metrics(results_dir, method, benchmark)
+        for method in methods
+        for benchmark in benchmarks
+    }
+    show_hash = any(_has_hash_arm(d) for d in loaded.values())
 
     for method in methods:
         for benchmark in benchmarks:
-            data = _load_paired_metrics(results_dir, method, benchmark)
+            data = loaded[(method, benchmark)]
             if not data:
                 continue
 
             # Aggregate across problems
             all_rf, all_rr, all_oh = [], [], []
+            all_hs_rf: list[float] = []
             all_canon_ms, all_eval_ms = [], []
             bl_r2s, is_r2s = [], []
+            hs_r2s: list[float] = []
             n_sig = 0
             n_prob = 0
             speedups = []
@@ -353,6 +510,10 @@ def generate_table1(
                 n_prob += 1
                 bl_r2s.append(_nanmean(d["bl_r2_test"].values()))
                 is_r2s.append(_nanmean(d["is_r2_test"].values()))
+                if d.get("hs_r2_test"):
+                    hs_r2s.append(_nanmean(d["hs_r2_test"].values()))
+                if d.get("hs_rf"):
+                    all_hs_rf.extend(d["hs_rf"].values())
                 _, p = _paired_test(d["bl_r2_test"], d["is_r2_test"])
                 p_values.append(p)
 
@@ -376,7 +537,7 @@ def generate_table1(
             cpdt = _load_cpdt(results_dir, method, benchmark)
             if cpdt and "r2_test" in cpdt and "error" not in cpdt["r2_test"]:
                 cpdt_r2 = cpdt["r2_test"]
-                cpdt_p = cpdt_r2["p_value_one_sided"]
+                cpdt_p = _cpdt_primary_p(cpdt_r2, table="Table 1", method=method)
                 cpdt_d = cpdt_r2["cohens_d"]
             else:
                 # Fallback: Holm-corrected count
@@ -402,16 +563,29 @@ def generate_table1(
 
             if np.isfinite(cpdt_p):
                 cpdt_p_str = _fmt_cpdt_p(cpdt_p)
-                cpdt_d_str = f"${cpdt_d:+.2f}$"
+                cpdt_d_str = _fmt_cpdt_d(cpdt_d)
             else:
                 cpdt_p_str = f"{n_sig_holm}/{n_prob}"
                 cpdt_d_str = "--"
 
+            # Three-arm cells: the hash arm shares the R^2 and rho columns
+            # rather than adding new ones, so the tabular spec is untouched.
+            if show_hash:
+                hs_r2_mean = float(np.nanmean(hs_r2s)) if hs_r2s else float("nan")
+                hs_r2_cell = f"${hs_r2_mean:.3f}$" if math.isfinite(hs_r2_mean) else _UNDEFINED_CELL
+                r2_cell = f"${bl_r2_mean:.3f}$ / {hs_r2_cell} / ${is_r2_mean:.3f}$"
+                hs_rf_mean = _nanmean(all_hs_rf) if all_hs_rf else float("nan")
+                hs_rf_cell = f"${hs_rf_mean:.2f}$" if math.isfinite(hs_rf_mean) else _UNDEFINED_CELL
+                rho_cell = f"${rf_mean:.2f} \\pm {rf_std:.2f}$ / {hs_rf_cell}"
+            else:
+                r2_cell = f"${bl_r2_mean:.3f}$ / ${is_r2_mean:.3f}$"
+                rho_cell = f"${rf_mean:.2f} \\pm {rf_std:.2f}$"
+
             rows.append(
                 f"    {method_label:<6} & {bench_label:<12} & {n_prob:>2} "
-                f"& ${rf_mean:.2f} \\pm {rf_std:.2f}$ "
+                f"& {rho_cell} "
                 f"& ${rr_mean:.1f}\\%$ "
-                f"& ${bl_r2_mean:.3f}$ / ${is_r2_mean:.3f}$ "
+                f"& {r2_cell} "
                 f"& {cpdt_d_str} & {cpdt_p_str} "
                 f"& ${canon_mean:.3f}$ & ${eval_mean:.2f}$ "
                 f"& ${ratio_str}$ "
@@ -419,15 +593,22 @@ def generate_table1(
                 f"& ${s_mean:.2f}$ \\\\"
             )
 
+    hash_note = (
+        "HS: Naive-Hash deduplication arm; $\\rho$ and $R^2$ list IS then HS. " if show_hash else ""
+    )
+    rho_header = "$\\rho$ (IS/HS)" if show_hash else "$\\rho$"
+    r2_header = "$R^2$ (BL/HS/IS)" if show_hash else "$R^2$ (BL/IS)"
     tex = (
         "\\begin{table*}[t]\n"
         "\\centering\n"
         "\\small\n"
         "\\caption{Unified three-axis summary of \\IsalSR{} integration. "
         "$\\rho$: empirical reduction factor. "
+        f"{hash_note}"
         "$d_{\\mathrm{CPDT}}$/$p_{\\mathrm{CPDT}}$: Cross-Problem Dominance Test "
         "(one-sided paired test across problems, treating each problem's mean $R^2$ "
         "as one observation; $^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$). "
+        "$p_{\\mathrm{CPDT}}$ is Holm-adjusted across the three CPDT contrasts. "
         "$T_{\\mathrm{canon}}$/$T_{\\mathrm{eval}}$: per-DAG "
         "canonicalization/evaluation cost (ms). "
         "OH: overhead. $S$: speedup.}\n"
@@ -439,8 +620,8 @@ def generate_table1(
         "& \\multicolumn{5}{c}{Computational Cost} \\\\\n"
         "\\cmidrule(lr){4-5} \\cmidrule(lr){6-8} \\cmidrule(lr){9-13}\n"
         "Method & Benchmark & $n$ "
-        "& $\\rho$ & Red. "
-        "& $R^2$ (BL/IS) & $d$ & $p$ "
+        f"& {rho_header} & Red. "
+        f"& {r2_header} & $d$ & $p$ "
         "& $T_{\\mathrm{canon}}$ & $T_{\\mathrm{eval}}$ & Ratio "
         "& OH & $S$ \\\\\n"
         "\\midrule\n"
@@ -464,33 +645,41 @@ def generate_table2(
     benchmarks: list[str],
     output_dir: Path,
 ) -> None:
-    """Per-problem R² comparison with Cohen's d and Holm p-value."""
+    """Per-problem R² comparison with Cohen's d and Holm p-value.
+
+    A three-arm results root adds a Naive-Hash (HS) column between BL and IS;
+    a two-arm root emits the original two columns unchanged. ``d``, ``Delta``
+    and the per-problem p-value always describe the BL -> IS contrast.
+    """
 
     for method in methods:
         rows: list[str] = []
         prev_bench = ""
+        per_bench_data = {b: _load_paired_metrics(results_dir, method, b) for b in benchmarks}
+        show_hash = any(_has_hash_arm(d) for d in per_bench_data.values())
 
         for benchmark in benchmarks:
-            data = _load_paired_metrics(results_dir, method, benchmark)
+            data = per_bench_data[benchmark]
             if not data:
                 continue
 
             # Collect p-values for Holm correction within this benchmark
-            prob_stats: list[tuple[str, float, float, float, float]] = []
+            prob_stats: list[tuple[str, float, float, float, float, float]] = []
             for prob in sorted(data.keys()):
                 d = data[prob]
                 if not d.get("bl_r2_test") or not d.get("is_r2_test"):
                     continue
                 bl_mean = _nanmean(d["bl_r2_test"].values())
                 is_mean = _nanmean(d["is_r2_test"].values())
+                hs_mean = _nanmean(d.get("hs_r2_test", {}).values())
                 cohens_d, p_raw = _paired_test(d["bl_r2_test"], d["is_r2_test"])
-                prob_stats.append((prob, bl_mean, is_mean, cohens_d, p_raw))
+                prob_stats.append((prob, bl_mean, hs_mean, is_mean, cohens_d, p_raw))
 
             # Holm correction
-            raw_ps = [s[4] for s in prob_stats]
+            raw_ps = [s[5] for s in prob_stats]
             adjusted = _holm_bonferroni(raw_ps) if raw_ps else []
 
-            for i, (prob, bl_mean, is_mean, cohens_d, _) in enumerate(prob_stats):
+            for i, (prob, bl_mean, hs_mean, is_mean, cohens_d, _) in enumerate(prob_stats):
                 p_adj = adjusted[i] if i < len(adjusted) else 1.0
                 sig = ""
                 if p_adj < 0.001:
@@ -511,15 +700,21 @@ def generate_table2(
 
                 delta = is_mean - bl_mean
                 delta_str = f"+{delta:.4f}" if delta >= 0 else f"{delta:.4f}"
+                hs_cell = ""
+                if show_hash:
+                    hs_cell = (
+                        f"& ${hs_mean:.4f}$ " if math.isfinite(hs_mean) else f"& {_UNDEFINED_CELL} "
+                    )
                 rows.append(
                     f"    {label:<8} "
-                    f"& ${bl_mean:.4f}$ & ${is_mean:.4f}$ "
+                    f"& ${bl_mean:.4f}$ {hs_cell}& ${is_mean:.4f}$ "
                     f"& ${delta_str}$ "
                     f"& ${cohens_d:+.2f}$ "
                     f"& ${p_adj:.3f}${sig} \\\\"
                 )
 
         # Add CPDT summary rows (one per benchmark, plus pooled "all")
+        arm_span = 3 if show_hash else 2
         rows.append("    \\midrule")
         for cpdt_bench in benchmarks + ["all"]:
             cpdt = _load_cpdt(results_dir, method, cpdt_bench)
@@ -532,31 +727,45 @@ def generate_table2(
                 w = cr["n_wins"]
                 t = cr["n_ties"]
                 lo = cr["n_losses"]
-                d_val = cr["cohens_d"]
-                p_val = cr["p_value_one_sided"]
+                d_val = float(cr["cohens_d"])
+                # Supplementary detail table: the RAW one-sided p lives here by
+                # policy; Tables 1 and S carry the Holm-adjusted value.
+                p_val = float(cr["p_value_one_sided"])
                 wt_str = f"W{w}/T{t}/L{lo}"
                 rows.append(
-                    f"    {cpdt_label} & \\multicolumn{{2}}{{c}}{{{wt_str}}} "
+                    f"    {cpdt_label} & \\multicolumn{{{arm_span}}}{{c}}{{{wt_str}}} "
                     f"& $n$={n_p} "
-                    f"& ${d_val:+.2f}$ "
+                    f"& {_fmt_cpdt_d(d_val)} "
                     f"& {_fmt_cpdt_p(p_val)} \\\\"
                 )
 
         method_label = method.upper()
+        arm_spec = "rrr" if show_hash else "rr"
+        arm_header = "& BL $R^2$ & HS $R^2$ & IS $R^2$ " if show_hash else "& BL $R^2$ & IS $R^2$ "
+        hash_note = (
+            "HS: Naive-Hash deduplication arm. "
+            "$\\Delta$, $d$ and $p$ describe the BL versus IS contrast. "
+            if show_hash
+            else ""
+        )
         tex = (
             "\\begin{table}[t]\n"
             "\\centering\n"
             "\\small\n"
             f"\\caption{{Per-problem $R^2$ test comparison for {method_label}. "
+            f"{hash_note}"
             f"Cohen's $d$: per-problem paired effect size. "
             f"$p$: Holm-adjusted. "
             f"Bottom rows: Cross-Problem Dominance Test (CPDT) — one-sided paired "
             f"test across problems. W/T/L: wins/ties/losses. "
+            f"The CPDT $p$ in those rows is the raw one-sided value, uncorrected; "
+            f"the main tables report it Holm-adjusted across the three CPDT "
+            f"contrasts. "
             f"$^{{*}}p<0.05$, $^{{**}}p<0.01$, $^{{***}}p<0.001$.}}\n"
             f"\\label{{tab:r2_per_problem_{method}}}\n"
-            "\\begin{tabular}{@{}l rr r r r@{}}\n"
+            f"\\begin{{tabular}}{{@{{}}l {arm_spec} r r r@{{}}}}\n"
             "\\toprule\n"
-            "Problem & BL $R^2$ & IS $R^2$ & $\\Delta$ & $d$ & $p_{\\mathrm{Holm}}$ \\\\\n"
+            f"Problem {arm_header}& $\\Delta$ & $d$ & $p_{{\\mathrm{{Holm}}}}$ \\\\\n"
             "\\midrule\n"
         )
         tex += "\n".join(rows) + "\n"
@@ -842,19 +1051,18 @@ def generate_table_supplementary(
                 )
                 n_p = cr["n_problems"]
                 w, t_cnt, lo = cr["n_wins"], cr["n_ties"], cr["n_losses"]
-                d_val = cr["cohens_d"]
-                p_val = cr["p_value_one_sided"]
-                # CPDT for RF
-                cpdt_rf = cpdt.get("empirical_reduction_factor", {})
-                rf_d = cpdt_rf.get("cohens_d", 0.0) if isinstance(cpdt_rf, dict) else 0.0
-                rf_p = cpdt_rf.get("p_value_one_sided", 1.0) if isinstance(cpdt_rf, dict) else 1.0
+                d_val = float(cr["cohens_d"])
+                p_val = _cpdt_primary_p(cr, table="Table S", method=method)
+                # CPDT for rho: inferential only on the hash -> isalsr
+                # contrast, descriptive against a baseline that never merges.
+                rf_d_cell, rf_p_cell = _cpdt_rho_cells(cpdt)
 
                 all_rows.append(
                     f"    {cpdt_label} "
                     f"& \\multicolumn{{2}}{{c}}{{W{w}/T{t_cnt}/L{lo}}} "
                     f"& \\multicolumn{{2}}{{c}}{{$n$={n_p}}} "
-                    f"& ${d_val:+.2f}$ & {_fmt_cpdt_p(p_val)} "
-                    f"& ${rf_d:+.1f}$ & {_fmt_cpdt_p(rf_p)} "
+                    f"& {_fmt_cpdt_d(d_val)} & {_fmt_cpdt_p(p_val)} "
+                    f"& {rf_d_cell} & {rf_p_cell} "
                     f"& \\multicolumn{{3}}{{c}}{{}} \\\\"
                 )
 
@@ -872,9 +1080,14 @@ def generate_table_supplementary(
             f"Cohen's $d$: per-problem paired effect size with 95\\% bootstrap CI. "
             f"$p$: Holm-adjusted. "
             f"Bottom rows: Cross-Problem Dominance Test (CPDT) — "
-            f"one-sided paired test treating each problem's mean as one observation "
+            f"one-sided paired test treating each problem's mean as one observation, "
+            f"Holm-adjusted across the three CPDT contrasts "
             f"($^{{*}}p<0.05$, $^{{**}}p<0.01$, $^{{***}}p<0.001$). "
-            f"$\\rho$: empirical reduction factor. "
+            f"$\\rho$: empirical reduction factor. Its CPDT $p$ is the "
+            f"Naive-Hash versus \\IsalSR{{}} contrast, the only one for which a "
+            f"test of $\\rho$ is meaningful: the native arm never merges, so "
+            f"$\\rho=1$ there by construction and that column is reported "
+            f"descriptively (---). "
             f"\\textbf{{Bold}}: better of BL/IS. "
             f"\\underline{{Underline}}: worse of BL/IS. "
             f"All statistics use pairwise deletion: a seed is included only if "

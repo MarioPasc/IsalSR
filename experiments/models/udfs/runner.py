@@ -57,6 +57,11 @@ class UDFSRawResult(RawRunResult):
     n_skipped: int = 0
     canonicalization_time_s: float = 0.0
     search_only_time_s: float = 0.0
+    # Wrapper work inside the wall-clock budget that is not canonicalisation:
+    # the adapter conversion (method cost) and the shadow sketches (audit
+    # instrumentation).  0.0 on the baseline arm, which runs neither.
+    conversion_time_s: float = 0.0
+    shadow_time_s: float = 0.0
     # Atlas-specific (populated when --atlas-dir is used)
     atlas_hits: int = 0
     atlas_misses: int = 0

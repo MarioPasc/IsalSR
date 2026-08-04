@@ -121,6 +121,13 @@ RUN_LOG_FIELD_SPEC: tuple[tuple[tuple[str, ...], tuple[type, ...], bool], ...] =
     (("results", "time", "time_to_r2_0999_s"), _NUM, True),
     (("results", "time", "evaluation_time_s"), _NUM, False),
     (("results", "time", "overhead_time_s"), _NUM, False),
+    # Wrapper work inside the wall-clock budget that is not canonicalisation.
+    # 0.0 on the baseline arm, so non-nullable like the rest of the time block.
+    # A pre-fairness-audit artifact lacks both keys and is reported as missing:
+    # that is the intended reading, since its search time is inflated by exactly
+    # these two quantities.
+    (("results", "time", "conversion_time_s"), _NUM, False),
+    (("results", "time", "shadow_time_s"), _NUM, False),
     # --- results.search_space (core) ------------------------------------ #
     (("results", "search_space", "total_dags_explored"), (int,), False),
     (("results", "search_space", "unique_canonical_dags"), (int,), False),
@@ -145,6 +152,9 @@ RUN_LOG_FIELD_SPEC: tuple[tuple[tuple[str, ...], tuple[type, ...], bool], ...] =
     (("results", "search_space", "n_canon_timeouts"), (int,), True),
     (("results", "search_space", "n_canon_raised"), (int,), True),
     (("results", "search_space", "n_atlas_hits"), (int,), True),
+    # --- results.search_space (effective-population disclosure) ---------- #
+    (("results", "search_space", "penalised_in_population_mean"), _NUM, False),
+    (("results", "search_space", "penalised_in_population_max"), _NUM, False),
     # --- best_expression ------------------------------------------------- #
     (("best_expression", "symbolic_form"), (str,), False),
     (("best_expression", "isalsr_string"), (str,), False),

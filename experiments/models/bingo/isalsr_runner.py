@@ -46,6 +46,7 @@ from experiments.models.bingo.runner import (
     extract_sympy,
 )
 from experiments.models.fallback_ledger import FallbackLedger
+from experiments.models.stage_d_trace import StageDTracer
 from isalsr.baselines import FixedOrder, HyperLogLog, fixed_order_hash, serialise
 from isalsr.baselines.host_native import (
     HostNativeRecord,
@@ -206,6 +207,11 @@ class _CanonicalDeduplicator:
         self.timeout = timeout
         self.atlas = atlas  # AtlasLookup | None
         self.ledger: FallbackLedger | None = ledger
+        # Stage-D detailed trace (EXECUTION-PLAN §4.4 D2).  Constructed from the
+        # environment; inert unless ISALSR_STAGE_D_TRACE is set, which the worker
+        # does on exactly one cell.  Every hook below is one attribute read when
+        # disabled, and no file is created.
+        self.tracer: StageDTracer = StageDTracer.from_env()
         self.key_mode = key_mode
         # Shadow distinct-cardinality sketches over the full candidate stream.
         # HyperLogLog(p=14) is ~16 KB each and constant in stream length; an
@@ -239,6 +245,14 @@ class _CanonicalDeduplicator:
         self.n_skipped: int = 0
         self.n_rejected_duplicates: int = 0  # Population-level rejections
         self.canon_time_total: float = 0.0
+        # Adapter conversion cost (host AGraph -> LabeledDAG).  Inside the
+        # wall-clock budget and part of the method, so it must be subtracted
+        # from search time and charged as overhead.
+        self.conversion_time_total: float = 0.0
+        # Shadow sketch cost.  Inside the wall-clock budget but pure audit
+        # instrumentation: subtracted from search time, never charged as
+        # overhead.  Stays exactly 0.0 when the sketches are disabled.
+        self.shadow_time_total: float = 0.0
         # Atlas-specific stats
         self.atlas_hits: int = 0
         self.atlas_misses: int = 0
@@ -293,18 +307,22 @@ class _CanonicalDeduplicator:
         """
         if not self._shadow:
             return
+        # Timed from here, not from the call site: with the sketches disabled the
+        # method returns above having done no work, so ``shadow_time_total``
+        # stays exactly 0.0 rather than accumulating call overhead.
+        t0 = time.perf_counter()
         for order, sketch in self._shadow.items():
             try:
                 sketch.add(fixed_order_hash(dag, order))
             except Exception:  # noqa: BLE001
                 self.n_shadow_failures += 1
-        if host is None or self._shadow_host_native is None:
-            return
-        self._host_native_offered = True
-        try:
-            self._shadow_host_native.add(host_native_hash(bingo_host_native_records(host)))
-        except Exception:  # noqa: BLE001
-            self.n_shadow_failures += 1
+        if host is not None and self._shadow_host_native is not None:
+            self._host_native_offered = True
+            try:
+                self._shadow_host_native.add(host_native_hash(bingo_host_native_records(host)))
+            except Exception:  # noqa: BLE001
+                self.n_shadow_failures += 1
+        self.shadow_time_total += time.perf_counter() - t0
 
     def shadow_counts(self) -> dict[str, float]:
         """Return the shadow distinct-cardinality estimates by RunLog field name.
@@ -474,6 +492,28 @@ class IsalSREvaluation(Evaluation):
     # (I.10.7, I.48.20) where each generation processes >4 K individuals.
     _GC_INTERVAL = 5_000
 
+    def _traced_fitness(self, indv: Any) -> float:
+        """Evaluate *indv*, charging the wall time to the Stage-D tracer.
+
+        The two ``perf_counter`` calls run only while the tracer has selected
+        the current candidate for sampling, so with tracing off (every campaign
+        run and 11 of the 12 Stage-D cells) this costs one attribute read on top
+        of the direct call it replaces.
+
+        Args:
+            indv: The Bingo ``AGraph`` to evaluate.
+
+        Returns:
+            The fitness value.
+        """
+        tracer = self.dedup.tracer
+        if not tracer.sampling:
+            return self.fitness_function(indv)
+        t0 = time.perf_counter()
+        value = self.fitness_function(indv)
+        tracer.note_eval_time(time.perf_counter() - t0)
+        return value
+
     def _serial_eval(self, population):  # type: ignore[override]
         for indv in population:
             is_parent = id(indv) in self._parent_ids
@@ -491,6 +531,12 @@ class IsalSREvaluation(Evaluation):
 
             self.dedup.n_total += 1
 
+            # Stage-D trace: open a candidate.  Returns False (and does nothing
+            # else) unless the tracer is enabled AND this candidate is on the
+            # deterministic 1-in-N sampling grid.
+            tracer = self.dedup.tracer
+            tracer.begin()
+
             # Periodic heap release (GC + malloc_trim)
             if self.dedup.n_total % self._GC_INTERVAL == 0:
                 _release_heap()
@@ -498,18 +544,24 @@ class IsalSREvaluation(Evaluation):
             # Convert AGraph → LabeledDAG
             # record_pre is called inside agraph_to_labeled_dag, before
             # _normalize_const_edges, to measure RTF precondition violations.
+            t_conv = time.perf_counter()
             try:
                 dag = agraph_to_labeled_dag(indv, ledger=self.dedup.ledger)
             except Exception:  # noqa: BLE001
+                # A refused candidate still consumed the budget, so the failed
+                # conversion is charged like a successful one.
+                self.dedup.conversion_time_total += time.perf_counter() - t_conv
                 # Conversion failed: count in ledger (full-rate, O(1))
                 if self.dedup.ledger is not None:
                     self.dedup.ledger.record_conversion_failure()
                 # Evaluate normally (only if unevaluated)
                 if not indv.fit_set:
-                    indv.fitness = self.fitness_function(indv)
+                    indv.fitness = self._traced_fitness(indv)
                     if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                         self._best_fitness = indv.fitness
+                tracer.record(fallback="conversion_failure")
                 continue
+            self.dedup.conversion_time_total += time.perf_counter() - t_conv
 
             # Record post-normalisation state (before canonicalisation).
             # violated_post should be 0 if _normalize_const_edges worked correctly.
@@ -536,6 +588,7 @@ class IsalSREvaluation(Evaluation):
             t0 = time.perf_counter()
             canon_hash: int | None = None
             canonical: str | None = None
+            trace_fallback = "none"
 
             if self.dedup.atlas is not None:
                 canon_hash, was_hit = self.dedup.atlas.lookup_dag(dag)
@@ -543,6 +596,7 @@ class IsalSREvaluation(Evaluation):
                 self.dedup.atlas_lookup_time += dt
                 if was_hit:
                     self.dedup.atlas_hits += 1
+                    trace_fallback = "atlas_hit"
                     if self.dedup.ledger is not None:
                         self.dedup.ledger.record_atlas_hit(dag)
                 else:
@@ -559,25 +613,30 @@ class IsalSREvaluation(Evaluation):
                 try:
                     canonical = self.dedup.representation_string(dag, indv)
                 except Exception as _exc:  # noqa: BLE001
-                    if self.dedup.ledger is not None:
-                        from isalsr.core.canonical import CanonicalTimeoutError
+                    from isalsr.core.canonical import CanonicalTimeoutError
 
-                        if isinstance(_exc, CanonicalTimeoutError):
+                    is_timeout = isinstance(_exc, CanonicalTimeoutError)
+                    trace_fallback = "timeout" if is_timeout else "canon_raised"
+                    if self.dedup.ledger is not None:
+                        if is_timeout:
                             self.dedup.ledger.record_timeout(dag)
                         else:
                             self.dedup.ledger.record_canon_raised(dag)
                     self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
-                    self.dedup.canon_time_total += time.perf_counter() - t0
+                    dt_canon = time.perf_counter() - t0
+                    self.dedup.canon_time_total += dt_canon
                     if not indv.fit_set:
-                        indv.fitness = self.fitness_function(indv)
+                        indv.fitness = self._traced_fitness(indv)
                         if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                             self._best_fitness = indv.fitness
+                    tracer.record(dag=dag, t_canon=dt_canon, fallback=trace_fallback)
                     continue
                 self.dedup.canon_fallback_time += time.perf_counter() - t0_canon
                 if canon_hash is None:
                     canon_hash = hash(canonical)
 
-            self.dedup.canon_time_total += time.perf_counter() - t0
+            dt_canon = time.perf_counter() - t0
+            self.dedup.canon_time_total += dt_canon
 
             if self._enforce_dedup:
                 # --- Population-level dedup with fitness caching ---
@@ -589,6 +648,15 @@ class IsalSREvaluation(Evaluation):
                     indv.fitness = np.inf
                     if self._use_age_penalty:
                         indv.genetic_age = _DUPLICATE_AGE_PENALTY
+                    tracer.record(
+                        dag=dag,
+                        representation=canonical,
+                        representation_kind=self.dedup.key_mode,
+                        representation_hash=canon_hash,
+                        t_canon=dt_canon,
+                        fallback=trace_fallback,
+                        dedup_hit=True,
+                    )
                     continue
 
                 # Stale duplicate re-entry: individual was previously penalized
@@ -602,7 +670,7 @@ class IsalSREvaluation(Evaluation):
                 if canon_hash in self.dedup.fitness_cache:
                     indv.fitness = self.dedup.fitness_cache[canon_hash]
                 elif not indv.fit_set:
-                    indv.fitness = self.fitness_function(indv)
+                    indv.fitness = self._traced_fitness(indv)
 
                 # Cache the fitness for future reuse
                 if np.isfinite(indv.fitness):
@@ -617,6 +685,14 @@ class IsalSREvaluation(Evaluation):
 
                 if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                     self._best_fitness = indv.fitness
+                tracer.record(
+                    dag=dag,
+                    representation=canonical,
+                    representation_kind=self.dedup.key_mode,
+                    representation_hash=canon_hash,
+                    t_canon=dt_canon,
+                    fallback=trace_fallback,
+                )
             else:
                 # --- Legacy dedup: historical hash rejection ---
                 is_duplicate = canon_hash in self.dedup.canonical_seen
@@ -625,6 +701,15 @@ class IsalSREvaluation(Evaluation):
                     indv.fitness = np.inf
                     if self._use_age_penalty:
                         indv.genetic_age = _DUPLICATE_AGE_PENALTY
+                    tracer.record(
+                        dag=dag,
+                        representation=canonical,
+                        representation_kind=self.dedup.key_mode,
+                        representation_hash=canon_hash,
+                        t_canon=dt_canon,
+                        fallback=trace_fallback,
+                        dedup_hit=True,
+                    )
                     continue
 
                 # Counters are unconditional: with suppression off the arm still
@@ -634,9 +719,18 @@ class IsalSREvaluation(Evaluation):
                     self.dedup.canonical_seen.add(canon_hash)
                     self.dedup.n_unique += 1
                 if not indv.fit_set:
-                    indv.fitness = self.fitness_function(indv)
+                    indv.fitness = self._traced_fitness(indv)
                 if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
                     self._best_fitness = indv.fitness
+                tracer.record(
+                    dag=dag,
+                    representation=canonical,
+                    representation_kind=self.dedup.key_mode,
+                    representation_hash=canon_hash,
+                    t_canon=dt_canon,
+                    fallback=trace_fallback,
+                    dedup_hit=is_duplicate,
+                )
 
 
 def purge_penalized(population: list) -> list:
@@ -788,9 +882,24 @@ class IsalSRBingoRunner(ModelRunner):
         except Exception:  # noqa: BLE001
             log.debug("Failed to extract Bingo IsalSR results", exc_info=True)
 
-        search_only = wall_clock - dedup.canon_time_total
+        # Every block the wrapper runs inside the budget is removed, not just the
+        # canonicalisation: conversion and the shadow sketches were previously
+        # booked as search time.
+        search_only = max(
+            0.0,
+            wall_clock
+            - dedup.canon_time_total
+            - dedup.conversion_time_total
+            - dedup.shadow_time_total,
+        )
         snapshots = evaluation.snapshots  # type: ignore[union-attr]
         convergence_data = evaluation.convergence_data  # type: ignore[union-attr]
+
+        # Effective-population disclosure: how many population members were
+        # sitting at the +inf duplicate penalty, per generation.
+        penalised = [n for _gen, n, _size in evaluation.n_penalised_per_gen]  # type: ignore[union-attr]
+        penalised_mean = float(np.mean(penalised)) if penalised else 0.0
+        penalised_max = float(max(penalised)) if penalised else 0.0
 
         log.info(
             "IsalSR Bingo: total=%d unique=%d skipped=%d pop_rejected=%d "
@@ -807,6 +916,18 @@ class IsalSRBingoRunner(ModelRunner):
         if ledger.enabled:
             log.info("FallbackLedger: %s", ledger.to_dict())
         self.last_ledger: FallbackLedger = ledger
+        # Stage-D D2: flush the trace and write the four derived artefacts.
+        # No-op unless ISALSR_STAGE_D_TRACE was set for this cell.
+        dedup.tracer.close(
+            ledger=ledger,
+            run={
+                "method": "bingo",
+                "variant": self.variant,
+                "key_mode": self.KEY_MODE,
+                "problem": config.get("problem_name"),
+                "seed": seed,
+            },
+        )
         self.last_shadow = dedup.shadow_counts()
         if self.last_shadow:
             log.info(
@@ -832,6 +953,10 @@ class IsalSRBingoRunner(ModelRunner):
             n_skipped=dedup.n_skipped,
             canonicalization_time_s=dedup.canon_time_total,
             search_only_time_s=search_only,
+            conversion_time_s=dedup.conversion_time_total,
+            shadow_time_s=dedup.shadow_time_total,
+            penalised_in_population_mean=penalised_mean,
+            penalised_in_population_max=penalised_max,
             atlas_hits=dedup.atlas_hits,
             atlas_misses=dedup.atlas_misses,
             atlas_lookup_time_s=dedup.atlas_lookup_time,

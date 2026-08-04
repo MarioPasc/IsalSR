@@ -211,7 +211,9 @@ def critical_difference_data(
 
     # Compute ranks per problem (1 = best). For metrics where higher is
     # better, the caller should negate values before passing.
-    ranks = np.zeros_like(data_matrix)
+    # float dtype is mandatory: an integer matrix would truncate the .5
+    # average ranks that ties produce.
+    ranks = np.zeros(data_matrix.shape, dtype=float)
     for i in range(n_problems):
         ranks[i] = stats.rankdata(-data_matrix[i])  # higher value = lower rank
 

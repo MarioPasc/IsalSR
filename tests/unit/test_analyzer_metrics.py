@@ -24,11 +24,14 @@ Two things are under test:
    proved equal    ``True``               recovered
    proved unequal  ``False``              not recovered
    timed out       ``None``               undetermined -- excluded
+   SymPy raised    ``None``               undetermined -- excluded
    =============== ====================== ==========================
 
    Recording a timeout as ``False`` would be a false negative landing
    preferentially on whichever arm finds larger expressions, biasing the
-   paired comparison.
+   paired comparison. A SymPy exception is treated identically (fairness
+   audit, 2026-08-04): conversion blowups correlate with expression size for
+   the same reason timeouts do.
 """
 
 from __future__ import annotations
@@ -159,13 +162,20 @@ def test_jaccard_timeout_is_none() -> None:
     assert result is None
 
 
-def test_error_is_false_not_none() -> None:
-    """A genuine failure keeps its existing semantics: False, not undetermined.
+def test_sympy_exception_is_none_not_false() -> None:
+    """A SymPy exception is undetermined (None), like a timeout.
 
-    The None/False distinction is the whole point -- conflating them would put
-    real negatives back into the excluded bucket.
+    ``False``/``0.0`` used to be returned here, which is a *decided* negative.
+    SymPy blowups correlate with expression size exactly as timeouts do, so
+    scoring them as failures lands preferentially on whichever arm finds larger
+    expressions -- the same asymmetric-failure argument that made a timeout
+    ``None``. ``False`` stays reserved for a proved non-equivalence.
     """
-    assert solution_recovered("not an expression", x + 1) is False
+    assert solution_recovered("not an expression", x + 1) is None
+    # ``jaccard_index`` does *not* raise here: ``_get_subexpressions`` returns
+    # the empty set for a non-``sympy.Basic`` input, so 0.0 comes out of the
+    # normal path, not the exception handler. Its exception handler is covered
+    # in tests/unit/test_stats_fairness_fixes.py.
     assert jaccard_index("not an expression", x + 1) == 0.0
 
 

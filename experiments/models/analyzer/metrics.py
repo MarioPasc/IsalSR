@@ -209,11 +209,12 @@ def solution_recovered(
     to avoid false negatives from assumption mismatches between SR methods.
 
     Three outcomes are distinguished. ``True``/``False`` mean the equivalence
-    was decided; ``None`` means it could not be decided within ``timeout_s``
-    and the observation must be *excluded* from the recovery rate rather than
-    counted as a failure. Recording a timeout as ``False`` would be a false
-    negative that lands preferentially on whichever arm finds larger
-    expressions, biasing the paired comparison.
+    was decided; ``None`` means it could not be decided and the observation
+    must be *excluded* from the recovery rate rather than counted as a failure.
+    ``None`` covers both a timeout and a SymPy exception: recording either as
+    ``False`` would be a false negative that lands preferentially on whichever
+    arm finds larger expressions (conversion blowups correlate with expression
+    size, exactly as timeouts do), biasing the paired comparison.
 
     Args:
         expr_found: Found SymPy expression.
@@ -222,8 +223,8 @@ def solution_recovered(
         timeout_s: Wall-clock budget. Non-positive disables the bound.
 
     Returns:
-        True if symbolically equivalent, False if proved non-equivalent or the
-        comparison failed, None if undetermined within the budget.
+        True if symbolically equivalent, False if proved non-equivalent, None
+        if undetermined within the budget or if SymPy raised.
     """
     try:
         import sympy
@@ -241,8 +242,11 @@ def solution_recovered(
         )
         return None
     except Exception:  # noqa: BLE001
-        log.debug("Solution recovery check failed", exc_info=True)
-        return False
+        log.warning(
+            "Solution recovery undetermined: SymPy raised; recording None (excluded), not False",
+            exc_info=True,
+        )
+        return None
 
 
 def jaccard_index(
@@ -262,8 +266,10 @@ def jaccard_index(
         timeout_s: Wall-clock budget. Non-positive disables the bound.
 
     Returns:
-        Jaccard index in [0, 1], higher is better; None if the normalisation
-        did not finish within the budget (excluded, not scored as 0.0).
+        Jaccard index in [0, 1], higher is better; None if undetermined within
+        the budget or if SymPy raised (excluded, not scored as 0.0). Both
+        failure modes correlate with expression size, so scoring them as 0.0
+        would penalise whichever arm finds larger expressions.
     """
     try:
         with _time_limit(timeout_s):
@@ -287,8 +293,11 @@ def jaccard_index(
         )
         return None
     except Exception:  # noqa: BLE001
-        log.debug("Jaccard computation failed", exc_info=True)
-        return 0.0
+        log.warning(
+            "Jaccard undetermined: SymPy raised; recording None (excluded), not 0.0",
+            exc_info=True,
+        )
+        return None
 
 
 def _get_subexpressions(expr: Any) -> set[Any]:

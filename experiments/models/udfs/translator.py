@@ -106,9 +106,22 @@ class UDFSTranslator(ResultTranslator):
         avg_canon = r.canon_fallback_time_s / max(r.atlas_misses, 1) if r.atlas_misses > 0 else 0.0
         estimated_saved = r.atlas_hits * avg_canon
 
+        # Cost attribution.  Search time is the wall clock minus every block the
+        # dedup wrapper ran inside the same budget; overhead is the
+        # representation layer's own cost, which is canonicalisation plus the
+        # adapter conversion that produces the object it canonicalises.  The
+        # shadow sketches are audit instrumentation, not method cost: they are
+        # removed from search time but deliberately left out of the overhead and
+        # reported separately, so both figures are clean.
+        search_only = max(
+            0.0,
+            r.wall_clock_s - r.canonicalization_time_s - r.conversion_time_s - r.shadow_time_s,
+        )
+        overhead = r.canonicalization_time_s + r.conversion_time_s
+
         time_results = TimeResults(
             wall_clock_total_s=r.wall_clock_s,
-            wall_clock_search_only_s=r.search_only_time_s,
+            wall_clock_search_only_s=search_only,
             canonicalization_precomputed_s=r.atlas_lookup_time_s,
             canonicalization_runtime_s=r.canonicalization_time_s,
             cache_hit_rate=hit_rate,
@@ -117,8 +130,10 @@ class UDFSTranslator(ResultTranslator):
             estimated_time_saved_s=estimated_saved,
             time_to_r2_099_s=time_to_099,
             time_to_r2_0999_s=time_to_0999,
-            evaluation_time_s=r.search_only_time_s,
-            overhead_time_s=r.canonicalization_time_s,
+            evaluation_time_s=search_only,
+            overhead_time_s=overhead,
+            conversion_time_s=r.conversion_time_s,
+            shadow_time_s=r.shadow_time_s,
         )
 
         # Search space metrics
