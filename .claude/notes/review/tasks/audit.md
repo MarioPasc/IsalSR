@@ -632,3 +632,29 @@ record that we knew before the campaign ran.
 all touched files. The 26 failures seen in one intermediate run were a mid-edit
 snapshot (`NameError: StageDTracer` before its import landed) and clear on
 re-run — not a regression.
+
+### 7.2 Execution log (2026-08-04, runbook driven by the orchestrator on Mario's direct instruction)
+
+Mario's instruction: *"Merge the branches, sign C5. Ignore the HOME space for
+now, and execute C re-cert + Stage D submission."* The build agent declined to
+act on relayed consent (correctly, from its vantage) and surfaced that HOME's
+grace is **32 h** — shorter than Stage D's horizon. Mitigation without touching
+HOME: all wave/Stage-D logs redirected to FSCRATCH via the launchers' existing
+`C2_LOGS_DIR`/`D_LOGS_DIR` overrides; only the SP-0 probe writes to
+`~/execs` (the worker's own guard requires it — see below).
+
+| Step | Result |
+|---|---|
+| Merge | `6c3798f` (parents `e7e03c9` + `1856a97`, zero conflicts); C5 signed `a001810`, signature line completed `a470da2` |
+| A2 gate on merged commit | 6,759 passed / 5 skipped / 0 failed; ruff clean; `mypy --strict` clean |
+| Deploy #1 | `a470da2` — SP-1 OK (remote exact, clean, `.git` synced), SP-2 OK (gcc 13.2.0, `build_hash 298fc118…`, `engine=cpp`) |
+| Wave #1 (aborted) | 🔴 **Self-inflicted provenance split**: a mid-wave redeploy (the launcher fix below) would have left cells recording two different HEADs. Cancelled all 42 arrays + aggregation ≈10 min in, wiped `c2_smoke_v4`, relaunched on the stable commit. **Lesson (generalises the config rule): never deploy while a wave is running — a deploy IS a config edit** |
+| `--test-only` findings | Two real launcher bugs the local phase could not catch: (1) python resolved via the workstation `~/.conda` path that does not exist on Picasso — fixed `a455d6c`; (2) `GROUPS=` — a **reserved bash array**; assignment returns error status and `set -e` killed the script silently — fixed `9b351e7`. After both: exit 0, 12/12 cells enumerate per the §7 lock, TRACE flag on Bingo×Pagie-1×isalsr |
+| Probe #1 (1765639) | FAILED **by design**: the worker's own SP-0 guard rejects probe output outside `~/execs/isalsr/` (my FSCRATCH redirect violated the convention the worker enforces). Guard kept; probe resubmitted per RUNBOOK verbatim |
+| Wave #2 (live) | 42 arrays on `a455d6c`, root `c2_smoke_v4`, logs on FSCRATCH, `%24`, aggregation+certifier **1766718** (`afterany`) |
+| Probe #2 | **1766802** (bingo_isalsr worker, 900 s payload, RSS interval 15 s, `~/execs/isalsr/c2d_probe`) |
+| Monitor | armed on 1766718 (re-cert verdict), 1766802 (probe), and wave failure counts |
+
+Pending at the time of writing: re-cert verdict (gates Stage D submission),
+probe artefact check (`rss_timeseries.csv` + trace flag), post-wave deploy of
+`9b351e7`, then the three Stage D groups + `c2d_certify`.
