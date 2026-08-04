@@ -563,3 +563,21 @@ tarred (7,932 members each, verified) then removed, `c2_smoke_v3` intact.
    than `p_value_holm` — narrative choice for the review-answer lane.
 4. `c2_smoke/worker.sh`'s ≥2-seed guard is unusable for SP-0 probes (seed 0
    only); a dedicated probe worker exists, but the friction will recur.
+
+---
+
+## 7. Stage D configuration lock (Mario, 2026-08-04, via question dialogue)
+
+| # | Decision | Value |
+|---|---|---|
+| 1 | Merge & submission authority | **Mario merges** `feature/experiment-fairness-audit` → `cpp-core-port` himself, after review. The implementation agent builds everything on the audit branch now; **submission of the Stage C re-cert wave and Stage D is gated on the merge landing** and happens only on an explicit go |
+| 2 | Trace problem | **Pagie-1** (6 cells: × 3 arms × 2 methods). D2 detailed trace = **Bingo × Pagie-1 × seed 101**, run as extra persistence inside that cell |
+| 3 | Stage D config | Defaults accepted: `max_time 43,200 s`, wall **16 h**, `--constraint=sr`, **seed 101** all 12 cells, shadow ON + `--ledger` ON, mem Bingo-IsalSR **256 GB** / Bingo other **32 GB** / UDFS **16 GB**. **Addendum (Mario): measure memory properly so production can request less without OOM risk** — per-task RSS time series (sampler) in addition to `sacct` MaxRSS (`JobIDRaw`, `.batch` step); D1.2 output = recommended production `--mem` per (method, arm) at peak + ≥30 % headroom |
+| 4 | Headline tables | **Holm-adjusted p (`p_value_holm`) in main Tables 1/S; raw one-sided in the supplement.** On C1's numbers Bingo R² ≈ 1.8×10⁻² after Holm — still < 0.05 |
+| — | Conservative-substitution levels | Confirmed as implemented (R²→0, NRMSE→1, ρ→1, redundancy→0, clamp) — no objection raised |
+
+Cell enumeration (12): Pagie-1 × {baseline, hash, isalsr} × {UDFS, Bingo} (6) +
+{Korns-12, Vlad-2} × {baseline, hash, isalsr} × Bingo only (6). Memory groups:
+UDFS 3 × 16 GB, Bingo non-isalsr 6 × 32 GB, Bingo isalsr 3 × 256 GB.
+C5 (`smoke_vs_C1.md` §3) is drafted by the agent from `c2_smoke_v3` against
+the frozen §2 expectations and **signed by Mario** before Stage D submits.
