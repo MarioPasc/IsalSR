@@ -12,7 +12,7 @@ disagree about a launch, **this file wins**; update the ticket.
 | Budget per run | `max_time = 43,200 s` (12 h), 1 core |
 | Core-hours | **100,800** committed |
 | Launch model | **one gated launch, all six arrays** — nothing submits until every blocker and every pre-flight gate in §4 has passed |
-| Status | **NOT SUBMITTED.** Blockers open (§3). Pre-flight suite not started (§4) |
+| Status | **NOT SUBMITTED.** Pre-flight A–C complete and signed; **Stage D running** (§4.4, 13 cells, jobs 1769422–1769425); Stage E ready to start in parallel on `c2_smoke_v4/`. Remaining before launch: Stage D verdict, D3, E1–E7, one clean Stage C wave on the final config, HOME quota, Stage F sign-off, `campaign/c2` tag |
 | Number freeze | 2026-09-10 |
 
 ---
@@ -493,19 +493,29 @@ Reference:
 **Deliverable:** `c2_preflight/smoke_vs_C1.md` — a table with every anomaly either
 explained or escalated. An unexplained anomaly blocks Stage D.
 
-### 4.4 Stage D — full-length certification (**12 tasks, 144 core-hours**)
+### 4.4 Stage D — full-length certification (**13 tasks, 156 core-hours**)
 
 The 15-minute smoke proves nothing about a 12-hour run: memory growth, heap
 fragmentation, dedup-set size, timeout paths and convergence behaviour are all
 budget-dependent. Stage D is the successor to the old G7 single task and it is
 **not optional and not parallelisable with the full launch**.
 
-**Composition — 12 tasks at the full 43,200 s budget:**
+**Composition — 13 tasks at the full 43,200 s budget.** Amended 2026-08-04
+(audit.md §7.3): the twelve certification cells run with the shadow sketches
+**off**, and a thirteenth cell carries the D2 trace with them **on**. The split
+exists because the sketches cost **17.6 %** of Bingo's wall clock, paid by the
+`isalsr` arm alone: certifying under that penalty would confound D1.6's ρ
+comparison against a C1 that never paid it — which is precisely the question
+C5 §3.5 hands to D1.6. The trace cell runs at **seed 102**, because it repeats
+cell 10's `(method, suite, problem, arm)` and at a shared seed the orchestrator
+would write both runs into one directory.
+
 
 | Group | Cells | Why these |
 |---|---|---|
-| Trace problem | 1 problem × 3 arms × 2 methods = 6 | a structural-bottleneck problem where IsalSR is predicted to help (recommend **Pagie-1** or **I.15.10**); this is the run that produces the detailed trace |
+| Trace problem | **Pagie-1** × 3 arms × 2 methods = 6 | the structural-bottleneck problem where IsalSR is predicted to help (2026-04-19 analysis). Locked by Mario, audit.md §7 row 2 |
 | NaN problems | Korns-12 + Vlad-2 × 3 arms × Bingo only = 6 | **the T08 AC-7 evidence.** These are the two cells that were NaN in the submission |
+| D2 trace cell | Bingo × Pagie-1 × isalsr × seed 102 = 1 | shadow sketches **on**, `bingo_hard_trace.yaml`. **Not a certification cell** — excluded from D1.1–D1.8 by `STAGE_D_CERTIFICATION_CELLS`, so its ρ and R² never enter a table |
 
 **Pass criteria:**
 
@@ -647,7 +657,48 @@ test. Any truncation is recorded in §10.1 and disclosed in the paper.
 Pairwise CPDT (`isalsr` vs `baseline`, `hash` vs `baseline`, `isalsr` vs `hash`)
 with **Holm correction across the three contrasts**, plus Friedman/Nemenyi over the
 three arms per method for the critical-difference diagram. **Do not silently reuse
-the two-arm machinery** (T04 §5.3). Verified at A8/E2.
+the two-arm machinery** (T04 §5.3). Verified at A8/E2 — **closed 2026-08-04**.
+
+**Contrast policy, decided 2026-08-04 (Mario) — pre-registered directions only.**
+Every contrast now persists its own effect size, p-value and `p_value_holm`:
+
+| Contrast (δ = treatment − reference) | R²_train, R²_test | NRMSE_test | ρ, redundancy |
+|---|---|---|---|
+| baseline → isalsr | one-sided (as submitted) | one-sided | **descriptive, no p** |
+| hash → isalsr | **two-sided** | **two-sided** | one-sided |
+| baseline → hash | **two-sided** | **two-sided** | **descriptive, no p** |
+
+Two-sided wherever no directional hypothesis was ever registered; one-sided for
+ρ only on `hash → isalsr`, where the direction is guaranteed by construction (a
+sound fixed-order hash cannot merge more than the canonical string).
+
+**ρ is not tested against the baseline.** `bingo/runner.py:428` sets
+`n_unique_canonical = total_evals`, so the baseline's ρ is **1.0 by
+construction**; a paired test against it asks only "does any duplicate exist?"
+and returns p ≈ 0 tautologically. The submitted table's ρ p-values
+(2.7 × 10⁻²² UDFS) are withdrawn from the revision on those grounds; ρ against
+the baseline is reported as mean ± std, and the inferential ρ claim moves to
+`isalsr` vs `hash`, which is the comparison R1.4 actually asked for. Holm's
+family per metric is therefore **3 for R²/NRMSE and 1 for ρ**.
+
+### 6.1a Tie handling in the CPDT — corrected 2026-08-04
+The CPDT called `scipy.stats.wilcoxon` with its default `zero_method="wilcox"`,
+which **discards** tied problems — while the project's own W/T/L rationale
+treats a tie as evidence of no difference. Dropping ties inflates significance
+whenever the non-tied δ lean one way. Two changes, both conservative:
+
+1. `|δ| ≤ 1e-6` is snapped to exactly 0 **before** the test, so the tested
+   vector and the reported W/T/L are the same partition. Previously the
+   threshold governed only the display and floating-point noise entered the
+   test as signed evidence.
+2. `zero_method="zsplit"` (Pratt 1959, JASA 54:655–667; Demšar 2006, JMLR
+   7:1–30) splits the zeros' rank sum evenly between the positive and negative
+   sums.
+
+Recomputed on C1's archived δ (N = 50): **no significance claim flips at
+α = 0.05**; Bingo's R² rows move from *** to ** (4.4 × 10⁻⁴ → 6.1 × 10⁻³).
+**Any C1 CPDT p-value quoted in the revision must be the corrected one.**
+Effect sizes stay on the raw δ — snapping is a decision rule, not an estimator.
 
 ### 6.2 CPDT remains primary
 CPDT treats each problem as one paired observation: `δᵢ = mean_seeds(m^A) −
@@ -993,6 +1044,18 @@ wrong at cost:
 | 2026-08-04 | **The 10 stale `n_seeds: 30` configs are now 20** | Closed the A4 finding of 2026-08-03. All **14** configs verified at `n_seeds: 20`, and the **A4b operator-set invariant re-checked after the edit**: 1 distinct set per method, non-empty (`bingo` 10 operators, `udfs` 11). Done **between waves**, never during one — the certifier job reads no config, which is what makes the moment safe | Claude |
 | 2026-08-03 | **Stage C moves to 3 seeds** (§4.3 amended) | **DECIDED (Mario).** Seeds **0, 101, 102** — disjoint from campaign seeds 1…20 *and* from the 21…30 top-up range, so SP-0's "never mistakable for a campaign cell" intent is preserved. Reason: at one seed the three paired contrasts are **never constructed**, so the smoke would certify everything except the machinery the paired design rests on, and the first three-arm run of that code would be the campaign itself — §4.5's most expensive failure mode. **Two seeds does not work**: the threshold is `< 3`. Three is also `scipy.stats.shapiro`'s minimum, exercising the Shapiro→t/Wilcoxon branch at its boundary. Cost 105 → **315 core-hours (0.3 % of C2)**. Buys the code path only — at `n = 3` the minimum two-sided Wilcoxon `p` is 0.25, so **no number from Stage C means anything** | Claude, `aggregation.py:207` |
 
+| 2026-08-04 | 🔴 **Fairness audit of the whole experimental setup** | **16 findings; 5 defect clusters fixed.** Commissioned to check whether the setup over-favours the competitor arms or IsalSR. Core design verified sound: identical configs/budgets/seeds/data across arms, host-enforced budget windows with no hidden pre-computation, an honestly-naive hash competitor, arm-independent metric scoring. Defects were in *accounting*, and cut both ways — pro-IsalSR: CPDT tie-dropping (§6.1a), the tautological ρ p-value (§6.1), overhead understated 1.57×/2.43× by excluding adapter conversion; pro-competitor: `T_search` inflated by untimed instrumentation (so C1's Bingo `S = 0.93` partly measures wrapper bookkeeping), duplicates denied the LM restarts the baseline gets, and Bingo's cross-arm `total_dags_explored` flattering the baseline 3–4× (`eval_count` vs candidates — **never report it cross-arm**). Full log: `audit.md` | Claude |
+| 2026-08-04 | **Cost attribution corrected** | `conversion_time_s` and `shadow_time_s` are now timed per candidate and reported. `wall_clock_search_only_s = wall − canon − conversion − shadow`; `overhead_time_s = canon + conversion` (shadow excluded — it is audit instrumentation, not method cost). ⚠ **Two consequences to carry:** D1.7's "Bingo ≈7.4 %" expectation was canon-only and the honest figure is higher — not a regression; and **T01 AC-6's `S` value was derived under the old formula**. The mechanism (`dS/dT_canon = 0`) survives; the number moves upward for `isalsr` | Claude |
+| 2026-08-04 | **Shadow sketches OFF campaign-wide** | **DECIDED (Mario).** Measured on the v4 wave: Bingo `isalsr` **17.6 %** of wall clock — *more than the 14.8 % method overhead it instruments* — against UDFS's 0.034 %, paid by one arm inside a fixed budget. Since C1's trajectory replay shows Bingo's paired effect eroding 69 % from 12 h to 8 h, that is our own effect being cut. `shadow_hash: false` in all 14 configs, **in the method block** — `create_runner` passes `config.get(method, {})`, so a key under `isalsr:` is silently ignored and the sketches would have run on all 8,400 runs unrecoverably (the `ISALSR_LEDGER_ENABLED` trap again). Fixed-order numbers now come from D2/D3 only | Claude, audit.md §7.3 |
+| 2026-08-04 | **"Steel-man" second hash number WITHDRAWN** | **Mario's challenge, accepted.** The audit had asked for the adapter-order ρ_hash to be reported beside the live host-native one. That does not survive scrutiny: the adapter's renumbering is *part of IsalSR's own preprocessing*, so the adapter-order rung is not an independent competitor but a hybrid nobody could build without our adapter, and two published ρ_hash numbers invite "which is the baseline?". **Replacement, and it is stronger:** state which representation the naive hash keys on, and answer the "UDFS ρ_hash = 1.0000 looks rigged" objection *mechanistically* — systematic enumeration emits structurally distinct `node_dict`s, so a representation-order hash has nothing to merge; the redundancy is purely isomorphic. The adapter-order rung stays computable from D3 and is held in reserve for the letter | Mario + Claude |
+| 2026-08-04 | **A6 / A8 / A13 / B8 closed** | MANIFEST + strict validator (46 tests); three-arm analyzer with Holm-by-3 asserted (52 tests); FSCRATCH **155.4k / 250k = 94.6k headroom** after archiving the superseded `c2_smoke`/`c2_smoke_v2` roots (only 15.9k of the drop attributable — the earlier 248.6k reading was likely stale); resume/corruption proven on Picasso. ⚠ **HOME remains over quota** (0.34/0.28 TB) — Mario's lane, deliberately deferred, and mitigated for the campaign by writing all wave/Stage-D logs to FSCRATCH | Claude |
+| 2026-08-04 | **Stage C v3 GO; C4 PASS** | 1,260/1,260 on `sr`, span 31 m 55 s. C4 multiplicity histogram **{6: 204, 18: 2}** — 204 fingerprints at 3 arms × 2 methods, the two declared deterministic grids at 18; `cross_arm_disagreement = 0`, `duplicate_problems = 0` (the `I.34.27` 1/(2π) restoration holds), `seed_collapse = 0`. **The last Stage C blocker closed** | Claude, job 1761777 |
+| 2026-08-04 | **Audit branch merged; C5 signed** | `6c3798f` merges 20 commits into `cpp-core-port` (zero conflicts); A2 green **on the merged commit** (6,759 tests, ruff, mypy-strict); C5 signed by Mario with §3.5's ρ deviation handed to D1.6 | Claude |
+| 2026-08-04 | ⚠ **A deploy IS a config edit — never during a wave** | Generalises the 2026-08-03 config rule. A mid-wave redeploy split provenance across two HEADs inside a certification wave; caught ≈10 min in, wave cancelled, root wiped, relaunched on a stable commit. Separately, 161 of v4's 1,260 cells recorded `a455d6c-dirty` from an in-place `sed` on the *deployed* tree — same lesson, second form. **The deployed tree is read-only while any array is running** | Claude |
+| 2026-08-04 | **Two launcher bugs only `--test-only` could find** | (1) python resolved via a workstation `~/.conda` path absent on Picasso; (2) `GROUPS=` is a **reserved bash array** — assignment returns an error status and `set -e` killed the launcher before its first `echo`, exiting 1 with **zero output**. Both fixed. Neither is reachable locally: there is no `sbatch` on the workstation. **Run `--test-only` on the cluster for every new launcher** | Claude |
+| 2026-08-05 | **Stage D submitted — 13 cells** | Jobs **1769422** (udfs 3 × 16 GB), **1769423** (bingo_std 6 × 32 GB), **1769424** (bingo_isalsr 4 × 256 GB), certifier **1769425** (`afterany`, dependency verified non-null). **13/13 RUNNING within 20 s**, including all three 256 GB cells — `sr`'s 128-core/450 GB nodes absorbed them without queueing. Deployed `00635ae` from a temporary clean clone, because `deploy.sh` (rightly) refuses a dirty tree and the tree carried another agent's in-flight work; SP-1 and SP-2 both verified from the remote side. ⚠ **`git pull` is impossible on Picasso** — no outbound SSH to GitHub; `deploy.sh` is the only path | Claude |
+| 2026-08-05 | 🔴 **A clean Stage C wave on `00635ae` is still owed** | v4 certified the merged commit but under the **pre-shadow-off configs**, and 161 of its cells are `-dirty`. §5.1 requires the campaign to launch on a commit **and configuration** a Stage C wave has certified, so one more 1,260-task wave (~35 min at `%24`/`sr` + aggregation) runs on `00635ae` **before the `campaign/c2` tag**. Stage D is unaffected: its cells record their own clean provenance | Claude |
+
 ### 11.2 Pre-flight sign-off
 
 | Stage | # | Check | Date | Result | Evidence artefact |
@@ -1003,11 +1066,11 @@ wrong at cost:
 | A | A4 | Config equivalence across arms | 2026-08-03 | **PASS + finding.** No arm block overrides a host-search hyperparameter; the top-level `isalsr:` block holds only canonicaliser settings. 🔴 **10 configs still declare `n_seeds: 30`** — fix before C2 | `c2_preflight/config_diff.md` |
 | A | A4b | Operator-set policy decided (uniform per method) | 2026-08-03 | **Decided.** Configs updated; containment guard landed. Still to do at sign-off: dump `operator_sets.csv`, record the policy **and the 22-problem continuity exclusion** in the MANIFEST | `c2_preflight/operator_sets.csv` |
 | A | A5 | Seed set declared (1…20, ⊂ C1) | 2026-08-03 | **PASS.** Campaign 1…20 (`0 ∉ seeds`); Stage C uses 0/101/102, disjoint from both the campaign set and the 21…30 top-up range; renders as `seed_00`/`seed_101`/`seed_102` | `c2_preflight/seed_declaration.md` |
-| A | A6 | MANIFEST schema frozen + validator | | **OPEN.** `experiments/models/manifest.py` still does not exist. Blocks the campaign, not Stage C | |
-| A | A7 | RunLog accepts three arms | | | |
-| A | A8 | Analyzer three-arm readiness | | | |
-| A | A9 | T08 code half landed | | | |
-| A | A10 | Failure ledger implemented | | | |
+| A | A6 | MANIFEST schema frozen + validator | 2026-08-04 | ✅ **CLOSED.** `experiments/models/manifest.py` + strict validator: nothing defaults, `from_dict` rejects any missing top-level or nested field, and the CLI exits 1 on a truncated manifest (the graded criterion). Records commit+tag, build hash, compiler+flags, per-`(method, suite)` `config_sha256`, the A4b policy **with the 22-problem Bingo continuity exclusion enumerated**, three arms, seeds 1–20 (seed 0 rejected), `decomposed`, engine, `sr`, 42 arrays / 8,400 tasks. 46 tests | `tests/unit/test_manifest.py` |
+| A | A7 | RunLog accepts three arms | 2026-08-04 | **PASS.** Three arms round-trip; the provenance block is A7-BUG's. Extended since by the fairness audit: `conversion_time_s`, `shadow_time_s` (cost attribution) and `penalised_in_population_{mean,max}`, all legacy-tolerant. **Certified field count 56 → 60** | `tests/unit/test_schemas.py`, `test_cost_attribution.py` |
+| A | A8 | Analyzer three-arm readiness | 2026-08-04 | ✅ **CLOSED.** `analyze.py` takes `--variants baseline,hash,isalsr` end to end; Friedman/Nemenyi over three arms; pairwise CPDT over the three contrasts with **Holm dividing by 3, asserted directly** (`3 × 0.01`, explicitly not `2 × 0.01`); conservative-substitution sensitivity check; three-arm table emission. Contrast policy and ρ handling: audit.md §6.1/§7.3 | `tests/unit/test_three_arm_stats.py`, `test_cpdt_contrasts.py` |
+| A | A9 | T08 code half landed | 2026-08-04 | **PASS**, and hardened by the audit: NaN can never be marked better (regression-tested), pairwise deletion reports the true per-metric `N`, and the conservative-substitution check now exists (it did not when T08 closed — audit F-14) | `test_table_nan_integrity.py` |
+| A | A10 | Failure ledger implemented | 2026-08-03 | **PASS** (P4). Write-ahead `status.json` survives an OOM `SIGKILL`; `collect_status_ledger` emits `status_ledger.csv`; `reconcile()` names missing cells. Exercised at scale: Stage C 1,260 rows / 1,260 distinct cells | `c2_smoke*/status_ledger.csv` |
 | A | A11 | Hash-collision bound stated | 2026-08-03 | **PASS, pending one input.** `n²/2⁶⁵ = 2.7×10⁻⁶` per run at `n = 10⁷`; `≈1.5×10⁻²` expected across 5,600 dedup-bearing runs. The bound is **quadratic in n** and was stated at an *assumed* `n`; re-evaluate against Stage C's measured `max(total_dags_explored)` | `c2_preflight/collision_bound.md` |
 | A | A12 | SLURM array/job limits | 2026-07-31 | **PASS** — `MaxArraySize=4096` ≥ 1,401; no chunking | `scontrol show config` |
 | A | A13 | 🔴 Storage **and file-count** headroom (see P6) | 2026-08-03 | 🔴 **Stage C PASS, campaign FAIL.** FSCRATCH 222.8k/250.0k soft: Stage C needs ≈7.9k and fits; C2 needs ≈45k and does not (**27.2k headroom vs the ≥60k criterion**). HOME 0.43/0.28 TB, **2 days grace**, of which **436 GB is `~/execs/vena`** (a different project) | `c2_preflight/storage_projection.md`, `quota_capture.txt` |
@@ -1019,7 +1082,7 @@ wrong at cost:
 | B | B6 | Node-constraint decision | 2026-08-04 | ✅ **CLOSED: pin `--constraint=sr`** (AMD EPYC 7H12). Two independent reasons, either sufficient: **(i)** data generation is not bit-reproducible across families (~1 ULP), which split 35/210 cells in the unpinned v2 wave and fails C4; **(ii)** wall clock is a *reported* quantity and `sd` 2.1 GHz vs `sr` 2.6 GHz makes a mixed pool partly a measurement of the scheduler. `sr` is the largest pool (154 × 128 = **19,712 cores**, >2× the `cpu=9000` entitlement) and matches the engine's `x86-64-v3`/`avx512f=0` build. **Verified: 1,260/1,260 v3 tasks placed on `sr`, and throughput rose to 592 cores** | v3 wave, `sacct NodeList` |
 | B | B6b | AVX-512 portability of the C++ engine | 2026-08-03 | **PASS.** Built with `gcc/13.2.0`; `build_hash = 298fc1188bf1b051` **identical to the local gcc 12.2.0 build**; `isa_level=x86-64-v3`, `avx512f=0`; imports with every module purged ⇒ portable across `sd`/`sr`/`bc`/`bl` | `verify_build.py` output |
 | B | B7 | `sbatch --test-only`, **all 42 arrays** | 2026-08-03 | **PASS.** exit 0 on 42/42, task counts exactly 210 per `(method, arm)`, 1,260 total | launcher `--test-only` |
-| B | B8 | Resume / idempotency | | **Partly exercised, not yet the full protocol.** The orchestrator's resume path (validate `run_log.json`, delete-and-re-run on corruption) is unit-tested and the 42-task probe's cells are skipped by the wave. The deliberate-corruption half is outstanding | |
+| B | B8 | Resume / idempotency | 2026-08-04 | ✅ **CLOSED, both halves, locally and on Picasso.** Jobs **1762279** (fresh, 3,951 B) → **1762282** ("already exists", byte-identical, skipped) → truncated to 1,975 B → **1762284** ("Corrupt run_log detected, re-running" → valid 3,951 B). Two cases beyond the ask: zero-byte file, and valid JSON that is not a RunLog | `tests/integration/test_resume_corruption.py` (6) |
 | B | B9 | T06 counter re-verification (threshold from T06) | in flight | Paired 240 s runs with and without `--ledger`, both hosts. **C1.9 already confirms liveness on real Picasso cells** (`ledger_enabled=true`, `n_ledger_sampled > 0`, 3/3) | `stage_b/*/b9_overhead.json` |
 | C | — | **The 1,260-task wave itself** | 2026-08-03 | **1,260/1,260 COMPLETED, 0 failed**, 20:28:54 → 21:46:02 (77.1 min). Achieved concurrency ≈245 cores — **but see the 2026-08-04 correction in §11.1: that is 73 % of our own `%8` throttle, not a cluster limit** | jobs 1752689–1753133 |
 | C | C1.1–C1.9 | exit codes, schema, NaN, shapes, ground truth, ρ, hash sanity, baseline purity, ledger liveness | 2026-08-04 | **ALL PASS.** C1.1 1260/1260; C1.2 all 56 fields; C1.3 **0 non-finite**; C1.4 70/70; C1.5 70/70; C1.6 420/420 with ρ≥1 and **100 % ρ>1**; C1.7 **0/420 violations**; C1.8 420/420; C1.9 840/840 counters live | `stage_c_certification.json`, job 1758634 |
@@ -1030,11 +1093,11 @@ wrong at cost:
 | C | C3 | Dedup-off equivalence control | 2026-08-03 | **UDFS PASS outright** (313/313 identical candidate-stream prefix; `r2_train` bit-identical). **Bingo: criterion untestable — the baseline does not reproduce itself** (155,449 / 41,023 / 41,049 candidates at one seed). Residual **bounded**: wrapper perturbation 3 inner evals vs baseline self-noise 12. Accepted by Mario; **must be stated in the paper** | T17 §6 |
 | C | **ALL** | **Stage C re-certified on `c2_smoke_v3`** | 2026-08-04 | ✅ **VERDICT: GO — 19/19 criteria PASS, 0 blocking failures.** Wave 1,260/1,260 COMPLETED, **1,260/1,260 on `sr`**, span 31 m 55 s (592 cores). C1.10 **1260/1260**; C4 **PASS** with `cross_arm_disagreement=0`, `duplicate_problems_blocking=0`, `seed_collapse_blocking=0`, `wrong_multiplicity=0`, multiplicity histogram `{6: 204, 18: 2}` — the signature of a correct campaign. Aggregation completed in 1 h 35 under the new 6 h wall | `c2_smoke_v3/c2_preflight/stage_c_certification.{json,md}`, job 1761777 |
 | C | C4 | Cross-arm data identity | 2026-08-04 | ✅ **RESOLVED — see the row above.** Was the one remaining blocker; two independent findings, both now fixed.| **(a)** `I.12.1` ≡ `I.34.27`: both reduce to `x_0*x_1` on `[1,5]²` and generate byte-identical data, a genuine **D1** duplicate inflating `N` since C1. **(b)** The data is **not bit-reproducible across CPU families**: v2 showed 35/210 pairs split, **all 35 partitioning exactly by node family, 0 exceptions**, measured at **≤1 ULP (5.55×10⁻¹⁷)**. Not a config race (`config_sha256` identical), not non-determinism (8 draws → 1 fingerprint). **Recommendation: pin the node family — it fixes C4, removes the wall-clock confound, and closes B6.** Pagie-1/Keijzer-6 seed-invariance is expected and now a declared exemption | `c4_fingerprint_findings.md`, probe jobs 1760654/1760655 |
-| C | C5 | Comparison against C1 | | **OPEN.** `c2_preflight/smoke_vs_C1.md` §3 to be filled; §2's expectations are pre-registered and frozen — do not edit them | |
-| D | D1.1–D1.8 | 12-task full-length certification | | | |
-| D | D2 | Detailed single-problem trace | | | |
-| D | D3 | T04 Mode 1 replay + soundness | | | |
-| E | E1–E7 | Analysis dry-run on 3 arms | | | |
+| C | C5 | Comparison against C1 | 2026-08-04 | ✅ **SIGNED (Mario).** Every row MEETS except **§3.5**: Bingo ρ at 900 s sits **1.1–1.7 % below** C1 where §2 expected a rise. The dangerous cause is falsified directly — SP-4 finds **0** SUB/DIV in 292 canonical strings — leaving the 48× budget gap, **handed to D1.6** (12 h vs 12 h). §2 untouched | `c2_preflight/smoke_vs_C1.md` |
+| D | D1.1–D1.8 | 12-task full-length certification | 2026-08-05 | **SUBMITTED, running.** Jobs **1769422** udfs (3 × 16 GB), **1769423** bingo_std (6 × 32 GB), **1769424** bingo_isalsr (4 × 256 GB); **13/13 RUNNING within 20 s**. Certifier **1769425** (`afterany`, dependency verified non-null). D1.2 additionally emits a per-`(method, arm)` production `--mem` recommendation from `max(sacct MaxRSS, VmHWM)` + 30 % headroom (Mario's addendum) | `stage_d_certification.{json,md}` |
+| D | D2 | Detailed single-problem trace | 2026-08-05 | **RUNNING as cell 13.** Bingo × Pagie-1 × isalsr at **seed 102** under `bingo_hard_trace.yaml` (`shadow_hash: true`), sampling 1 candidate in 100 (571.7 B/record measured). Split from cell 10 so the certification cells stay clean — audit.md §7.3 | `c2_trace/` |
+| D | D3 | T04 Mode 1 replay + soundness | | **Ready, gated on D2's stream.** `experiments/scripts/stage_d_mode1_replay.py`: ρ_exact/ρ_iso/ρ_total per method stratified by `k`, hash soundness (equal fixed-order hash ⇒ equal canonical string, a loud failure) and IsalSR soundness spot-check. **Now also the sole source of the fixed-order numbers**, since the shadow sketches are off campaign-wide (§7.3) | |
+| E | E1–E7 | Analysis dry-run on 3 arms | | **READY TO START — runs in parallel with Stage D.** Input is `c2_smoke_v4/` (1,260 runs, 3 arms × 3 seeds, all 60 fields, 420 valid paired-stat files). A8's machinery is closed, so E1/E2/E4/E5 have real three-arm input. **Read audit.md §6.1 and §7.3 first**: ρ is descriptive against the definitional baseline and inferential only on isalsr-vs-hash, main tables print `p_value_holm`, and the ρ CPDT footer must never render `$nan$` | |
 | F | — | Sign-off (Mario) | | | |
 
 ### 11.3 Launch ledger
