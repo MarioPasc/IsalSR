@@ -655,9 +655,26 @@ HOME: all wave/Stage-D logs redirected to FSCRATCH via the launchers' existing
 | Probe #2 | **1766802** (bingo_isalsr worker, 900 s payload, RSS interval 15 s, `~/execs/isalsr/c2d_probe`) |
 | Monitor | armed on 1766718 (re-cert verdict), 1766802 (probe), and wave failure counts |
 
-Pending at the time of writing: re-cert verdict (gates Stage D submission),
-probe artefact check (`rss_timeseries.csv` + trace flag), post-wave deploy of
-`9b351e7`, then the three Stage D groups + `c2d_certify`.
+### 7.2.1 Stage D submitted (2026-08-05)
+
+| Step | Result |
+|---|---|
+| Shadow-off change set | `00635ae` — 14 configs, trace config, 13-cell registry, 35 new tests. Suite **6,897 passed**; the only 2 failures in the tree are `test_appendix_d_generator.py`, the **T09 agent's untracked work**, verified absent at HEAD (`git stash -u` → "no tests ran") and left untouched |
+| A2 gate scope | `ruff src/ tests/` clean; `experiments/` count 554 → 555 traced to one import-sort in my own file and fixed, so **zero introduced** |
+| Push | `feature/cpp-core-port` → `origin`, author MarioPasc \<mario.pg02@gmail.com\> |
+| Picasso update | 🔴 **`git pull` is impossible there** — the login node has no outbound SSH to GitHub (`Could not read from remote repository`). Used the sanctioned `deploy.sh` (rsync **including `.git`**) instead |
+| Deploy blocker, and how it was resolved honestly | `deploy.sh` refuses a dirty local tree, and the tree was dirty **only** from the T09 agent's in-flight files. Rather than weaken SP-1 or touch their work, deployed from a **temporary clean clone** of the branch tip. SP-1 OK (remote exactly `00635ae`, 0 dirty), SP-2 OK (gcc 13.2.0, `build_hash 298fc118…`, `isa_level x86-64-v3`, `avx512f=0`, `engine=cpp`) |
+| Cluster verification | `shadow_hash: false` present in the production configs, `true` in `bingo_hard_trace.yaml`; `--test-only` exit 0 on all three arrays; registry prints 13 cells with TRACE on cell 13 only |
+| **Submission** | **1769422** udfs (3 × 16 GB), **1769423** bingo_std (6 × 32 GB), **1769424** bingo_isalsr (4 × 256 GB), **1769425** `c2d_certify` (`afterany`, dependency verified non-null). **13/13 RUNNING within 20 s**, including all three 256 GB cells — `sr`'s 128-core/450 GB nodes absorbed them without queueing |
+
+Monitor armed on all four jobs (failure states + certifier terminal state).
+Payload is 12 h under a 16 h wall, so the D1.1–D1.8 verdict lands tomorrow.
+
+**Still outstanding before the campaign** (not before Stage D): the clean
+Stage C wave on `00635ae` — v4 certified the merged commit but under the
+pre-shadow-off configs and with 161 cells recording `a455d6c-dirty`. Under
+§5.1 the campaign must launch on a commit *and configuration* a Stage C wave
+has certified, so that wave runs on `00635ae` before the `campaign/c2` tag.
 
 ### 7.3 Shadow sketches — what they are, measured cost, and the decision (Mario, 2026-08-04)
 
