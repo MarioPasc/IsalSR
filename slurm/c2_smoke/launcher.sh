@@ -21,18 +21,96 @@
 #   bash slurm/c2_smoke/launcher.sh --test-only        # sbatch --test-only on all 42 (B7)
 #   bash slurm/c2_smoke/launcher.sh                    # the full 1,260-task wave
 #   bash slurm/c2_smoke/launcher.sh --only udfs:isalsr:nguyen
+#   C2_PROFILE=campaign bash slurm/c2_smoke/launcher.sh --dry-run   # C2 itself
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ---- Profile ---------------------------------------------------------------
+# One launcher, two profiles.  Stage C exists to certify the code path C2 will
+# use, and "certifying a topology you will not launch certifies nothing" (§1) --
+# so the smoke and the campaign differ ONLY in seeds, payload budget, wall and
+# output root.  Everything structural (topology, slot apportionment, memory,
+# aggregation shape) is shared, and the owed clean Stage C wave therefore
+# certifies the campaign's launcher and not a cousin of it.
+#
+# Selecting a profile sets a coherent GROUP of defaults.  That is deliberate:
+# eight independent env vars that each silently default to the smoke value is
+# the ISALSR_LEDGER_ENABLED / shadow_hash trap a third time.
+C2_PROFILE="${C2_PROFILE:-smoke}"
+
+case "${C2_PROFILE}" in
+  smoke)
+    DEF_SEEDS="0,101,102"      # T17 §0.1: outside campaign 1..20 AND the 21..30 top-up range
+    DEF_MAX_TIME=900           # payload budget, seconds.  Never the production 43,200
+    DEF_WALL="0-00:40:00"      # >2x the payload, so a SLURM kill means a real defect (C1.12)
+    DEF_ROOT_NAME="c2_smoke"
+    DEF_SLOT_BUDGET=1008       # same total as the certified %24 wave, apportioned
+    DEF_AGG_WALL="0-01:59:00"
+    ;;
+  campaign)
+    # 30 seeds, not 20 (Mario, 2026-08-05).  §0.4a fixed the campaign at 20 on a
+    # cost premise that the measured runtimes reversed: UDFS 12.00 h and Bingo
+    # ~5.15 h put 30 seeds at ~107,100 core-hours, and the apportioned throttle
+    # puts that at a 54 h makespan.  30 seeds restores the seed count C1 used, so
+    # §6.3's disclosure paragraph about reduced supplementary-table power goes
+    # away entirely.
+    #
+    # ⚠ `--seeds` is always passed explicitly, but `orchestrator.py:641` falls
+    # back to the config's own `n_seeds` when it is not -- so all 14 configs were
+    # moved to `n_seeds: 30` at the same time.  Leaving them at 20 would have
+    # been the ISALSR_LEDGER_ENABLED trap once more: a default that is silently
+    # wrong on any path that does not override it.
+    DEF_SEEDS="1-30"
+    DEF_MAX_TIME=43200         # §5.4: 12 h.  8 h was REJECTED on measured effect erosion
+    DEF_WALL=""                # per-method, from the plan (16 h; see c2_slot_plan.WALL)
+    DEF_ROOT_NAME="c2_3arm"    # §1: the one and only campaign root
+    DEF_SLOT_BUDGET=2016
+    DEF_AGG_WALL="0-01:59:00"
+    ;;
+  *)
+    echo "FATAL: C2_PROFILE must be 'smoke' or 'campaign', got '${C2_PROFILE}'" >&2
+    exit 1 ;;
+esac
+
 # ---- Configuration ---------------------------------------------------------
 export ISALSR_REPO_DIR="${ISALSR_REPO_DIR:-/mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR}"
-RESULTS_ROOT="${C2_RESULTS_DIR:-/mnt/home/users/tic_163_uma/mpascual/fscratch/results/isalsr/c2_smoke}"
-LOGS_DIR="${C2_LOGS_DIR:-/mnt/home/users/tic_163_uma/mpascual/execs/isalsr/c2_smoke/logs}"
-ACCOUNT="tic_163_uma"
+FSCRATCH="${ISALSR_FSCRATCH:-/mnt/home/users/tic_163_uma/mpascual/fscratch}"
+RESULTS_ROOT="${C2_RESULTS_DIR:-${FSCRATCH}/results/isalsr/${DEF_ROOT_NAME}}"
 
-SEEDS="0,101,102"          # T17 §0.1: outside campaign 1..20 AND the 21..30 top-up range
+# 🔴 Logs go to FSCRATCH, not HOME.  Measured 2026-08-05: HOME's file quota is
+# 35.0k soft with 13.5k used, and ~/execs alone holds 10.7k of that.  C2 writes
+# two log files per task -- 16,800 at 20 seeds, 25,200 at 30 -- so the 30-seed
+# campaign EXCEEDS the HOME soft quota outright and the 20-seed one lands at
+# 86 % of it.  FSCRATCH has 83.6k inodes of headroom.  T17-HANDOFF §3.3 claimed
+# the logs were "already redirected to FSCRATCH"; they were not, in the code or
+# on disk -- the redirection existed only as an env-var override nobody applied,
+# and Stage D duly wrote to HOME.  It is a default now, not a habit.
+LOGS_DIR="${C2_LOGS_DIR:-${FSCRATCH}/execs/isalsr/${DEF_ROOT_NAME}/logs}"
+ACCOUNT="${C2_ACCOUNT:-tic_163_uma}"
+
+# One log file per task, not two.  SLURM folds stderr into stdout when --error is
+# omitted, halving the campaign's log inodes: 25,200 -> 12,600 at 30 seeds.
+#
+# This is not cosmetic -- it is load-bearing for the 30-seed campaign.  Measured
+# 2026-08-05, with FSCRATCH at 91.5k inodes of headroom after archiving
+# c2_smoke_v3: 30 seeds needs 71,781 result inodes, so split logs come to 96,981
+# and do NOT fit even with BOTH superseded smoke roots archived; merged logs come
+# to 84,381 and fit with ~7k to spare.
+#
+# Nothing is lost.  No code reads the .err stream: c2_certify reads run_log.json,
+# status.json and sacct, never the SLURM logs (grepped).  The worker sets
+# PYTHONUNBUFFERED=1 and bash's echo is unbuffered, so the two streams interleave
+# line-cleanly rather than tearing.  Diagnosis by grep is unaffected -- the
+# `.err` content the ledger cites (e.g. Bingo's "maximum number of fitness
+# evaluations ... exceeded") simply lands in the .out file.
+#
+# Applied to BOTH profiles on purpose: the smoke must certify the log layout the
+# campaign uses, not a cousin of it.
+MERGE_LOGS="${C2_MERGE_LOGS:-1}"
+
+SEEDS="${C2_SEEDS_SPEC:-${DEF_SEEDS}}"
 # 🔴 sbatch --export is COMMA-separated, so a comma inside a VALUE is parsed as
 # the start of the next variable. Exporting C2_SEEDS=0,101,102 delivered
 # C2_SEEDS=0 to the worker -- one seed instead of three -- so every array had
@@ -41,23 +119,59 @@ SEEDS="0,101,102"          # T17 §0.1: outside campaign 1..20 AND the 21..30 to
 # correct-looking seed-0 cells, so the array was 1/3 right and 2/3 failed rather
 # than failing outright. Ship the list colon-separated; the worker translates.
 SEEDS_EXPORT="${SEEDS//,/:}"
-MAX_TIME=900               # payload budget, seconds.  Never the production 43,200
-WALL="0-00:40:00"          # SLURM limit: >2x the payload, so a SLURM kill means a real defect (C1.12)
-THROTTLE="${C2_THROTTLE:-8}"   # per array; 42 arrays x 8 = up to 336 concurrent (§8.2 target ~300)
+MAX_TIME="${C2_MAX_TIME:-${DEF_MAX_TIME}}"
+WALL_OVERRIDE="${C2_WALL:-${DEF_WALL}}"
 
-# 🔴 The 336-task ceiling above is OURS, not the cluster's.  The achieved 245
-# cores measured on 2026-08-03 is 73 % of it, and the QOS entitlement is
-# cpu=9000 with thousands of cores routinely idle -- so "C2 takes 17.1 days"
-# was an artefact of this variable, not a contention measurement.  Raise it
-# (C2_THROTTLE=24 -> 1,008) before trading away D2 coverage, the hash arm or
-# seeds under §8.3.  See EXECUTION-PLAN §11.1, 2026-08-04.
+# ---- Slot budget -----------------------------------------------------------
+# The throttle is now apportioned per array in proportion to that array's WORK
+# (tasks x per-run hours) by experiments/scripts/c2_slot_plan.py, instead of one
+# uniform %K for all 42.
+#
+# 🔴 The uniform %K was the dominant schedule loss, and it was invisible in the
+# Stage C measurements.  The 42 arrays carry a 5.4x work spread
+# (udfs:*:strogatz 280 x 12.0 h against bingo:*:feynman_remainder 120 x ~5 h),
+# so under a uniform %K the small arrays drain early and hand their slots back
+# to nobody -- the survivors are still capped at %K.  At 20 seeds and 1,008
+# total slots the uniform split finishes in 140.0 h and the apportioned one in
+# 72.7 h: 1.92x, for the same slots and no configuration change at all.  Stage C
+# could not show this because it has 1.25 tasks per slot and is ramp-up and
+# drain end to end; C2 has 8.3.  See T17-appendix/capacity_optimisation_worklog.md §2.
+SLOT_BUDGET="${C2_SLOT_BUDGET:-${DEF_SLOT_BUDGET}}"
+# Escape hatch: C2_UNIFORM_THROTTLE=24 restores the pre-2026-08-05 behaviour for
+# A/B work.  It is strictly worse; it exists so the claim above stays falsifiable.
+UNIFORM_THROTTLE="${C2_UNIFORM_THROTTLE:-}"
 
 # Aggregation wall.  2 h was NOT enough and cost a verdict: job 1753134 spent
 # ~1h40 on the 14-config `--postprocess only` loop over 1,260 runs and was
 # killed at its wall BEFORE the certifier emitted anything.  The artefacts
 # persisted, so `certify.sh` recovered it -- but the stage read as failed for a
-# day.  The cost scales with RUNS, not configs, so C2's 8,400 runs need >=24 h.
-AGG_WALL="${C2_AGG_WALL:-0-06:00:00}"
+# day.
+#
+# That job is now a 14-TASK ARRAY plus one dependent ledger job, so the wall
+# sizes ONE config, not fourteen.  Measured 2026-08-05: the cost is ~4.2 s per
+# problem and is set by (problem x contrast x metric), a count that is IDENTICAL
+# at Stage C and C2 -- the earlier "x6.7 in runs => ~11 h" extrapolation does not
+# hold, because going from 3 seeds to 20 costs 2.6 %, not 570 %.  Real I/O over
+# the whole 1,260-run root is 0.6 s; 95 % of the wall WAS the 10,000-iteration
+# Python bootstrap loop in cohens_d_ci_bootstrap, now vectorised bit-identically
+# (tests/unit/test_effect_sizes_bootstrap.py).  All fourteen configs together
+# take 19 s locally against ~590 s before, and the 841 artefacts they write are
+# byte-identical to the old path's.
+#
+# 1 h 59 m, not 6 h, and the two minutes matter: `short` has MaxWall = 2 h and
+# QOS priority 10000 against medium_uma's 1000, which under
+# PriorityWeightQOS = 100000 is 118,933 against 28,873.  Measured with
+# `sbatch --test-only` 2026-08-05: a 1:59 request started IMMEDIATELY, a 2:01
+# request was estimated three hours out, and 13 h / 16 h / 23 h / 7 d all got
+# that same three-hours-out estimate.  This is the ONLY place in the campaign
+# where trimming the wall buys anything at all.
+#
+# Margin: one array task is one config -- 1.4 s at Stage C's 3 seeds, and the
+# 2026-08-03 incident that motivated the 6 h wall was the OLD serial loop taking
+# 1 h 40 m for all fourteen.  That work is now 28x smaller and parallel.  A wall
+# kill stays recoverable: the artefacts persist and certify.sh reads them off
+# disk, which is exactly how job 1753134 was salvaged.
+AGG_WALL="${C2_AGG_WALL:-${DEF_AGG_WALL}}"
 
 # Node family: NOT pinned.  The engine is x86-64-v3 / avx512f=0, hence portable
 # across sd/sr/bc/bl (B6b), and Stage C produces no number that enters a table,
@@ -85,40 +199,33 @@ AGG_WALL="${C2_AGG_WALL:-0-06:00:00}"
 #   bc   32 x 256 =  8,192 cores, 700 GB, AMD, avx512
 #   bl   24 x 128 =  3,072 cores, 1855 GB, AMD, no avx512
 # `sr` is the largest pool by a factor of 2.4 and is itself more than double the
-# QOS entitlement (cpu=9000), so the pin does not bind the entitlement. Its
-# 450 GB/node also covers Bingo-IsalSR even at §3.3's 256 GB request (1 task per
-# node). And the engine is built `isa_level=x86-64-v3, avx512f=0`, i.e. exactly
-# the ISA `sr` provides -- B6b already certified it imports and runs there.
+# QOS entitlement (cpu=9000), so the pin does not bind the entitlement. And the
+# engine is built `isa_level=x86-64-v3, avx512f=0`, i.e. exactly the ISA `sr`
+# provides -- B6b already certified it imports and runs there.
+#
+# ✅ At §3.3's original 256 GB, `sr`'s 450 GB/node hosted exactly ONE
+# Bingo-IsalSR task per node -- a hard ceiling of 154 concurrent tasks out of
+# 1,400, sterilising ~115 of each node's 128 cores, and separately capped at 190
+# by the QOS's own `mem=50000000M` per-user limit.  That was the campaign's real
+# capacity ceiling and it is gone at 32 GB (14 per node, no QOS bind).
 #
 # ACCEPTED COST (Mario, 2026-08-04): a pinned pool queues slower than `cpu`.
 # That is the intended trade -- comparability over turnaround.
 CONSTRAINT="${C2_CONSTRAINT:-sr}"
 
-METHODS=(udfs bingo)
-ARMS=(baseline hash isalsr)
-SUITES=(nguyen feynman hard cherrypicked roundoff feynman_remainder strogatz)
-
-# Memory per (method, arm).  DEVIATION FROM PRODUCTION, RECORDED DELIBERATELY:
-# EXECUTION-PLAN §3.3 sets Bingo-IsalSR to 256 GB in C2, a figure derived from
-# C1 runs that hit MaxRSS ~127.7 GB after HOURS of evolution.  A 900 s run
-# cannot approach it, and holding 256 GB x 210 tasks for 15 minutes would make
-# the §8.2 achieved-concurrency figure a measurement of fat-node availability
-# rather than of core contention.  C1.11's product is the MEASURED MaxRSS, which
-# the request does not affect, and the plan itself designates Stage D (D1.2, at
-# the full 12 h budget) as what sizes production memory.  Values below are
-# >4x any plausible 900 s peak and are re-checked against the one-task probe
-# before the wave goes out.
-# Overridable, because the first 42-task probe measured a peak MaxRSS of 343 MB
-# across every arm -- 50-140x below these requests. Over-requesting is not free:
-# SLURM cannot pack tasks, which throttles exactly the achieved-concurrency
-# figure §8.2 needs from this stage. Set from measurement, not from history.
-mem_for() {
-    case "$1:$2" in
-        bingo:isalsr)  echo "${C2_MEM_BINGO_ISALSR:-16}" ;;
-        bingo:*)       echo "${C2_MEM_BINGO:-16}" ;;
-        udfs:*)        echo "${C2_MEM_UDFS:-8}" ;;
-    esac
-}
+# Topology, task counts, per-array throttle, memory and wall now come from
+# experiments/scripts/c2_slot_plan.py -- ONE python call for all 42 arrays,
+# instead of 42 separate `c2_task_spec --count` invocations, and one place where
+# the resource table can be unit-tested (tests/unit/test_c2_slot_plan.py, 49
+# tests).  Memory in particular is no longer a bash case statement: see
+# c2_slot_plan.MEM_GB for the derivation of Bingo-IsalSR's 32 GB.
+#
+# ✅ The Stage C memory DEVIATION recorded on 2026-08-03 is WITHDRAWN.  It
+# existed because §3.3's 256 GB, held across 210 concurrent smoke tasks, would
+# have turned the §8.2 achieved-concurrency figure into a measurement of
+# fat-node availability.  With Bingo-IsalSR at 32 GB there is nothing to deviate
+# from, so the smoke now requests exactly what the campaign requests -- which is
+# what §5.1 wanted all along.
 
 # ---- Argument parsing ------------------------------------------------------
 MODE="submit"
@@ -156,39 +263,137 @@ submit() {
 }
 
 PY="$(conda run -n isalsr which python 2>/dev/null || echo python3)"
+REPO_LOCAL="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-task_count() {   # config -> number of array tasks (n_problems * n_seeds)
-    "${PY}" -m experiments.scripts.c2_task_spec --config "$1" --seeds "${SEEDS}" --count
+# The plan is computed from the LOCAL checkout, which deploy.sh has already
+# proven identical to the deployed one.  One call, 42 rows.
+PLAN_ARGS=(--config-dir "${REPO_LOCAL}/experiments/configs" --seeds "${SEEDS}" --tsv)
+if [[ -n "${UNIFORM_THROTTLE}" ]]; then
+    PLAN_ARGS+=(--uniform "${UNIFORM_THROTTLE}")
+else
+    PLAN_ARGS+=(--budget "${SLOT_BUDGET}")
+fi
+PLAN="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" \
+        "${PY}" -m experiments.scripts.c2_slot_plan "${PLAN_ARGS[@]}")" \
+    || { echo "FATAL: c2_slot_plan failed; nothing submitted" >&2; exit 1; }
+[[ "$(wc -l <<<"${PLAN}")" -eq 42 ]] \
+    || { echo "FATAL: plan has $(wc -l <<<"${PLAN}") rows, expected 42" >&2; exit 1; }
+
+# ---- A13 preflight: inodes, before anything is submitted --------------------
+# P6's failure mode, in its own words: "C2 hits the hard file quota mid-campaign
+# and every running task keeps burning wallclock while all its writes fail."
+# That is discovered at 70 % of a 54-hour campaign, and it is unrecoverable in
+# the sense that matters -- the compute is spent.  This turns it into a two-
+# second refusal at submit time.
+#
+# Coefficients are MEASURED on c2_smoke_v4 (1,260 runs, 7,932 inodes, of which
+# 843 are the fixed per-(problem, contrast) artefacts that do NOT scale with
+# seeds): 5.63 inodes per run, plus 843, plus two SLURM log files per task.
+# FAILS CLOSED.  The first version of this function parsed the wrong columns and
+# reported "would submit" for a request that overruns the quota by 13,333 inodes
+# -- a check that passes while measuring nothing, which is the exact shape of the
+# two C1.11 defects (`sacct -X` returning a blank MaxRSS, then `JobID` matching
+# 42 of 1,260 rows and still reporting PASS).  `quota` on Picasso separates the
+# space and file halves with a literal U+2551 box character, so positional $6/$7
+# straddle the divider.  Split on the divider, then sanity-check the result and
+# REFUSE if it is not plausible.
+check_inode_budget() {
+    local n_tasks="$1" half used soft avail need_results need_logs need
+    half="$(quota 2>/dev/null | awk -F'║' '/fscratc/ {print $2}')"
+
+    _to_int() {  # "166.4k" | "250.0k" | "400000" -> integer
+        awk '{ v=$0; sub(/[kKmM]$/,"",v);
+               if ($0 ~ /[kK]$/) v*=1000; else if ($0 ~ /[mM]$/) v*=1000000;
+               printf "%d", v }' <<<"$1"
+    }
+    used=$(_to_int "$(awk '{print $1}' <<<"${half}")")
+    soft=$(_to_int "$(awk '{print $2}' <<<"${half}")")
+
+    # Fail closed on an implausible parse rather than waving the campaign through.
+    if [[ -z "${half}" ]] || (( used <= 0 || soft <= 0 || soft <= used )); then
+        echo "FATAL: could not parse the FSCRATCH file quota (used='${used}' soft='${soft}')." >&2
+        echo "       Refusing to submit blind.  Check \`quota\` by hand, or set" >&2
+        echo "       C2_SKIP_INODE_CHECK=1 once you have confirmed the headroom." >&2
+        return 1
+    fi
+
+    avail=$(( soft - used ))
+    need_results=$(( n_tasks * 563 / 100 + 843 ))
+    need_logs=$(( MERGE_LOGS == 1 ? n_tasks : n_tasks * 2 ))
+    need=$(( need_results + need_logs ))
+
+    printf '  inode preflight: need %d (results %d + logs %d, %s) against %d free (%d / %d soft)\n' \
+           "${need}" "${need_results}" "${need_logs}" \
+           "$([[ ${MERGE_LOGS} == 1 ]] && echo merged || echo split)" \
+           "${avail}" "${used}" "${soft}"
+    if (( need > avail )); then
+        cat >&2 <<EOF
+FATAL: projected inode use exceeds the FSCRATCH soft quota by $(( need - avail )).
+       Nothing submitted.  Without this check the campaign would run for tens of
+       hours and then have every write fail while the tasks kept burning
+       wallclock (EXECUTION-PLAN P6).
+
+       What actually frees inodes here (measured 2026-08-05):
+         C2_MERGE_LOGS=1 (the default)   halves the log count; already applied
+                                         if the line above says "merged"
+         tar czf c2_smoke_v4.tar.gz c2_smoke_v4 && rm -rf c2_smoke_v4
+                                         ~7,930, but ONLY after the owed clean
+                                         Stage C wave has passed on its
+                                         replacement -- v3 is already archived
+
+       What does NOT: \`conda clean\`.  Its dry run reports nothing to remove, and
+       16,060 of the 18,300 files under conda_pkgs are hardlinked into the envs
+       (nlink >= 2), so deleting the pkgs entry frees a directory entry and not
+       an inode.  Do not spend time on it.
+
+       Override with C2_SKIP_INODE_CHECK=1 only if the 400k hard limit is known
+       to cover the shortfall AND the grace period is understood.
+EOF
+        return 1
+    fi
+    return 0
 }
+
+# Runs on submit AND on --test-only.  --test-only is executed on the cluster
+# (defect 15: there is no sbatch on the workstation), so it is exactly where the
+# quota is readable and where you want to see the projection before committing.
+if [[ ( "${MODE}" == "submit" || "${MODE}" == "test" ) && "${C2_SKIP_INODE_CHECK:-0}" != "1" ]]; then
+    check_inode_budget "$(awk -F'\t' '{s+=$4} END {print s}' <<<"${PLAN}")" \
+        || { [[ "${MODE}" == "test" ]] && echo "  (--test-only: continuing anyway)" || exit 1; }
+fi
 
 JOB_IDS=()
 CONFIG_LIST=""
 N_TASKS_TOTAL=0
 N_ARRAYS=0
+SLOTS_TOTAL=0
 
-echo "Stage C -- C2 pre-flight certification smoke"
+echo "C2 launcher -- profile '${C2_PROFILE}'"
 echo "  repo:       ${ISALSR_REPO_DIR}"
 echo "  results:    ${RESULTS_ROOT}"
 echo "  logs:       ${LOGS_DIR}"
-echo "  seeds:      ${SEEDS}   max_time: ${MAX_TIME}s   wall: ${WALL}"
-echo "  constraint: ${CONSTRAINT}   throttle: %${THROTTLE} per array"
+echo "  seeds:      ${SEEDS}   max_time: ${MAX_TIME}s"
+echo "  constraint: ${CONSTRAINT}"
+if [[ -n "${UNIFORM_THROTTLE}" ]]; then
+    echo "  throttle:   UNIFORM %${UNIFORM_THROTTLE} (A/B escape hatch -- strictly worse)"
+else
+    echo "  throttle:   apportioned, ${SLOT_BUDGET} slots over 42 arrays"
+fi
 echo "  mode:       ${MODE}${ONLY:+   filter: ${ONLY}}"
 echo ""
 
-for METHOD in "${METHODS[@]}"; do
-  for ARM in "${ARMS[@]}"; do
-    for SUITE in "${SUITES[@]}"; do
+while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM PLAN_WALL; do
+      [[ -n "${METHOD}" ]] || continue
       KEY="${METHOD}:${ARM}:${SUITE}"
       [[ -n "${ONLY}" && "${KEY}" != "${ONLY}" ]] && continue
 
       CONFIG="${ISALSR_REPO_DIR}/experiments/configs/${METHOD}_${SUITE}.yaml"
-      LOCAL_CONFIG="$(cd "${SCRIPT_DIR}/../.." && pwd)/experiments/configs/${METHOD}_${SUITE}.yaml"
+      LOCAL_CONFIG="${REPO_LOCAL}/experiments/configs/${METHOD}_${SUITE}.yaml"
       [[ -f "${LOCAL_CONFIG}" ]] || { echo "FATAL: missing config ${LOCAL_CONFIG}" >&2; exit 1; }
 
-      N_TASKS="$(task_count "${LOCAL_CONFIG}")"
-      [[ "${N_TASKS}" =~ ^[0-9]+$ && "${N_TASKS}" -gt 0 ]] \
-          || { echo "FATAL: bad task count '${N_TASKS}' for ${KEY}" >&2; exit 1; }
-      MEM="$(mem_for "${METHOD}" "${ARM}")"
+      # The smoke profile overrides the plan's per-method wall with its own short
+      # one; the campaign takes the plan's.  Both paths are explicit.
+      WALL="${WALL_OVERRIDE:-${PLAN_WALL}}"
       JOB_NAME="c2s_${METHOD:0:1}${ARM:0:1}_${SUITE}"
 
       case "${MODE}" in
@@ -205,54 +410,81 @@ for METHOD in "${METHODS[@]}"; do
           --constraint="${CONSTRAINT}"
           --account="${ACCOUNT}"
           --output="${LOGS_DIR}/${JOB_NAME}_%A_%a.out"
-          --error="${LOGS_DIR}/${JOB_NAME}_%A_%a.err"
+      )
+      # Omitting --error is what makes SLURM merge stderr into stdout.
+      [[ "${MERGE_LOGS}" == "1" ]] \
+          || SB_ARGS+=(--error="${LOGS_DIR}/${JOB_NAME}_%A_%a.err")
+      SB_ARGS+=(
           --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=${SUITE},C2_CONFIG=${CONFIG},C2_SEEDS=${SEEDS_EXPORT},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT}"
           "${SCRIPT_DIR}/worker.sh"
       )
 
       N_ARRAYS=$((N_ARRAYS + 1))
       N_TASKS_TOTAL=$((N_TASKS_TOTAL + N_TASKS))
+      SLOTS_TOTAL=$((SLOTS_TOTAL + THROTTLE))
       CONFIG_LIST="${CONFIG_LIST} ${CONFIG}"
 
       case "${MODE}" in
         dry)
-            printf '  %-32s %3d tasks  %3dG  %s\n' "${KEY}" "${N_TASKS}" "${MEM}" "${ARRAY_SPEC}"
+            printf '  %-32s %4d tasks  %%%-3d  %3dG  %-11s %s\n' \
+                   "${KEY}" "${N_TASKS}" "${THROTTLE}" "${MEM}" "${WALL}" "${ARRAY_SPEC}"
             ;;
         test)
             if OUT=$(sbatch --test-only "${SB_ARGS[@]}" 2>&1); then
-                printf '  %-32s %3d tasks  OK\n' "${KEY}" "${N_TASKS}"
+                printf '  %-32s %4d tasks  %%%-3d  OK\n' "${KEY}" "${N_TASKS}" "${THROTTLE}"
             else
-                printf '  %-32s %3d tasks  FAILED: %s\n' "${KEY}" "${N_TASKS}" "${OUT}" ; exit 1
+                printf '  %-32s %4d tasks  FAILED: %s\n' "${KEY}" "${N_TASKS}" "${OUT}" ; exit 1
             fi
             ;;
         one|submit)
             ID=$(submit "${SB_ARGS[@]}") || exit 1
             JOB_IDS+=("${ID}")
-            printf '  %-32s %3s tasks  %3dG  job %s\n' "${KEY}" \
-                   "$([[ ${MODE} == one ]] && echo 1 || echo "${N_TASKS}")" "${MEM}" "${ID}"
+            printf '  %-32s %4s tasks  %%%-3d  %3dG  job %s\n' "${KEY}" \
+                   "$([[ ${MODE} == one ]] && echo 1 || echo "${N_TASKS}")" \
+                   "${THROTTLE}" "${MEM}" "${ID}"
             ;;
       esac
-    done
-  done
-done
+done <<< "${PLAN}"
 
 echo ""
-echo "Arrays: ${N_ARRAYS}   tasks: ${N_TASKS_TOTAL}"
+echo "Arrays: ${N_ARRAYS}   tasks: ${N_TASKS_TOTAL}   slots: ${SLOTS_TOTAL}"
 
-# ---- Aggregation job -------------------------------------------------------
+# ---- Aggregation: a 14-task array, then one ledger job ---------------------
 # afterany, not afterok: if some arrays fail, a status ledger that NAMES the
-# missing cells is exactly what Stage C exists to produce (C1.15, §5.5).
+# missing cells is exactly what this stage exists to produce (C1.15, §5.5).
+#
+# Was ONE job looping over 14 configs.  Two reasons it is now an array:
+#
+#   1. Each `--postprocess only` call is scoped to its own config, and a config
+#      declares exactly one (method, suite) -- so the aggregate.csv and
+#      paired_stats.json paths of any two configs are DISJOINT.  Fourteen
+#      concurrent tasks cannot collide.
+#   2. Except on one file.  orchestrator.py:555 rebuilt the campaign
+#      status_ledger.csv from a FULL RECURSIVE WALK of the whole root, once per
+#      config -- fourteen identical walks writing one shared path.  Serially
+#      that is waste; concurrently it is a race, the same class as the per-task
+#      post-processing race of 2026-08-03.  The walk is now hoisted out
+#      (`--postprocess only --no-status-ledger`) into the single dependent
+#      ledger job below, which runs it exactly once.
+#
+# Cost, measured 2026-08-05 on the 1,260-run root: ~4.2 s per problem, set by
+# (problem x contrast x metric) and NOT by the number of runs -- 3 seeds to 20
+# costs 2.6 %.  The old "~11 h at 8,400 runs" projection extrapolated in the
+# wrong variable.
 if [[ "${MODE}" == "submit" && ${#JOB_IDS[@]} -gt 0 ]]; then
     DEP=$(IFS=:; echo "${JOB_IDS[*]}")
+    N_CONFIGS=$(wc -w <<<"${CONFIG_LIST}")
+
     AGG_ID=$(submit \
         --job-name=c2s_aggregate \
+        --array="1-${N_CONFIGS}" \
         --time="${AGG_WALL}" \
-        --ntasks=1 --cpus-per-task=2 --mem=32G \
+        --ntasks=1 --cpus-per-task=2 --mem=16G \
         --constraint="${CONSTRAINT}" \
         --account="${ACCOUNT}" \
         --dependency="afterany:${DEP}" \
-        --output="${LOGS_DIR}/c2s_aggregate_%j.out" \
-        --error="${LOGS_DIR}/c2s_aggregate_%j.err" \
+        --output="${LOGS_DIR}/c2s_aggregate_%A_%a.out" \
+        --error="${LOGS_DIR}/c2s_aggregate_%A_%a.err" \
         --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_RESULTS_DIR=${RESULTS_ROOT},C2_CONFIG_LIST=${CONFIG_LIST# }" \
         "${SCRIPT_DIR}/aggregate_worker.sh") || exit 1
 
@@ -262,7 +494,27 @@ if [[ "${MODE}" == "submit" && ${#JOB_IDS[@]} -gt 0 ]]; then
         echo "FATAL: aggregation dependency dropped -- cancelling ${AGG_ID}" >&2
         scancel "${AGG_ID}"; exit 1
     fi
-    echo "Aggregation job ${AGG_ID} (afterany on ${#JOB_IDS[@]} arrays)"
+    echo "Aggregation array ${AGG_ID} (${N_CONFIGS} tasks, afterany on ${#JOB_IDS[@]} arrays)"
+
+    # The single full-root walk.  afterany on the aggregation array, so a ledger
+    # naming the gaps is still produced when some configs failed.
+    LEDGER_ID=$(submit \
+        --job-name=c2s_ledger \
+        --time="0-02:00:00" \
+        --ntasks=1 --cpus-per-task=1 --mem=16G \
+        --constraint="${CONSTRAINT}" \
+        --account="${ACCOUNT}" \
+        --dependency="afterany:${AGG_ID}" \
+        --output="${LOGS_DIR}/c2s_ledger_%j.out" \
+        --error="${LOGS_DIR}/c2s_ledger_%j.err" \
+        --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_RESULTS_DIR=${RESULTS_ROOT},C2_LEDGER_ONLY=1,C2_EXPECTED_TASKS=${N_TASKS_TOTAL},C2_MAX_TIME=${MAX_TIME}" \
+        "${SCRIPT_DIR}/aggregate_worker.sh") || exit 1
+
+    if scontrol show job "${LEDGER_ID}" | grep -q 'Dependency=(null)'; then
+        echo "FATAL: ledger dependency dropped -- cancelling ${LEDGER_ID}" >&2
+        scancel "${LEDGER_ID}"; exit 1
+    fi
+    echo "Status-ledger job ${LEDGER_ID} (afterany on ${AGG_ID})"
 fi
 
 if [[ ${#JOB_IDS[@]} -gt 0 ]]; then

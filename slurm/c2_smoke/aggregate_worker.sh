@@ -48,18 +48,61 @@ echo "Root:    ${RESULTS_DIR}"
 echo "Commit:  $(git -C "${REPO_DIR}" describe --tags --always --dirty 2>/dev/null || echo n/a)"
 echo "=========================================="
 
+# ---------------------------------------------------------------------------
+# Two roles, selected by the environment the launcher set.
+#
+#   C2_LEDGER_ONLY=1   -> the single dependent job: one full-root walk that
+#                         rebuilds status_ledger.csv, then certification.
+#   SLURM_ARRAY_TASK_ID -> one config of the aggregation array.
+#
+# Splitting the old fourteen-configs-in-one-loop job into an array is safe
+# because each --postprocess only call touches only its own (method, suite)
+# subtree.  The one exception was the status ledger, a full recursive walk
+# writing one shared path that ran once per config -- fourteen identical walks,
+# and a race the moment they run concurrently.  --no-status-ledger removes it
+# from the per-config path; the ledger job below runs it exactly once.
+# ---------------------------------------------------------------------------
 FAILED=0
-for CFG in ${CONFIG_LIST}; do
+
+if [[ "${C2_LEDGER_ONLY:-0}" != "1" ]]; then
+    IDX="${SLURM_ARRAY_TASK_ID:?ERROR: aggregate_worker needs SLURM_ARRAY_TASK_ID or C2_LEDGER_ONLY=1}"
+    # shellcheck disable=SC2206
+    CFG_ARRAY=(${CONFIG_LIST})
+    N_CFG=${#CFG_ARRAY[@]}
+    if (( IDX < 1 || IDX > N_CFG )); then
+        echo "[FATAL] array index ${IDX} outside [1, ${N_CFG}]" >&2
+        exit 1
+    fi
+    CFG="${CFG_ARRAY[$((IDX - 1))]}"
+
     echo ""
-    echo "--- postprocess: $(basename "${CFG}") ---"
+    echo "--- postprocess ${IDX}/${N_CFG}: $(basename "${CFG}") ---"
     if ! "${PYTHON}" -m experiments.models.orchestrator \
             --config "${CFG}" \
             --output-dir "${RESULTS_DIR}" \
-            --postprocess only; then
+            --postprocess only \
+            --no-status-ledger; then
         echo "[WARN] postprocess failed for ${CFG}"
-        FAILED=$((FAILED + 1))
+        FAILED=1
     fi
-done
+
+    END_TIME=$(date +%s)
+    ELAPSED=$((END_TIME - START_TIME))
+    echo ""
+    echo "Finished:  $(date)"
+    echo "Duration:  $((ELAPSED / 60))m $((ELAPSED % 60))s"
+    exit "${FAILED}"
+fi
+
+# ---- Ledger + certification (runs once, after the aggregation array) --------
+echo ""
+echo "--- status ledger: one full-root walk ---"
+if ! "${PYTHON}" -m experiments.models.orchestrator \
+        --output-dir "${RESULTS_DIR}" \
+        --postprocess ledger; then
+    echo "[WARN] status ledger failed"
+    FAILED=$((FAILED + 1))
+fi
 
 # Certification: every C1.x criterion, computed from the files on disk.  Exits
 # non-zero on any blocking failure, so the job's own state carries the verdict.
@@ -72,8 +115,8 @@ set +e
     --root "${RESULTS_DIR}" \
     --out-json "${CERT_DIR}/stage_c_certification.json" \
     --out-md "${CERT_DIR}/stage_c_certification.md" \
-    --expected-tasks 1260 \
-    --max-time 900
+    --expected-tasks "${C2_EXPECTED_TASKS:-1260}" \
+    --max-time "${C2_MAX_TIME:-900}"
 CERT_RC=$?
 set -e
 
@@ -82,7 +125,7 @@ ELAPSED=$((END_TIME - START_TIME))
 echo ""
 echo "Finished:  $(date)"
 echo "Duration:  $((ELAPSED / 60))m $((ELAPSED % 60))s"
-echo "Postprocess failures: ${FAILED}"
-echo "Certification exit:   ${CERT_RC}"
+echo "Ledger failures:    ${FAILED}"
+echo "Certification exit: ${CERT_RC}"
 echo "Report: ${CERT_DIR}/stage_c_certification.md"
 exit $(( FAILED > 0 ? 1 : CERT_RC ))

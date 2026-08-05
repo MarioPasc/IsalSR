@@ -466,6 +466,7 @@ def postprocess_output_root(
     problem_filter: str | None = None,
     *,
     variants: Sequence[str] | None = None,
+    write_ledger: bool = True,
 ) -> dict[str, int]:
     """Aggregate, compare and index whatever run logs are already on disk.
 
@@ -485,11 +486,20 @@ def postprocess_output_root(
         variants: Arms to consider. ``None`` (the standalone-job case) discovers
             the arms present on disk and skips problems with no directory, so no
             empty tree is created for a problem that was never run.
+        write_ledger: Whether to rebuild ``status_ledger.csv``. Everything else
+            this function writes lives under ``method/benchmark/`` and is
+            therefore disjoint between configs, but the ledger is a full
+            recursive walk of the *whole* root writing one shared path. Running
+            one aggregation job per config then means N identical walks — waste
+            when serial, a torn file when concurrent. Pass ``False`` in the
+            per-config tasks and run :func:`collect_status_ledger` once, from a
+            single dependent job, afterwards.
 
     Returns:
         Counts of the artefacts produced: ``aggregates`` (aggregate.csv files
         written), ``paired_stats`` (paired-stats JSON files written, before the
-        Holm re-save) and ``ledger_rows`` (rows in the status ledger).
+        Holm re-save) and ``ledger_rows`` (rows in the status ledger, ``0`` when
+        ``write_ledger`` is ``False``).
     """
     counts = {"aggregates": 0, "paired_stats": 0, "ledger_rows": 0}
 
@@ -552,8 +562,25 @@ def postprocess_output_root(
                 save_paired_stats(ps, ps_path)
 
     # P4: assemble the campaign status ledger from the per-run records.
+    if write_ledger:
+        counts["ledger_rows"] = write_status_ledger(output_base)
+    return counts
+
+
+def write_status_ledger(output_base: Path) -> int:
+    """Rebuild ``status_ledger.csv`` from the per-run status records (P4).
+
+    A full recursive walk of the whole output root. Kept separate from
+    :func:`postprocess_output_root` so that a per-config aggregation array can
+    skip it and one dependent job can run it exactly once.
+
+    Args:
+        output_base: Root of the results tree.
+
+    Returns:
+        Number of ledger rows written.
+    """
     ledger_rows = collect_status_ledger(output_base, output_base / "status_ledger.csv")
-    counts["ledger_rows"] = len(ledger_rows)
     n_killed = sum(1 for r in ledger_rows if r.terminal_status == "started")
     log.info(
         "Status ledger: %d rows (%d completed, %d failed, %d killed) -> %s",
@@ -563,7 +590,7 @@ def postprocess_output_root(
         n_killed,
         output_base / "status_ledger.csv",
     )
-    return counts
+    return len(ledger_rows)
 
 
 def run_experiment(config_path: str, args: argparse.Namespace) -> int:
@@ -590,6 +617,7 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> int:
                 config["experiment"]["method"],
                 config,
                 problem_filter=getattr(args, "problems", None),
+                write_ledger=not bool(getattr(args, "no_status_ledger", False)),
             )
         except Exception:  # noqa: BLE001 -- reported through the exit code
             log.exception("Post-processing failed for %s", output_root)
@@ -978,8 +1006,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--config",
-        required=True,
-        help="Path to YAML experiment config",
+        default=None,
+        help="Path to YAML experiment config. Required for every mode except "
+        "--postprocess ledger, which reads no config at all.",
     )
     parser.add_argument(
         "--output-dir",
@@ -1031,7 +1060,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--postprocess",
-        choices=("auto", "skip", "only"),
+        choices=("auto", "skip", "only", "ledger"),
         default="auto",
         help="When to run the post-run block (aggregate.csv, the three paired "
         "contrasts, the Holm correction, status_ledger.csv). Inside a SLURM "
@@ -1041,7 +1070,19 @@ def build_parser() -> argparse.ArgumentParser:
         "which arms happen to have landed. Use 'skip' in the array tasks and a "
         "single dependent 'only' job (no search, no data generation) over the "
         "whole output root afterwards; 'auto' (default) keeps the in-process "
-        "behaviour for local runs.",
+        "behaviour for local runs. 'ledger' rebuilds status_ledger.csv alone, "
+        "reading no config -- the once-per-root half of a per-config "
+        "aggregation array.",
+    )
+    parser.add_argument(
+        "--no-status-ledger",
+        action="store_true",
+        help="With --postprocess only: skip rebuilding status_ledger.csv. "
+        "Everything else the step writes lives under method/benchmark/ and is "
+        "disjoint between configs, but the ledger walks the WHOLE root and "
+        "writes one shared path, so running one aggregation job per config "
+        "would repeat the walk N times and race on the file. Pair this with a "
+        "single dependent '--postprocess ledger' job.",
     )
     parser.add_argument(
         "--ledger",
@@ -1066,7 +1107,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     """Parse command-line arguments and run the experiment."""
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.postprocess == "ledger":
+        # The once-per-root half of a per-config aggregation array. Reads no
+        # config: the ledger is assembled from status.json records, which carry
+        # their own provenance.
+        try:
+            n_rows = write_status_ledger(Path(args.output_dir))
+        except Exception:  # noqa: BLE001 -- reported through the exit code
+            log.exception("Status ledger failed for %s", args.output_dir)
+            return 1
+        return 0 if n_rows else 1
+
+    if not args.config:
+        parser.error("--config is required unless --postprocess ledger is given")
     return run_experiment(args.config, args)
 
 
