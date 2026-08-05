@@ -311,6 +311,70 @@ leave-tier-out sensitivity (pooled minus the enriched tier) in the
 supplement — the per-benchmark machinery already computes it, and C2's root
 keeps suites separate by construction. No code change.
 
+### F-17 🔴🔴 **The Bingo arms are not compared at equal budget — `max_evals` binds before `max_time`, and it binds *sooner for the baseline*** (favors **isalsr**) — FOUND 2026-08-05 IN STAGE D, DECISION REQUIRED BEFORE C2
+
+**How it surfaced.** Stage D cell 8 (`bingo/baseline/Vladislavleva-2`) COMPLETED
+after **1 h 0 m** of a 12 h budget. It did not converge
+(`solution_recovered: False`, R² = 0.9985) and did not hit the wall. Its log:
+*"The maximum number of fitness evaluations (100000000) was exceeded. Total
+fitness evals: 100,054,500."*
+
+**Mechanism.** `bingo_*.yaml` carries **both** `max_time: 43200` **and**
+`max_evals: 100000000`, and for Bingo the evaluation cap binds first. It binds
+*asymmetrically*: the dedup arms assign duplicates `inf` **without invoking the
+fitness function**, so their evaluation counter advances more slowly and they
+keep running long after the baseline has spent its 100 M.
+
+**Measured on C1 — the submitted campaign** (hard tier, 264 paired
+`(problem, seed)` cells, `wl_subtree_hard/models_hard`):
+
+| Arm | median wall clock | < 3 h | ran ≥ 95 % of 12 h |
+|---|---|---|---|
+| Bingo baseline | **12,611 s (3.5 h)** | 106/264 | 1/264 |
+| Bingo isalsr | **29,440 s (8.2 h)** | 78/264 | 52/264 |
+
+**isalsr/baseline wall-clock ratio: median 2.40×, mean 3.52×. The isalsr arm ran
+>10 % longer in 206/264 cells (78 %); only 11/264 (4 %) are within ±10 %.**
+
+**UDFS is unaffected**: 300/300 paired cells at exactly 43,200 s on both arms,
+ratio 1.00 — its config has no `max_evals`, only `max_time`. So this is a
+Bingo-only defect, which is also why Bingo is the host where R1 will look.
+
+**Why this is the most serious finding in the audit.** Every Bingo R² / NRMSE /
+solution-recovery comparison in the submitted paper contrasts an isalsr arm that
+ran a median 2.4× longer against the baseline it is measured against. The
+paper describes a 12-hour budget, and `EXECUTION-PLAN.md` §5.4 states *"Every
+arm runs the full 43,200 s budget"* — **both are false as executed.** §5.4
+itself warned about exactly this failure mode ("a stop rule firing at different
+times on different arms … would make `S` a measurement of the stop rule rather
+than of the method"); `max_evals` **is** that stop rule, and it was never
+recognised as one.
+
+**This is not an argument that the numbers are wrong — it is that the protocol
+is misdescribed.** Two coherent protocols exist; the campaign must pick one and
+say which:
+
+| | **(A) Equal wall clock** | **(B) Equal evaluation budget** |
+|---|---|---|
+| How | raise `max_evals` out of reach (e.g. `10^12`) so `max_time` binds | keep `max_evals`, drop the "12 h budget" language |
+| Claim it supports | "at equal compute, the invariant representation reaches equal-or-better fitness" | "at equal *evaluations*, dedup spends them on distinct structures" |
+| Matches the manuscript / R1's endorsement | **yes** | no — needs rewriting |
+| Cost | Bingo baseline cells grow from ~1–3.5 h to 12 h; already inside C2's committed 100,800 core-hours (we are currently *under*-spending) | none |
+| Reviewer exposure | none | "your arm ran 2.4× longer" is the first thing a reviewer computes |
+
+**Recommendation: (A).** It is what the paper already claims, it removes the
+confound rather than explaining it, the budget is already provisioned, and ρ
+independently reports the evaluation-efficiency story that (B) would be
+defending. **Mario's and Ezequiel's call — it changes the campaign
+configuration, so it must be settled before C2 launches.**
+
+**Status of the running work.** Stage D continues: it is cheap (156 core-h),
+already 1.5 h in, and it is now the cleanest live measurement of *how* the
+asymmetry develops at the full budget — exactly the evidence the decision needs.
+But **Stage D certifies the production configuration, so if `max_evals` changes,
+Stage D must be re-run under the final config**, and D1.6's ρ/R² comparison
+against C1 must be read in this light.
+
 ### F-16 🟢 Minor notes
 - `hash(str)` dedup keys are SipHash-salted per process — fine within a run;
   would silently break any future cross-process atlas mixing (atlas is None in
