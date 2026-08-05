@@ -1,0 +1,1955 @@
+{
+  "schema_version": "appendix-d.1",
+  "provenance": {
+    "generator": "experiments/scripts/generate_appendix_d_tables.py",
+    "size_source": "experiments/configs/{bingo,udfs}_<suite>.yaml -> benchmarks.<suite>.{train_size,test_size}, realised through experiments.models.orchestrator._generate_benchmark_data",
+    "size_probe_seed": 42,
+    "bib_path": "/media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/article/journal/69c1637a28a81fea2badda9a/article/paper/references.bib",
+    "campaign_yaml_sizes": {
+      "cherrypicked": [
+        1000,
+        250
+      ],
+      "feynman": [
+        1000,
+        250
+      ],
+      "feynman_remainder": [
+        1000,
+        250
+      ],
+      "hard": [
+        1000,
+        250
+      ],
+      "nguyen": [
+        240,
+        1000
+      ],
+      "roundoff": [
+        1000,
+        250
+      ],
+      "strogatz": [
+        300,
+        100
+      ]
+    },
+    "operator_sets": {
+      "bingo": [
+        "+",
+        "-",
+        "*",
+        "/",
+        "sin",
+        "cos",
+        "exp",
+        "log",
+        "sqrt",
+        "pow"
+      ],
+      "udfs": [
+        "+",
+        "-",
+        "*",
+        "/",
+        "sin",
+        "cos",
+        "exp",
+        "log",
+        "sqrt",
+        "neg",
+        "inv"
+      ]
+    }
+  },
+  "counts": {
+    "n_problems": 70,
+    "per_tier": {
+      "nguyen": 12,
+      "feynman": 10,
+      "hard": 10,
+      "cherrypicked": 10,
+      "roundoff": 8,
+      "feynman_remainder": 6,
+      "strogatz": 14
+    }
+  },
+  "citation_audit": {
+    "bib_entries_total": 36,
+    "citation_keys_used": [
+      "keijzer2003",
+      "korns2011",
+      "pagie1997",
+      "petersen2021",
+      "strogatz1994",
+      "udrescu2020",
+      "uy2011",
+      "vladislavleva2009"
+    ],
+    "citation_keys_resolved": [
+      "keijzer2003",
+      "korns2011",
+      "pagie1997",
+      "petersen2021",
+      "udrescu2020",
+      "uy2011",
+      "vladislavleva2009"
+    ],
+    "citation_keys_missing": [
+      "strogatz1994"
+    ],
+    "problems_awaiting_bib_entry": [
+      "Strogatz-bacres1",
+      "Strogatz-bacres2",
+      "Strogatz-barmag1",
+      "Strogatz-barmag2",
+      "Strogatz-glider1",
+      "Strogatz-glider2",
+      "Strogatz-lv1",
+      "Strogatz-lv2",
+      "Strogatz-predprey1",
+      "Strogatz-predprey2",
+      "Strogatz-shearflow1",
+      "Strogatz-shearflow2",
+      "Strogatz-vdp1",
+      "Strogatz-vdp2"
+    ],
+    "suggested_bibtex": {
+      "strogatz1994": "@book{strogatz1994,\n  author    = {Strogatz, Steven H.},\n  title     = {Nonlinear Dynamics and Chaos: With Applications to Physics, Biology, Chemistry, and Engineering},\n  publisher = {Addison-Wesley},\n  year      = {1994}\n}"
+    },
+    "attribution_notes": {
+      "R2": "Rational benchmark distributed with the DSO suite (petersen2021); primary origin is contested in the literature.",
+      "R3": "Rational benchmark distributed with the DSO suite (petersen2021); primary origin is contested in the literature.",
+      "R1": "Rational benchmark distributed with the DSO suite (petersen2021); primary origin is contested in the literature.",
+      "Strogatz-bacres1": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-bacres2": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-barmag1": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-barmag2": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-glider1": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-glider2": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-lv1": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-lv2": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-predprey1": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-predprey2": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-shearflow1": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-shearflow2": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-vdp1": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021).",
+      "Strogatz-vdp2": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    }
+  },
+  "problems": [
+    {
+      "problem_id": "Nguyen-1",
+      "tier": "nguyen",
+      "expression": "x^3 + x^2 + x",
+      "expression_latex": "x_{0}^{3} + x_{0}^{2} + x_{0}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-2",
+      "tier": "nguyen",
+      "expression": "x^4 + x^3 + x^2 + x",
+      "expression_latex": "x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-3",
+      "tier": "nguyen",
+      "expression": "x^5 + x^4 + x^3 + x^2 + x",
+      "expression_latex": "x_{0}^{5} + x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-4",
+      "tier": "nguyen",
+      "expression": "x^6 + x^5 + x^4 + x^3 + x^2 + x",
+      "expression_latex": "x_{0}^{6} + x_{0}^{5} + x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-5",
+      "tier": "nguyen",
+      "expression": "sin(x^2) * cos(x) - 1",
+      "expression_latex": "\\sin{\\left(x_{0}^{2} \\right)} \\cos{\\left(x_{0} \\right)} - 1",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-6",
+      "tier": "nguyen",
+      "expression": "sin(x) + sin(x + x^2)",
+      "expression_latex": "\\sin{\\left(x_{0} \\right)} + \\sin{\\left(x_{0}^{2} + x_{0} \\right)}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-7",
+      "tier": "nguyen",
+      "expression": "log(x + 1) + log(x^2 + 1)",
+      "expression_latex": "\\log{\\left(x_{0} + 1 \\right)} + \\log{\\left(x_{0}^{2} + 1 \\right)}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          0.0,
+          2.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-8",
+      "tier": "nguyen",
+      "expression": "sqrt(x)",
+      "expression_latex": "\\sqrt{x_{0}}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          0.0,
+          4.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-9",
+      "tier": "nguyen",
+      "expression": "sin(x) + sin(y^2)",
+      "expression_latex": "\\sin{\\left(x_{0} \\right)} + \\sin{\\left(x_{1}^{2} \\right)}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ],
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-10",
+      "tier": "nguyen",
+      "expression": "2 * sin(x) * cos(y)",
+      "expression_latex": "2 \\sin{\\left(x_{0} \\right)} \\cos{\\left(x_{1} \\right)}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ],
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-11",
+      "tier": "nguyen",
+      "expression": "x^y",
+      "expression_latex": "x_{0}^{x_{1}}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Nguyen-12",
+      "tier": "nguyen",
+      "expression": "x^4 - x^3 + 0.5*y^2 - y",
+      "expression_latex": "x_{0}^{4} - x_{0}^{3} + 0.5 x_{1}^{2} - x_{1}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ],
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 240,
+      "n_test": 1000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "uy2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.6.20a",
+      "tier": "feynman",
+      "expression": "exp(-theta^2/2) / sqrt(2*pi)",
+      "expression_latex": "\\frac{\\sqrt{2} e^{- \\frac{x_{0}^{2}}{2}}}{2 \\sqrt{\\pi}}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          1.0,
+          3.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.12.1",
+      "tier": "feynman",
+      "expression": "mu * N_s",
+      "expression_latex": "x_{0} x_{1}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.14.3",
+      "tier": "feynman",
+      "expression": "m * g * z",
+      "expression_latex": "x_{0} x_{1} x_{2}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.25.13",
+      "tier": "feynman",
+      "expression": "q / C",
+      "expression_latex": "\\frac{x_{0}}{x_{1}}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          1.0,
+          3.0
+        ],
+        [
+          1.0,
+          3.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.34.27",
+      "tier": "feynman",
+      "expression": "h * omega / (2 * pi)",
+      "expression_latex": "\\frac{x_{0} x_{1}}{2 \\pi}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.39.10",
+      "tier": "feynman",
+      "expression": "1.5 * p_r * V",
+      "expression_latex": "\\frac{3 x_{0} x_{1}}{2}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.12.4",
+      "tier": "feynman",
+      "expression": "Ef = q1 * r / (4 * pi * epsilon * r^3)",
+      "expression_latex": "\\frac{x_{0}}{4 \\pi x_{1} x_{2}^{2}}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "II.3.24",
+      "tier": "feynman",
+      "expression": "flux = Pwr / (4 * pi * r^2)",
+      "expression_latex": "\\frac{x_{0}}{4 \\pi x_{1}^{2}}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.10.7",
+      "tier": "feynman",
+      "expression": "m0 / sqrt(1 - v^2/c^2)",
+      "expression_latex": "\\frac{x_{0}}{\\sqrt{- \\frac{x_{1}^{2}}{x_{2}^{2}} + 1}}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          3.0,
+          10.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.48.20",
+      "tier": "feynman",
+      "expression": "m*c^2 / sqrt(1 - (v/c)^2)",
+      "expression_latex": "\\frac{x_{0} x_{1}^{2}}{\\sqrt{1 - \\frac{x_{2}^{2}}{x_{1}^{2}}}}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          3.0,
+          10.0
+        ],
+        [
+          1.0,
+          2.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.15.10",
+      "tier": "hard",
+      "expression": "m0*v / sqrt(1 - v^2/c^2)",
+      "expression_latex": "\\frac{x_{0} x_{1}}{\\sqrt{- \\frac{x_{1}^{2}}{x_{2}^{2}} + 1}}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          3.0,
+          10.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.30.3",
+      "tier": "hard",
+      "expression": "sin(n*theta/2)^2 / sin(theta/2)^2",
+      "expression_latex": "\\frac{\\sin^{2}{\\left(\\frac{x_{0} x_{1}}{2} \\right)}}{\\sin^{2}{\\left(\\frac{x_{1}}{2} \\right)}}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.37.4",
+      "tier": "hard",
+      "expression": "I1 + I2 + 2*sqrt(I1*I2)*cos(delta)",
+      "expression_latex": "x_{0} + x_{1} + 2 \\sqrt{x_{0} x_{1}} \\cos{\\left(x_{2} \\right)}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "II.11.27",
+      "tier": "hard",
+      "expression": "n*alpha/(1 - n*alpha/3) * epsilon * Ef",
+      "expression_latex": "\\frac{x_{0} x_{1} x_{2} x_{3}}{- \\frac{x_{0} x_{1}}{3} + 1}",
+      "n_variables": 4,
+      "variable_ranges": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          1.0,
+          2.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "III.17.37",
+      "tier": "hard",
+      "expression": "beta*(1 + alpha*cos(theta))",
+      "expression_latex": "x_{0} \\left(x_{1} \\cos{\\left(x_{2} \\right)} + 1\\right)",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Pagie-1",
+      "tier": "hard",
+      "expression": "1/(1 + x^(-4)) + 1/(1 + y^(-4))",
+      "expression_latex": "\\frac{1}{1 + \\frac{1}{x_{1}^{4}}} + \\frac{1}{1 + \\frac{1}{x_{0}^{4}}}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          -5.0,
+          5.0
+        ]
+      ],
+      "n_train": 676,
+      "n_test": 2500,
+      "sampling_protocol": "grid_2d_skip_zero",
+      "sampling_protocol_label": "2D grid, zero skipped",
+      "citation_key": "pagie1997",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Korns-12",
+      "tier": "hard",
+      "expression": "2.0 - 2.1*cos(9.8*x1)*sin(1.3*x5)",
+      "expression_latex": "- 2.1 \\sin{\\left(1.3 x_{4} \\right)} \\cos{\\left(9.8 x_{0} \\right)} + 2.0",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          -50.0,
+          50.0
+        ],
+        [
+          -50.0,
+          50.0
+        ],
+        [
+          -50.0,
+          50.0
+        ],
+        [
+          -50.0,
+          50.0
+        ],
+        [
+          -50.0,
+          50.0
+        ]
+      ],
+      "n_train": 2000,
+      "n_test": 2000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "korns2011",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Vladislavleva-4",
+      "tier": "hard",
+      "expression": "10 / (5 + (x1-3)^2 + (x2-3)^2 + (x3-3)^2 + (x4-3)^2 + (x5-3)^2)",
+      "expression_latex": "\\frac{10}{\\left(x_{0} - 3\\right)^{2} + \\left(x_{1} - 3\\right)^{2} + \\left(x_{2} - 3\\right)^{2} + \\left(x_{3} - 3\\right)^{2} + \\left(x_{4} - 3\\right)^{2} + 5}",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          0.05,
+          6.05
+        ],
+        [
+          0.05,
+          6.05
+        ],
+        [
+          0.05,
+          6.05
+        ],
+        [
+          0.05,
+          6.05
+        ],
+        [
+          0.05,
+          6.05
+        ]
+      ],
+      "n_train": 1024,
+      "n_test": 5000,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "vladislavleva2009",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Vladislavleva-2",
+      "tier": "hard",
+      "expression": "exp(-x)*x^3*(cos(x)*sin(x))*(cos(x)*sin(x)^2 - 1)",
+      "expression_latex": "x_{0}^{3} \\left(\\sin^{2}{\\left(x_{0} \\right)} \\cos{\\left(x_{0} \\right)} - 1\\right) e^{- x_{0}} \\sin{\\left(x_{0} \\right)} \\cos{\\left(x_{0} \\right)}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          0.05,
+          10.0
+        ]
+      ],
+      "n_train": 100,
+      "n_test": 221,
+      "sampling_protocol": "grid_1d_train_uniform_test_grid",
+      "sampling_protocol_label": "1D uniform train / grid test",
+      "citation_key": "vladislavleva2009",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Keijzer-6",
+      "tier": "hard",
+      "expression": "log(x)",
+      "expression_latex": "\\log{\\left(x_{0} \\right)} + 0.577215664901533",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          1.0,
+          120.0
+        ]
+      ],
+      "n_train": 50,
+      "n_test": 120,
+      "sampling_protocol": "integer_grid",
+      "sampling_protocol_label": "integer grid (extrapolation)",
+      "citation_key": "keijzer2003",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.29.16",
+      "tier": "cherrypicked",
+      "expression": "sqrt(x1^2 + x2^2 - 2*x1*x2*cos(theta1 - theta2))",
+      "expression_latex": "\\sqrt{x_{0}^{2} - 2 x_{0} x_{1} \\cos{\\left(x_{2} - x_{3} \\right)} + x_{1}^{2}}",
+      "n_variables": 4,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.50.26",
+      "tier": "cherrypicked",
+      "expression": "x1*(cos(omega*t) + alpha*cos(omega*t)^2)",
+      "expression_latex": "x_{0} \\left(x_{3} \\cos^{2}{\\left(x_{1} x_{2} \\right)} + \\cos{\\left(x_{1} x_{2} \\right)}\\right)",
+      "n_variables": 4,
+      "variable_ranges": [
+        [
+          1.0,
+          3.0
+        ],
+        [
+          1.0,
+          3.0
+        ],
+        [
+          1.0,
+          3.0
+        ],
+        [
+          1.0,
+          3.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.16.6",
+      "tier": "cherrypicked",
+      "expression": "(u + v) / (1 + u*v/c^2)",
+      "expression_latex": "\\frac{x_{1} + x_{2}}{1 + \\frac{x_{1} x_{2}}{x_{0}^{2}}}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "II.11.28",
+      "tier": "cherrypicked",
+      "expression": "1 + n*alpha / (1 - n*alpha/3)",
+      "expression_latex": "\\frac{x_{0} x_{1}}{- \\frac{x_{0} x_{1}}{3} + 1} + 1",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          1.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "III.14.14",
+      "tier": "cherrypicked",
+      "expression": "I_0 * (exp(q*Volt/(kb*T)) - 1)",
+      "expression_latex": "x_{0} \\left(e^{\\frac{x_{1} x_{2}}{x_{3} x_{4}}} - 1\\right)",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          1.0,
+          2.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Vlad-7",
+      "tier": "cherrypicked",
+      "expression": "(x1-3)*(x2-3) + 2*sin((x1-4)*(x2-4))",
+      "expression_latex": "\\left(x_{0} - 3\\right) \\left(x_{1} - 3\\right) + 2 \\sin{\\left(\\left(x_{0} - 4\\right) \\left(x_{1} - 4\\right) \\right)}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          0.05,
+          6.05
+        ],
+        [
+          0.05,
+          6.05
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 1200,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "vladislavleva2009",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "R2",
+      "tier": "cherrypicked",
+      "expression": "(x^5 - 3*x^3 + 1) / (x^2 + 1)",
+      "expression_latex": "\\frac{x_{0}^{5} - 3 x_{0}^{3} + 1}{x_{0}^{2} + 1}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "petersen2021",
+      "citation_resolved": true,
+      "attribution_note": "Rational benchmark distributed with the DSO suite (petersen2021); primary origin is contested in the literature."
+    },
+    {
+      "problem_id": "R3",
+      "tier": "cherrypicked",
+      "expression": "(x^6 + x^5) / (x^4 + x^3 + x^2 + x + 1)",
+      "expression_latex": "\\frac{x_{0}^{6} + x_{0}^{5}}{x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0} + 1}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "petersen2021",
+      "citation_resolved": true,
+      "attribution_note": "Rational benchmark distributed with the DSO suite (petersen2021); primary origin is contested in the literature."
+    },
+    {
+      "problem_id": "Keijzer-11",
+      "tier": "cherrypicked",
+      "expression": "x*y + sin((x-1)*(y-1))",
+      "expression_latex": "x_{0} x_{1} + \\sin{\\left(\\left(x_{0} - 1\\right) \\left(x_{1} - 1\\right) \\right)}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -3.0,
+          3.0
+        ],
+        [
+          -3.0,
+          3.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "keijzer2003",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Liv-14",
+      "tier": "cherrypicked",
+      "expression": "x1^3 + x1^2 + x1 + sin(x1) + sin(x2^2)",
+      "expression_latex": "x_{0}^{3} + x_{0}^{2} + x_{0} + \\sin{\\left(x_{0} \\right)} + \\sin{\\left(x_{1}^{2} \\right)}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ],
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "petersen2021",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "III.10.19",
+      "tier": "roundoff",
+      "expression": "mom * sqrt(Bx^2 + By^2 + Bz^2)",
+      "expression_latex": "x_{0} \\sqrt{x_{1}^{2} + x_{2}^{2} + x_{3}^{2}}",
+      "n_variables": 4,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "II.11.3",
+      "tier": "roundoff",
+      "expression": "q*Ef / (m*(omega_0^2 - omega^2))",
+      "expression_latex": "\\frac{x_{0} x_{1}}{x_{2} \\left(x_{3}^{2} - x_{4}^{2}\\right)}",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          3.0
+        ],
+        [
+          3.0,
+          5.0
+        ],
+        [
+          1.0,
+          2.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.13.12",
+      "tier": "roundoff",
+      "expression": "G*m1*m2*(1/r2 - 1/r1)",
+      "expression_latex": "x_{0} x_{1} x_{4} \\left(\\frac{1}{x_{3}} - \\frac{1}{x_{2}}\\right)",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.44.4",
+      "tier": "roundoff",
+      "expression": "n*kb*T*ln(V2/V1)",
+      "expression_latex": "x_{0} x_{1} x_{2} \\log{\\left(\\frac{x_{4}}{x_{3}} \\right)}",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "R1",
+      "tier": "roundoff",
+      "expression": "(x+1)^3 / (x^2 - x + 1)",
+      "expression_latex": "\\frac{\\left(x_{0} + 1\\right)^{3}}{x_{0}^{2} - x_{0} + 1}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          -1.0,
+          1.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "petersen2021",
+      "citation_resolved": true,
+      "attribution_note": "Rational benchmark distributed with the DSO suite (petersen2021); primary origin is contested in the literature."
+    },
+    {
+      "problem_id": "Pagie-2",
+      "tier": "roundoff",
+      "expression": "1/(1+x^(-4)) + 1/(1+y^(-4)) + 1/(1+z^(-4))",
+      "expression_latex": "\\frac{x_{0}^{4}}{x_{0}^{4} + 1} + \\frac{x_{1}^{4}}{x_{1}^{4} + 1} + \\frac{x_{2}^{4}}{x_{2}^{4} + 1}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          -5.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "pagie1997",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Liv-4",
+      "tier": "roundoff",
+      "expression": "ln(x+1) + ln(x^2+1) + ln(x)",
+      "expression_latex": "\\log{\\left(x_{0} \\right)} + \\log{\\left(x_{0} + 1 \\right)} + \\log{\\left(x_{0}^{2} + 1 \\right)}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          0.1,
+          10.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "petersen2021",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Liv-19",
+      "tier": "roundoff",
+      "expression": "ln(x^2+x) + ln(x^3+x)",
+      "expression_latex": "\\log{\\left(x_{0}^{2} + x_{0} \\right)} + \\log{\\left(x_{0}^{3} + x_{0} \\right)}",
+      "n_variables": 1,
+      "variable_ranges": [
+        [
+          0.1,
+          10.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "petersen2021",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "I.12.2",
+      "tier": "feynman_remainder",
+      "expression": "q1*q2*r/(4*pi*epsilon*r**3)",
+      "expression_latex": "\\frac{x_{0} x_{1}}{4 \\pi x_{2} x_{3}^{2}}",
+      "n_variables": 4,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "II.34.29a",
+      "tier": "feynman_remainder",
+      "expression": "q*h/(4*pi*m)",
+      "expression_latex": "\\frac{x_{0} x_{1}}{4 \\pi x_{2}}",
+      "n_variables": 3,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "II.34.29b",
+      "tier": "feynman_remainder",
+      "expression": "g_*mom*B*Jz/(h/(2*pi))",
+      "expression_latex": "\\frac{2 \\pi x_{0} x_{2} x_{3} x_{4}}{x_{1}}",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "III.19.51",
+      "tier": "feynman_remainder",
+      "expression": "-m*q**4/(2*(4*pi*epsilon)**2*(h/(2*pi))**2)*(1/n**2)",
+      "expression_latex": "- \\frac{x_{0} x_{1}^{4}}{8 x_{2}^{2} x_{3}^{2} x_{4}^{2}}",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "III.4.32",
+      "tier": "feynman_remainder",
+      "expression": "1/(exp((h/(2*pi))*omega/(kb*T))-1)",
+      "expression_latex": "\\frac{1}{e^{\\frac{x_{0} x_{1}}{2 \\pi x_{2} x_{3}}} - 1}",
+      "n_variables": 4,
+      "variable_ranges": [
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ],
+        [
+          1.0,
+          5.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "test_4",
+      "tier": "feynman_remainder",
+      "expression": "sqrt(2/m*(E_n-U-L**2/(2*m*r**2)))",
+      "expression_latex": "\\sqrt{2} \\sqrt{\\frac{x_{1} - x_{2} - \\frac{x_{3}^{2}}{2 x_{0} x_{4}^{2}}}{x_{0}}}",
+      "n_variables": 5,
+      "variable_ranges": [
+        [
+          1.0,
+          3.0
+        ],
+        [
+          8.0,
+          12.0
+        ],
+        [
+          1.0,
+          3.0
+        ],
+        [
+          1.0,
+          3.0
+        ],
+        [
+          1.0,
+          3.0
+        ]
+      ],
+      "n_train": 1000,
+      "n_test": 250,
+      "sampling_protocol": "uniform",
+      "sampling_protocol_label": "i.i.d. uniform",
+      "citation_key": "udrescu2020",
+      "citation_resolved": true,
+      "attribution_note": ""
+    },
+    {
+      "problem_id": "Strogatz-bacres1",
+      "tier": "strogatz",
+      "expression": "20 - x - x*y/(1 + 0.5*x^2)",
+      "expression_latex": "- \\frac{x_{0} x_{1}}{\\frac{x_{0}^{2}}{2} + 1} - x_{0} + 20",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          3.48540194192317,
+          16.330198758649303
+        ],
+        [
+          9.79266054660331,
+          54.4451763341321
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-bacres2",
+      "tier": "strogatz",
+      "expression": "10 - x*y/(1 + 0.5*x^2)",
+      "expression_latex": "- \\frac{x_{0} x_{1}}{\\frac{x_{0}^{2}}{2} + 1} + 10",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          3.48540194192317,
+          16.330198758649303
+        ],
+        [
+          9.79266054660331,
+          54.4451763341321
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-barmag1",
+      "tier": "strogatz",
+      "expression": "0.5*sin(x - y) - sin(x)",
+      "expression_latex": "- \\sin{\\left(x_{0} \\right)} + \\frac{\\sin{\\left(x_{0} - x_{1} \\right)}}{2}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          4.1184890487447,
+          5.98625733320336
+        ],
+        [
+          0.200011672644315,
+          6.6497768432110895
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-barmag2",
+      "tier": "strogatz",
+      "expression": "0.5*sin(y - x) - sin(y)",
+      "expression_latex": "- \\sin{\\left(x_{1} \\right)} - \\frac{\\sin{\\left(x_{0} - x_{1} \\right)}}{2}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          4.1184890487447,
+          5.98625733320336
+        ],
+        [
+          0.200011672644315,
+          6.6497768432110895
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-glider1",
+      "tier": "strogatz",
+      "expression": "-0.05*x^2 - sin(y)",
+      "expression_latex": "- \\frac{x_{0}^{2}}{20} - \\sin{\\left(x_{1} \\right)}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          0.16255470990931306,
+          5.603272452842469
+        ],
+        [
+          -1.32283061311855,
+          28.7652192235257
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-glider2",
+      "tier": "strogatz",
+      "expression": "x - cos(y)/x",
+      "expression_latex": "x_{0} - \\frac{\\cos{\\left(x_{1} \\right)}}{x_{0}}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          0.16255470990931306,
+          5.603272452842469
+        ],
+        [
+          -1.32283061311855,
+          28.7652192235257
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-lv1",
+      "tier": "strogatz",
+      "expression": "3*x - 2*x*y - x^2",
+      "expression_latex": "- x_{0}^{2} - 2 x_{0} x_{1} + 3 x_{0}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          1.51029032243065e-05,
+          8.0
+        ],
+        [
+          0.000164747579959089,
+          3.0
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-lv2",
+      "tier": "strogatz",
+      "expression": "2*y - x*y - y^2",
+      "expression_latex": "- x_{0} x_{1} - x_{1}^{2} + 2 x_{1}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          1.51029032243065e-05,
+          8.0
+        ],
+        [
+          0.000164747579959089,
+          3.0
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-predprey1",
+      "tier": "strogatz",
+      "expression": "x*(4 - x - y/(1 + x))",
+      "expression_latex": "x_{0} \\left(- x_{0} - \\frac{x_{1}}{x_{0} + 1} + 4\\right)",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          0.00525005349045429,
+          6.58096270030409
+        ],
+        [
+          2.23001222822605,
+          11.6491125241285
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-predprey2",
+      "tier": "strogatz",
+      "expression": "y*(x/(1 + x) - 0.075*y)",
+      "expression_latex": "x_{1} \\left(\\frac{x_{0}}{x_{0} + 1} - \\frac{3 x_{1}}{40}\\right)",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          0.00525005349045429,
+          6.58096270030409
+        ],
+        [
+          2.23001222822605,
+          11.6491125241285
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-shearflow1",
+      "tier": "strogatz",
+      "expression": "cot(y)*cos(x)  [written cos(y)*cos(x)/sin(y)]",
+      "expression_latex": "\\frac{\\cos{\\left(x_{0} \\right)} \\cos{\\left(x_{1} \\right)}}{\\sin{\\left(x_{1} \\right)}}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -4.35009524082152,
+          3.59982835587276
+        ],
+        [
+          -2.7469888932939703,
+          2.14720535921647
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-shearflow2",
+      "tier": "strogatz",
+      "expression": "(cos(y)^2 + 0.1*sin(y)^2)*sin(x)",
+      "expression_latex": "\\left(\\frac{\\sin^{2}{\\left(x_{1} \\right)}}{10} + \\cos^{2}{\\left(x_{1} \\right)}\\right) \\sin{\\left(x_{0} \\right)}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -4.35009524082152,
+          3.59982835587276
+        ],
+        [
+          -2.7469888932939703,
+          2.14720535921647
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-vdp1",
+      "tier": "strogatz",
+      "expression": "10*(y - (1/3)*(x^3 - x))",
+      "expression_latex": "- \\frac{10 x_{0}^{3}}{3} + \\frac{10 x_{0}}{3} + 10 x_{1}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -1.19935296765204,
+          1.9373743834906296
+        ],
+        [
+          -0.19702633502074,
+          0.9276087313632232
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    },
+    {
+      "problem_id": "Strogatz-vdp2",
+      "tier": "strogatz",
+      "expression": "-(1/10)*x",
+      "expression_latex": "- \\frac{x_{0}}{10}",
+      "n_variables": 2,
+      "variable_ranges": [
+        [
+          -1.19935296765204,
+          1.9373743834906296
+        ],
+        [
+          -0.19702633502074,
+          0.9276087313632232
+        ]
+      ],
+      "n_train": 300,
+      "n_test": 100,
+      "sampling_protocol": "published_fixed",
+      "sampling_protocol_label": "published fixed rows (split by seed)",
+      "citation_key": "strogatz1994",
+      "citation_resolved": false,
+      "attribution_note": "Equation from Strogatz (1994); the numerical rows are the ODE-Strogatz tables redistributed via PMLB/SRBench (lacava2021)."
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+% Appendix D.1 -- benchmark documentation.
+% GENERATED FILE. Regenerate with:
+%   python -m experiments.scripts.generate_appendix_d_tables --out docs/generated/appendix_d/
+% Do not edit by hand.
+
+% Campaign operator sets (uniform across all seven tiers):
+%   Bingo: + - * / sin cos exp log sqrt pow
+%   UDFS:  + - * / sin cos exp log sqrt neg inv
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Nguyen tier: ground-truth expressions, sampling domains and dataset sizes (12 problems).}
+\label{tab:appendix-d-nguyen}
+\begin{tabular}{@{}llrlrrll@{}}
+\toprule
+Problem & Expression & $m$ & Domain & $n_{\mathrm{train}}$ & $n_{\mathrm{test}}$ & Sampling & Source \\
+\midrule
+Nguyen-1 & $x_{0}^{3} + x_{0}^{2} + x_{0}$ & 1 & $[-1, 1]$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-2 & $x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0}$ & 1 & $[-1, 1]$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-3 & $x_{0}^{5} + x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0}$ & 1 & $[-1, 1]$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-4 & $x_{0}^{6} + x_{0}^{5} + x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0}$ & 1 & $[-1, 1]$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-5 & $\sin{\left(x_{0}^{2} \right)} \cos{\left(x_{0} \right)} - 1$ & 1 & $[-1, 1]$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-6 & $\sin{\left(x_{0} \right)} + \sin{\left(x_{0}^{2} + x_{0} \right)}$ & 1 & $[-1, 1]$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-7 & $\log{\left(x_{0} + 1 \right)} + \log{\left(x_{0}^{2} + 1 \right)}$ & 1 & $[0, 2]$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-8 & $\sqrt{x_{0}}$ & 1 & $[0, 4]$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-9 & $\sin{\left(x_{0} \right)} + \sin{\left(x_{1}^{2} \right)}$ & 2 & $[-1, 1]^{2}$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-10 & $2 \sin{\left(x_{0} \right)} \cos{\left(x_{1} \right)}$ & 2 & $[-1, 1]^{2}$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-11 & $x_{0}^{x_{1}}$ & 2 & $[0, 1]^{2}$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+Nguyen-12 & $x_{0}^{4} - x_{0}^{3} + 0.5 x_{1}^{2} - x_{1}$ & 2 & $[-1, 1]^{2}$ & 240 & 1000 & i.i.d. uniform & \cite{uy2011} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Feynman tier: ground-truth expressions, sampling domains and dataset sizes (10 problems).}
+\label{tab:appendix-d-feynman}
+\begin{tabular}{@{}llrlrrll@{}}
+\toprule
+Problem & Expression & $m$ & Domain & $n_{\mathrm{train}}$ & $n_{\mathrm{test}}$ & Sampling & Source \\
+\midrule
+I.6.20a & $\frac{\sqrt{2} e^{- \frac{x_{0}^{2}}{2}}}{2 \sqrt{\pi}}$ & 1 & $[1, 3]$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.12.1 & $x_{0} x_{1}$ & 2 & $[1, 5]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.14.3 & $x_{0} x_{1} x_{2}$ & 3 & $[1, 5]^{3}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.25.13 & $\frac{x_{0}}{x_{1}}$ & 2 & $[1, 3]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.34.27 & $\frac{x_{0} x_{1}}{2 \pi}$ & 2 & $[1, 5]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.39.10 & $\frac{3 x_{0} x_{1}}{2}$ & 2 & $[1, 5]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.12.4 & $\frac{x_{0}}{4 \pi x_{1} x_{2}^{2}}$ & 3 & $[1, 5]^{3}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+II.3.24 & $\frac{x_{0}}{4 \pi x_{1}^{2}}$ & 2 & $[1, 5]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.10.7 & $\frac{x_{0}}{\sqrt{- \frac{x_{1}^{2}}{x_{2}^{2}} + 1}}$ & 3 & $[1, 5],\, [1, 2],\, [3, 10]$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.48.20 & $\frac{x_{0} x_{1}^{2}}{\sqrt{1 - \frac{x_{2}^{2}}{x_{1}^{2}}}}$ & 3 & $[1, 5],\, [3, 10],\, [1, 2]$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Hard tier: ground-truth expressions, sampling domains and dataset sizes (10 problems).}
+\label{tab:appendix-d-hard}
+\begin{tabular}{@{}llrlrrll@{}}
+\toprule
+Problem & Expression & $m$ & Domain & $n_{\mathrm{train}}$ & $n_{\mathrm{test}}$ & Sampling & Source \\
+\midrule
+I.15.10 & $\frac{x_{0} x_{1}}{\sqrt{- \frac{x_{1}^{2}}{x_{2}^{2}} + 1}}$ & 3 & $[1, 5],\, [1, 2],\, [3, 10]$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.30.3 & $\frac{\sin^{2}{\left(\frac{x_{0} x_{1}}{2} \right)}}{\sin^{2}{\left(\frac{x_{1}}{2} \right)}}$ & 2 & $[1, 5]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.37.4 & $x_{0} + x_{1} + 2 \sqrt{x_{0} x_{1}} \cos{\left(x_{2} \right)}$ & 3 & $[1, 5]^{3}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+II.11.27 & $\frac{x_{0} x_{1} x_{2} x_{3}}{- \frac{x_{0} x_{1}}{3} + 1}$ & 4 & $[0, 1],\, [0, 1],\, [1, 2],\, [1, 2]$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+III.17.37 & $x_{0} \left(x_{1} \cos{\left(x_{2} \right)} + 1\right)$ & 3 & $[1, 5]^{3}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+Pagie-1 & $\frac{1}{1 + \frac{1}{x_{1}^{4}}} + \frac{1}{1 + \frac{1}{x_{0}^{4}}}$ & 2 & $[-5, 5]^{2}$ & 676 & 2500 & 2D grid, zero skipped & \cite{pagie1997} \\
+Korns-12 & $- 2.1 \sin{\left(1.3 x_{4} \right)} \cos{\left(9.8 x_{0} \right)} + 2.0$ & 5 & $[-50, 50]^{5}$ & 2000 & 2000 & i.i.d. uniform & \cite{korns2011} \\
+Vladislavleva-4 & $\frac{10}{\left(x_{0} - 3\right)^{2} + \left(x_{1} - 3\right)^{2} + \left(x_{2} - 3\right)^{2} + \left(x_{3} - 3\right)^{2} + \left(x_{4} - 3\right)^{2} + 5}$ & 5 & $[0.05, 6.05]^{5}$ & 1024 & 5000 & i.i.d. uniform & \cite{vladislavleva2009} \\
+Vladislavleva-2 & $x_{0}^{3} \left(\sin^{2}{\left(x_{0} \right)} \cos{\left(x_{0} \right)} - 1\right) e^{- x_{0}} \sin{\left(x_{0} \right)} \cos{\left(x_{0} \right)}$ & 1 & $[0.05, 10]$ & 100 & 221 & 1D uniform train / grid test & \cite{vladislavleva2009} \\
+Keijzer-6 & $\log{\left(x_{0} \right)} + 0.577215664901533$ & 1 & $[1, 120]$ & 50 & 120 & integer grid (extrapolation) & \cite{keijzer2003} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Cherry-picked tier: ground-truth expressions, sampling domains and dataset sizes (10 problems).}
+\label{tab:appendix-d-cherrypicked}
+\begin{tabular}{@{}llrlrrll@{}}
+\toprule
+Problem & Expression & $m$ & Domain & $n_{\mathrm{train}}$ & $n_{\mathrm{test}}$ & Sampling & Source \\
+\midrule
+I.29.16 & $\sqrt{x_{0}^{2} - 2 x_{0} x_{1} \cos{\left(x_{2} - x_{3} \right)} + x_{1}^{2}}$ & 4 & $[1, 5]^{4}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.50.26 & $x_{0} \left(x_{3} \cos^{2}{\left(x_{1} x_{2} \right)} + \cos{\left(x_{1} x_{2} \right)}\right)$ & 4 & $[1, 3]^{4}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.16.6 & $\frac{x_{1} + x_{2}}{1 + \frac{x_{1} x_{2}}{x_{0}^{2}}}$ & 3 & $[1, 5]^{3}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+II.11.28 & $\frac{x_{0} x_{1}}{- \frac{x_{0} x_{1}}{3} + 1} + 1$ & 2 & $[0, 1]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+III.14.14 & $x_{0} \left(e^{\frac{x_{1} x_{2}}{x_{3} x_{4}}} - 1\right)$ & 5 & $[1, 5],\, [1, 2],\, [1, 2],\, [1, 2],\, [1, 2]$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+Vlad-7 & $\left(x_{0} - 3\right) \left(x_{1} - 3\right) + 2 \sin{\left(\left(x_{0} - 4\right) \left(x_{1} - 4\right) \right)}$ & 2 & $[0.05, 6.05]^{2}$ & 300 & 1200 & i.i.d. uniform & \cite{vladislavleva2009} \\
+R2 & $\frac{x_{0}^{5} - 3 x_{0}^{3} + 1}{x_{0}^{2} + 1}$ & 1 & $[-1, 1]$ & 1000 & 250 & i.i.d. uniform & \cite{petersen2021} \\
+R3 & $\frac{x_{0}^{6} + x_{0}^{5}}{x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0} + 1}$ & 1 & $[-1, 1]$ & 1000 & 250 & i.i.d. uniform & \cite{petersen2021} \\
+Keijzer-11 & $x_{0} x_{1} + \sin{\left(\left(x_{0} - 1\right) \left(x_{1} - 1\right) \right)}$ & 2 & $[-3, 3]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{keijzer2003} \\
+Liv-14 & $x_{0}^{3} + x_{0}^{2} + x_{0} + \sin{\left(x_{0} \right)} + \sin{\left(x_{1}^{2} \right)}$ & 2 & $[-1, 1]^{2}$ & 1000 & 250 & i.i.d. uniform & \cite{petersen2021} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Round-off tier: ground-truth expressions, sampling domains and dataset sizes (8 problems).}
+\label{tab:appendix-d-roundoff}
+\begin{tabular}{@{}llrlrrll@{}}
+\toprule
+Problem & Expression & $m$ & Domain & $n_{\mathrm{train}}$ & $n_{\mathrm{test}}$ & Sampling & Source \\
+\midrule
+III.10.19 & $x_{0} \sqrt{x_{1}^{2} + x_{2}^{2} + x_{3}^{2}}$ & 4 & $[1, 5]^{4}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+II.11.3 & $\frac{x_{0} x_{1}}{x_{2} \left(x_{3}^{2} - x_{4}^{2}\right)}$ & 5 & $[1, 5],\, [1, 5],\, [1, 3],\, [3, 5],\, [1, 2]$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.13.12 & $x_{0} x_{1} x_{4} \left(\frac{1}{x_{3}} - \frac{1}{x_{2}}\right)$ & 5 & $[1, 5]^{5}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+I.44.4 & $x_{0} x_{1} x_{2} \log{\left(\frac{x_{4}}{x_{3}} \right)}$ & 5 & $[1, 5]^{5}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+R1 & $\frac{\left(x_{0} + 1\right)^{3}}{x_{0}^{2} - x_{0} + 1}$ & 1 & $[-1, 1]$ & 1000 & 250 & i.i.d. uniform & \cite{petersen2021} \\
+Pagie-2 & $\frac{x_{0}^{4}}{x_{0}^{4} + 1} + \frac{x_{1}^{4}}{x_{1}^{4} + 1} + \frac{x_{2}^{4}}{x_{2}^{4} + 1}$ & 3 & $[-5, 5]^{3}$ & 1000 & 250 & i.i.d. uniform & \cite{pagie1997} \\
+Liv-4 & $\log{\left(x_{0} \right)} + \log{\left(x_{0} + 1 \right)} + \log{\left(x_{0}^{2} + 1 \right)}$ & 1 & $[0.1, 10]$ & 1000 & 250 & i.i.d. uniform & \cite{petersen2021} \\
+Liv-19 & $\log{\left(x_{0}^{2} + x_{0} \right)} + \log{\left(x_{0}^{3} + x_{0} \right)}$ & 1 & $[0.1, 10]$ & 1000 & 250 & i.i.d. uniform & \cite{petersen2021} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Feynman-remainder tier: ground-truth expressions, sampling domains and dataset sizes (6 problems).}
+\label{tab:appendix-d-feynman-remainder}
+\begin{tabular}{@{}llrlrrll@{}}
+\toprule
+Problem & Expression & $m$ & Domain & $n_{\mathrm{train}}$ & $n_{\mathrm{test}}$ & Sampling & Source \\
+\midrule
+I.12.2 & $\frac{x_{0} x_{1}}{4 \pi x_{2} x_{3}^{2}}$ & 4 & $[1, 5]^{4}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+II.34.29a & $\frac{x_{0} x_{1}}{4 \pi x_{2}}$ & 3 & $[1, 5]^{3}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+II.34.29b & $\frac{2 \pi x_{0} x_{2} x_{3} x_{4}}{x_{1}}$ & 5 & $[1, 5]^{5}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+III.19.51 & $- \frac{x_{0} x_{1}^{4}}{8 x_{2}^{2} x_{3}^{2} x_{4}^{2}}$ & 5 & $[1, 5]^{5}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+III.4.32 & $\frac{1}{e^{\frac{x_{0} x_{1}}{2 \pi x_{2} x_{3}}} - 1}$ & 4 & $[1, 5]^{4}$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+test\_4 & $\sqrt{2} \sqrt{\frac{x_{1} - x_{2} - \frac{x_{3}^{2}}{2 x_{0} x_{4}^{2}}}{x_{0}}}$ & 5 & $[1, 3],\, [8, 12],\, [1, 3],\, [1, 3],\, [1, 3]$ & 1000 & 250 & i.i.d. uniform & \cite{udrescu2020} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{ODE-Strogatz tier: ground-truth expressions, sampling domains and dataset sizes (14 problems).}
+\label{tab:appendix-d-strogatz}
+\begin{tabular}{@{}llrlrrll@{}}
+\toprule
+Problem & Expression & $m$ & Domain & $n_{\mathrm{train}}$ & $n_{\mathrm{test}}$ & Sampling & Source \\
+\midrule
+Strogatz-bacres1 & $- \frac{x_{0} x_{1}}{\frac{x_{0}^{2}}{2} + 1} - x_{0} + 20$ & 2 & $[3.485, 16.33],\, [9.793, 54.445]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-bacres2 & $- \frac{x_{0} x_{1}}{\frac{x_{0}^{2}}{2} + 1} + 10$ & 2 & $[3.485, 16.33],\, [9.793, 54.445]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-barmag1 & $- \sin{\left(x_{0} \right)} + \frac{\sin{\left(x_{0} - x_{1} \right)}}{2}$ & 2 & $[4.118, 5.986],\, [0.2, 6.65]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-barmag2 & $- \sin{\left(x_{1} \right)} - \frac{\sin{\left(x_{0} - x_{1} \right)}}{2}$ & 2 & $[4.118, 5.986],\, [0.2, 6.65]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-glider1 & $- \frac{x_{0}^{2}}{20} - \sin{\left(x_{1} \right)}$ & 2 & $[0.163, 5.603],\, [-1.323, 28.765]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-glider2 & $x_{0} - \frac{\cos{\left(x_{1} \right)}}{x_{0}}$ & 2 & $[0.163, 5.603],\, [-1.323, 28.765]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-lv1 & $- x_{0}^{2} - 2 x_{0} x_{1} + 3 x_{0}$ & 2 & $[0, 8],\, [0, 3]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-lv2 & $- x_{0} x_{1} - x_{1}^{2} + 2 x_{1}$ & 2 & $[0, 8],\, [0, 3]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-predprey1 & $x_{0} \left(- x_{0} - \frac{x_{1}}{x_{0} + 1} + 4\right)$ & 2 & $[0.005, 6.581],\, [2.23, 11.649]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-predprey2 & $x_{1} \left(\frac{x_{0}}{x_{0} + 1} - \frac{3 x_{1}}{40}\right)$ & 2 & $[0.005, 6.581],\, [2.23, 11.649]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-shearflow1 & $\frac{\cos{\left(x_{0} \right)} \cos{\left(x_{1} \right)}}{\sin{\left(x_{1} \right)}}$ & 2 & $[-4.35, 3.6],\, [-2.747, 2.147]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-shearflow2 & $\left(\frac{\sin^{2}{\left(x_{1} \right)}}{10} + \cos^{2}{\left(x_{1} \right)}\right) \sin{\left(x_{0} \right)}$ & 2 & $[-4.35, 3.6],\, [-2.747, 2.147]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-vdp1 & $- \frac{10 x_{0}^{3}}{3} + \frac{10 x_{0}}{3} + 10 x_{1}$ & 2 & $[-1.199, 1.937],\, [-0.197, 0.928]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+Strogatz-vdp2 & $- \frac{x_{0}}{10}$ & 2 & $[-1.199, 1.937],\, [-0.197, 0.928]$ & 300 & 100 & published fixed rows (split by seed) & \cite{strogatz1994} \\
+\bottomrule
+\end{tabular}
+\end{table}
