@@ -17,11 +17,13 @@ from experiments.scripts.stage_d_task_spec import (
     ARMS,
     NAN_PROBLEMS,
     STAGE_D_CELLS,
+    STAGE_D_CERTIFICATION_CELLS,
     STAGE_D_CONSTRAINT,
     STAGE_D_GROUPS,
     STAGE_D_MAX_TIME_S,
     STAGE_D_SEED,
     STAGE_D_SUITE,
+    STAGE_D_TRACE_SEED,
     STAGE_D_WALL,
     TRACE_CELL,
     TRACE_PROBLEM,
@@ -38,20 +40,29 @@ from experiments.scripts.stage_d_task_spec import (
 class TestLockedConfiguration:
     """The values audit.md §7 fixes. Changing one changes what Stage D means."""
 
-    def test_twelve_cells(self) -> None:
-        assert len(STAGE_D_CELLS) == 12
+    def test_thirteen_cells_twelve_of_them_certification(self) -> None:
+        # Twelve certification cells (audit.md §7 row 3) plus the D2 trace cell
+        # (§7.3), which repeats cell 10 under `shadow_hash: true` and is
+        # excluded from certification by construction.
+        assert len(STAGE_D_CELLS) == 13
+        assert len(STAGE_D_CERTIFICATION_CELLS) == 12
+        assert all(not c.trace for c in STAGE_D_CERTIFICATION_CELLS)
 
     def test_budget_and_wall(self) -> None:
         assert STAGE_D_MAX_TIME_S == 43_200
         assert STAGE_D_WALL == "0-16:00:00"
         assert STAGE_D_CONSTRAINT == "sr"
 
-    def test_single_seed_101_everywhere(self) -> None:
+    def test_seed_101_on_every_certification_cell_102_on_the_trace_cell(self) -> None:
         assert STAGE_D_SEED == 101
-        assert {c.seed for c in STAGE_D_CELLS} == {101}
+        assert STAGE_D_TRACE_SEED == 102
+        assert {c.seed for c in STAGE_D_CERTIFICATION_CELLS} == {101}
+        assert trace_cell().seed == 102
+        # Both lie outside the campaign seeds (1..20) and the 21..30 top-up.
+        assert {c.seed for c in STAGE_D_CELLS}.isdisjoint(set(range(1, 31)))
 
     def test_group_sizes_and_memory(self) -> None:
-        expected = {"udfs": (3, 16), "bingo_std": (6, 32), "bingo_isalsr": (3, 256)}
+        expected = {"udfs": (3, 16), "bingo_std": (6, 32), "bingo_isalsr": (4, 256)}
         for group, (n, mem) in expected.items():
             assert len(cells_for_group(group)) == n, group
             assert group_mem_gb(group) == mem, group
@@ -68,7 +79,7 @@ class TestLockedConfiguration:
         assert {c.suite for c in STAGE_D_CELLS} == {STAGE_D_SUITE}
 
     def test_indices_are_dense_and_unique(self) -> None:
-        assert [c.index for c in STAGE_D_CELLS] == list(range(1, 13))
+        assert [c.index for c in STAGE_D_CELLS] == list(range(1, 14))
 
     def test_group_indices_are_dense_within_each_group(self) -> None:
         for group in STAGE_D_GROUPS:
@@ -86,7 +97,9 @@ class TestTraceCell:
         cell = trace_cell()
         assert (cell.method, cell.problem, cell.arm) == TRACE_CELL
         assert (cell.method, cell.problem, cell.arm) == ("bingo", "Pagie-1", "isalsr")
-        assert cell.seed == 101
+        # Seed 102, not 101: the trace cell repeats cell 10's coordinates, so at
+        # a shared seed the orchestrator would write both into one directory.
+        assert cell.seed == 102
 
     def test_no_other_cell_carries_the_flag(self) -> None:
         for cell in STAGE_D_CELLS:
@@ -121,7 +134,7 @@ class TestIndexDecoding:
             for g in STAGE_D_GROUPS
             for i in range(1, len(cells_for_group(g)) + 1)
         ]
-        assert sorted(c.index for c in seen) == list(range(1, 13))
+        assert sorted(c.index for c in seen) == list(range(1, 14))
 
 
 class TestShellEmission:
@@ -175,11 +188,22 @@ class TestPathConventions:
 
     def test_run_dir_layout(self) -> None:
         cell = trace_cell()
-        assert cell.run_dir(Path("/r")) == Path("/r/bingo/hard/pagie_1/isalsr/seed_101")
+        assert cell.run_dir(Path("/r")) == Path("/r/bingo/hard/pagie_1/isalsr/seed_102")
+        clean = next(
+            c
+            for c in STAGE_D_CERTIFICATION_CELLS
+            if (c.method, c.problem, c.arm) == ("bingo", TRACE_PROBLEM, "isalsr")
+        )
+        assert clean.run_dir(Path("/r")) == Path("/r/bingo/hard/pagie_1/isalsr/seed_101")
+        # The whole point: the traced run cannot overwrite the certified one.
+        assert clean.run_dir(Path("/r")) != cell.run_dir(Path("/r"))
 
     def test_config_name_matches_launcher_convention(self) -> None:
-        for cell in STAGE_D_CELLS:
+        for cell in STAGE_D_CERTIFICATION_CELLS:
             assert cell.config_name == f"{cell.method}_{cell.suite}.yaml"
+
+    def test_trace_cell_takes_the_trace_config(self) -> None:
+        assert trace_cell().config_name == "bingo_hard_trace.yaml"
 
     def test_configs_exist_in_the_repo(self) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -191,7 +215,7 @@ class TestCli:
     """The worker and launcher shell out to this; exit codes are load-bearing."""
 
     def test_count_per_group(self, capsys: pytest.CaptureFixture[str]) -> None:
-        for group, n in (("udfs", 3), ("bingo_std", 6), ("bingo_isalsr", 3)):
+        for group, n in (("udfs", 3), ("bingo_std", 6), ("bingo_isalsr", 4)):
             assert main(["--group", group, "--count"]) == 0
             assert capsys.readouterr().out.strip() == str(n)
 
@@ -208,7 +232,15 @@ class TestCli:
         assert main(["--group", "bingo_isalsr", "--index", "1"]) == 0
         out = capsys.readouterr().out
         assert "D_PROBLEM='Pagie-1'" in out
-        assert "D_TRACE='1'" in out
+        # Index 1 of this group is the CERTIFICATION cell: trace off, seed 101.
+        assert "D_TRACE='0'" in out
+        assert "D_SEED='101'" in out
+
+        assert main(["--group", "bingo_isalsr", "--index", "4"]) == 0
+        traced = capsys.readouterr().out
+        assert "D_TRACE='1'" in traced
+        assert "D_SEED='102'" in traced
+        assert "D_CONFIG_NAME='bingo_hard_trace.yaml'" in traced
 
     def test_bad_index_exits_one(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert main(["--group", "udfs", "--index", "99"]) == 1
@@ -223,5 +255,5 @@ class TestCli:
 
         assert main(["--json"]) == 0
         payload = json.loads(capsys.readouterr().out)
-        assert len(payload) == 12
+        assert len(payload) == 13
         assert sum(1 for row in payload if row["trace"]) == 1

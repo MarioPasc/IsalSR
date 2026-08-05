@@ -1,0 +1,59 @@
+# Bingo, hard tier — D2 TRACE configuration (Stage D cell 13 only).
+#
+# This file is `bingo_hard.yaml` with ONE key changed: `shadow_hash: true`.
+# It exists so that the difference between the certification cells and the
+# traced cell is visible in `config_sha256`, rather than hidden behind a flag.
+#
+# Why the split (audit.md §7.3, Mario 2026-08-04):
+#   The shadow sketches cost 17.6 % of Bingo's wall clock, paid by the `isalsr`
+#   arm alone inside a fixed budget.  Certification cells must not pay it: D1.6
+#   compares 12 h rho and R^2 against C1, which never carried the sketches, so a
+#   penalised isalsr arm would confound exactly the question C5 §3.5 handed to
+#   D1.6.  The trace cell does pay it, because its whole purpose is the
+#   per-candidate stream the sketches and the D2/D3 machinery consume.
+#
+# Consequently: rho and R^2 from THIS config are not certification numbers and
+# must never enter a table.  `experiments/scripts/stage_d_task_spec.py` enforces
+# that structurally — the traced cell is excluded from
+# STAGE_D_CERTIFICATION_CELLS, and it runs at seed 102 so it cannot share an
+# output directory with cell 10.
+#
+# Everything else below is byte-identical to bingo_hard.yaml.  If that file
+# changes, this one must change with it.
+
+experiment:
+  name: bingo_hard_trace
+  method: bingo
+  n_seeds: 20
+
+benchmarks:
+  hard:
+    problems: all
+    train_size: 1000      # Used by Feynman-extended (uniform); ignored by grid problems.
+    test_size: 250
+
+bingo:
+  population_size: 500
+  stack_size: 32
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  metric: mse
+  clo_alg: lm
+  generations: 100000000
+  fitness_threshold: 1.0e-16
+  max_time: 43200       # 12h algorithm budget (standard).
+  max_evals: 100000000
+  snapshot_frequency: 10
+  # The one difference from bingo_hard.yaml.  Read by IsalSRBingoRunner.fit via
+  # `config.get("shadow_hash", ...)`; BingoConfig.from_dict filters it out of the
+  # dataclass, so it reaches the runner without perturbing any host parameter.
+  shadow_hash: true
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

@@ -74,6 +74,14 @@ NAN_PROBLEMS: tuple[str, ...] = ("Korns-12", "Vladislavleva-2")
 #: detailed candidate trace.
 TRACE_CELL: tuple[str, str, str] = ("bingo", TRACE_PROBLEM, "isalsr")
 
+#: Seed of the D2 trace cell.  It differs from :data:`STAGE_D_SEED` for a
+#: mechanical reason: the trace cell repeats cell 10's
+#: ``(method, suite, problem, arm)``, so at the same seed the orchestrator would
+#: write both runs into one seed directory and the second would overwrite the
+#: first.  Like 101 it lies outside the campaign seeds (1..20) and the 21..30
+#: top-up range, so a trace output can never be mistaken for a campaign cell.
+STAGE_D_TRACE_SEED: int = 102
+
 
 @dataclass(frozen=True)
 class StageDCell:
@@ -90,7 +98,12 @@ class StageDCell:
         problem: Benchmark problem name as the registry spells it.
         suite: Benchmark suite key.
         mem_gb: Requested memory for the group, in GiB.
-        trace: Whether this cell persists the D2 detailed candidate trace.
+        trace: Whether this cell persists the D2 detailed candidate trace. The
+            traced cell also runs the shadow sketches, so it is *not* a
+            certification cell: its rho and R^2 carry an instrumentation
+            penalty the other twelve deliberately avoid (audit.md §7.3).
+        seed: Seed this cell runs. :data:`STAGE_D_SEED` for the twelve
+            certification cells, :data:`STAGE_D_TRACE_SEED` for the trace cell.
     """
 
     index: int
@@ -102,6 +115,7 @@ class StageDCell:
     suite: str
     mem_gb: int
     trace: bool
+    seed: int = STAGE_D_SEED
 
     @property
     def problem_slug(self) -> str:
@@ -116,23 +130,20 @@ class StageDCell:
         return self.problem.lower().replace("-", "_")
 
     @property
-    def seed(self) -> int:
-        """Return the seed this cell runs.
-
-        Returns:
-            :data:`STAGE_D_SEED`, identical for all cells by design.
-        """
-        return STAGE_D_SEED
-
-    @property
     def config_name(self) -> str:
         """Return the basename of the experiment config this cell uses.
 
+        The twelve certification cells take the production config, which carries
+        ``shadow_hash: false`` (audit.md §7.3, Mario 2026-08-04). The trace cell
+        takes a sibling that differs in exactly that one key, so the difference
+        is visible in ``config_sha256`` rather than hidden in a flag.
+
         Returns:
-            The ``<method>_<suite>.yaml`` name, matching the convention
-            ``slurm/c2_smoke/launcher.sh`` uses.
+            ``<method>_<suite>.yaml``, or ``<method>_<suite>_trace.yaml`` for
+            the trace cell.
         """
-        return f"{self.method}_{self.suite}.yaml"
+        stem = f"{self.method}_{self.suite}"
+        return f"{stem}_trace.yaml" if self.trace else f"{stem}.yaml"
 
     @property
     def label(self) -> str:
@@ -171,7 +182,15 @@ def _build_registry() -> tuple[StageDCell, ...]:
     cells: list[StageDCell] = []
     index = 0
 
-    def add(group: str, method: str, arm: str, problem: str, mem_gb: int) -> None:
+    def add(
+        group: str,
+        method: str,
+        arm: str,
+        problem: str,
+        mem_gb: int,
+        *,
+        trace: bool = False,
+    ) -> None:
         nonlocal index
         index += 1
         group_index = sum(1 for c in cells if c.group == group) + 1
@@ -185,7 +204,8 @@ def _build_registry() -> tuple[StageDCell, ...]:
                 problem=problem,
                 suite=STAGE_D_SUITE,
                 mem_gb=mem_gb,
-                trace=(method, problem, arm) == TRACE_CELL,
+                trace=trace,
+                seed=STAGE_D_TRACE_SEED if trace else STAGE_D_SEED,
             )
         )
 
@@ -202,15 +222,29 @@ def _build_registry() -> tuple[StageDCell, ...]:
             add("bingo_std", "bingo", arm, problem, 32)
 
     # Group 3 — Bingo IsalSR. The canonical-string dedup set is what hit C1's
-    # ceiling; this group is the one D1.2 exists to size.
+    # ceiling; this group is the one D1.2 exists to size.  Shadow sketches are
+    # OFF on all three: they cost 17.6 % of Bingo's wall clock (audit.md §7.3),
+    # and a budget penalty C1 never paid would confound D1.6's rho comparison —
+    # which is the very question C5 §3.5 was handed to D1.6 to answer.
     for problem in (TRACE_PROBLEM, *NAN_PROBLEMS):
         add("bingo_isalsr", "bingo", "isalsr", problem, 256)
+
+    # Cell 13 — the D2 trace cell.  It repeats cell 10's (method, problem, arm)
+    # under a config that turns the shadow sketches back on, at a different
+    # seed so the two runs cannot share an output directory.  It produces the
+    # D2 stream, the D3 replay input and a 12 h shadow-cost figure; it is
+    # deliberately NOT one of the twelve certification cells.
+    add("bingo_isalsr", "bingo", "isalsr", TRACE_PROBLEM, 256, trace=True)
 
     return tuple(cells)
 
 
-#: The locked 12-cell Stage D registry.
+#: The Stage D registry: twelve certification cells plus the D2 trace cell.
 STAGE_D_CELLS: tuple[StageDCell, ...] = _build_registry()
+
+#: The twelve certification cells — everything D1.1..D1.8 is computed over.
+#: The trace cell is excluded by construction (audit.md §7.3).
+STAGE_D_CERTIFICATION_CELLS: tuple[StageDCell, ...] = tuple(c for c in STAGE_D_CELLS if not c.trace)
 
 #: Submission groups in the order the launcher submits them, with their memory.
 STAGE_D_GROUPS: tuple[str, ...] = ("udfs", "bingo_std", "bingo_isalsr")

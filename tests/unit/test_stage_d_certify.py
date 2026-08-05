@@ -27,7 +27,7 @@ from experiments.scripts.stage_d_certify import (
     certify,
     main,
 )
-from experiments.scripts.stage_d_task_spec import STAGE_D_CELLS, StageDCell
+from experiments.scripts.stage_d_task_spec import STAGE_D_CERTIFICATION_CELLS, StageDCell
 
 # ---------------------------------------------------------------------- #
 # Fixture parameters. Chosen so a CLEAN root passes every threshold with
@@ -283,7 +283,7 @@ def _write_sacct(path: Path, peaks_gb: dict[str, float] | None = None) -> Path:
     """
     peaks = peaks_gb or {}
     lines = ["JobID,MaxRSS"]
-    for spec in STAGE_D_CELLS:
+    for spec in STAGE_D_CERTIFICATION_CELLS:
         default = spec.mem_gb * CLEAN_PEAK_FRACTION
         gb = peaks.get(spec.label, default)
         lines.append(f"{_raw_job_id(spec)}.batch,{int(gb * 1024**2)}K")
@@ -298,7 +298,7 @@ def clean_root(tmp_path: Path) -> Path:
 
     root = tmp_path / "stage_d"
     ledger_rows: list[dict[str, Any]] = []
-    for spec in STAGE_D_CELLS:
+    for spec in STAGE_D_CERTIFICATION_CELLS:
         seed_dir = spec.run_dir(root)
         seed_dir.mkdir(parents=True, exist_ok=True)
         (seed_dir / "run_log.json").write_text(
@@ -364,7 +364,9 @@ def _detail(
 def _cell(problem: str, method: str, arm: str) -> StageDCell:
     """Return the registry entry for one cell."""
     return next(
-        c for c in STAGE_D_CELLS if c.problem == problem and c.method == method and c.arm == arm
+        c
+        for c in STAGE_D_CERTIFICATION_CELLS
+        if c.problem == problem and c.method == method and c.arm == arm
     )
 
 
@@ -402,7 +404,7 @@ def test_every_criterion_emits_a_verdict(clean_root: Path, c1_reference: Path) -
 
 def test_all_twelve_registry_cells_are_certified(clean_root: Path) -> None:
     detail = _detail(clean_root, "D1.1")
-    assert len(detail["per_cell"]) == len(STAGE_D_CELLS) == 12
+    assert len(detail["per_cell"]) == len(STAGE_D_CERTIFICATION_CELLS) == 12
 
 
 # ====================================================================== #
@@ -442,7 +444,7 @@ def test_sacct_elapsed_column_is_preferred_over_status_json(
 ) -> None:
     path = tmp_path / "sacct_elapsed.csv"
     lines = ["JobID,MaxRSS,Elapsed"]
-    for spec in STAGE_D_CELLS:
+    for spec in STAGE_D_CERTIFICATION_CELLS:
         gb = spec.mem_gb * CLEAN_PEAK_FRACTION
         lines.append(f"{_raw_job_id(spec)}.batch,{int(gb * 1024**2)}K,04:00:00")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -522,7 +524,7 @@ def test_missing_rss_timeseries_degrades_gracefully(
 
 
 def test_no_memory_evidence_at_all_fails_d1_2(clean_root: Path) -> None:
-    for spec in STAGE_D_CELLS:
+    for spec in STAGE_D_CERTIFICATION_CELLS:
         (spec.run_dir(clean_root) / "rss_timeseries.csv").unlink()
     # No --sacct-csv either: there is now no memory evidence anywhere.
     assert _run(clean_root)["D1.2"] == "FAIL"
@@ -546,7 +548,7 @@ def test_array_style_jobid_does_not_join(clean_root: Path, tmp_path: Path) -> No
     # "<array_id>_<task>" for an array while status.json holds the raw id.
     path = tmp_path / "array_style.csv"
     lines = ["JobID,MaxRSS"]
-    for spec in STAGE_D_CELLS:
+    for spec in STAGE_D_CERTIFICATION_CELLS:
         gb = spec.mem_gb * CLEAN_PEAK_FRACTION
         array_id = GROUP_ARRAY_IDS[spec.group]
         lines.append(f"{array_id}_{spec.group_index}.batch,{int(gb * 1024**2)}K")
@@ -588,7 +590,8 @@ def test_production_recommendation_is_emitted_per_method_arm(
 ) -> None:
     detail = _detail(clean_root, "D1.2", sacct=sacct_csv)
     rows = {r["group"]: r for r in detail["production_recommendation_by_method_arm"]}
-    assert set(rows) == {f"{m}/{a}" for m, a in {(c.method, c.arm) for c in STAGE_D_CELLS}}
+    expected_groups = {(c.method, c.arm) for c in STAGE_D_CERTIFICATION_CELLS}
+    assert set(rows) == {f"{m}/{a}" for m, a in expected_groups}
     row = rows["bingo/isalsr"]
     # peak = 256 x 0.40 = 102.4 GB -> 102.4 / 0.70 = 146.3 -> 152 GB.
     assert row["requested_gb"] == 256
@@ -945,7 +948,7 @@ def test_manifest_is_written_and_validates_non_strict(clean_root: Path) -> None:
     assert manifest.node_constraint == "sr"
     # One split per (method, arm): 2 methods x 3 arms.
     assert len(manifest.submission_splits) == 6
-    assert sum(s.n_tasks for s in manifest.submission_splits) == len(STAGE_D_CELLS)
+    assert sum(s.n_tasks for s in manifest.submission_splits) == len(STAGE_D_CERTIFICATION_CELLS)
 
 
 def test_manifest_splits_are_internally_consistent(clean_root: Path) -> None:

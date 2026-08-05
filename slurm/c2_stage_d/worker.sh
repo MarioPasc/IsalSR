@@ -274,5 +274,5 @@ echo "Finished:  $(date)"
 echo "Duration:  $((ELAPSED / 3600))h $(((ELAPSED % 3600) / 60))m $((ELAPSED % 60))s"
 echo "RSS rows:  ${N_RSS_ROWS} -> ${RSS_CSV}"
 echo "RSS peak:  ${PEAK_HWM_KB} kB VmHWM ($((PEAK_HWM_KB / 1048576)) GB) vs ${D_MEM_GB} GB requested"
-echo "=== Cell ${D_INDEX}/12 (${D_METHOD}/${D_ARM}/${D_PROBLEM}/seed=${D_SEED}) rc=${RC} ==="
+echo "=== Cell ${D_INDEX}/13 (${D_METHOD}/${D_ARM}/${D_PROBLEM}/seed=${D_SEED}) rc=${RC} ==="
 exit ${RC}

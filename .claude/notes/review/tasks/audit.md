@@ -724,6 +724,18 @@ deduplication, of which a measured share on the traced problem are verbatim
 copies the host's own clone-skipping already avoids", rather than as a
 portfolio-wide decomposition. This is a reporting limitation, not a defect.
 
+**As implemented (2026-08-04).** The decision is a *configuration* change, not a
+code change — the runner's default is untouched, so a bare runner outside the
+campaign behaves as before.
+
+| Piece | Where |
+|---|---|
+| `shadow_hash: false` in all **14** production configs | in the **method** block (`bingo:` / `udfs:`), **not** `isalsr:` — `create_runner` hands the runner `config.get(method, {})`, so a key under `isalsr:` would be **silently ignored** and shadow would have stayed on for all 8,400 runs. Same shape as the `ISALSR_LEDGER_ENABLED` trap; caught by reading the call site before editing |
+| `experiments/configs/bingo_hard_trace.yaml` | the trace cell's config: byte-identical to `bingo_hard.yaml` except `shadow_hash: true`, so the difference lives in `config_sha256` instead of a flag |
+| Registry now **13 cells** | 12 certification + the traced one. `STAGE_D_CERTIFICATION_CELLS` is what D1.1–D1.8 iterate; the trace cell is excluded structurally, not by convention |
+| Trace cell runs at **seed 102** | it repeats cell 10's `(method, suite, problem, arm)`, so at seed 101 the orchestrator would write both runs into one directory and the second would overwrite the first. 102 is outside campaign seeds 1–20 and the 21–30 top-up |
+| Tests | `tests/unit/test_shadow_hash_config.py` (35) locks all 14 configs, the block the runner actually reads, and the one-key trace diff; the Stage D lock tests were updated to the new 13/12 registry |
+
 **Sequencing consequence — the config change must precede the final re-cert.**
 Turning shadow off is a *configuration* change (`shadow_hash: false` in the
 `isalsr:` block), so it moves `config_sha256`. Under §5.1's one-commit,

@@ -63,7 +63,7 @@ from experiments.scripts.c2_certify import (  # noqa: E402
 )
 from experiments.scripts.stage_d_task_spec import (  # noqa: E402
     NAN_PROBLEMS,
-    STAGE_D_CELLS,
+    STAGE_D_CERTIFICATION_CELLS,
     STAGE_D_MAX_TIME_S,
     STAGE_D_SUITE,
     StageDCell,
@@ -382,7 +382,7 @@ def collect_observations(root: Path) -> list[Observation]:
     index = {(c.method, c.arm, _slug(c.problem), c.seed): c for c in cells}
 
     observations: list[Observation] = []
-    for spec in STAGE_D_CELLS:
+    for spec in STAGE_D_CERTIFICATION_CELLS:
         key = (spec.method, spec.arm, spec.problem_slug, spec.seed)
         cell = index.get(key)
         directory = spec.run_dir(root) if cell is None else cell.directory
@@ -1618,7 +1618,7 @@ def _submission_splits() -> list[Any]:
     ``method x arm x suite`` arrays and sizes them from ``SUITE_SIZES``, which
     does not describe a 12-cell pre-flight: Stage D runs three problems of the
     ``hard`` suite, not ten, and UDFS runs only one of them. The splits are
-    therefore derived from :data:`STAGE_D_CELLS` so that
+    therefore derived from :data:`STAGE_D_CERTIFICATION_CELLS` so that
     ``n_tasks == n_problems x len(seeds)`` holds, which is what the validator
     checks in non-strict mode.
 
@@ -1628,7 +1628,7 @@ def _submission_splits() -> list[Any]:
     from experiments.models.manifest import SubmissionSplit
 
     grouped: dict[tuple[str, str], list[StageDCell]] = {}
-    for cell in STAGE_D_CELLS:
+    for cell in STAGE_D_CERTIFICATION_CELLS:
         grouped.setdefault((cell.method, cell.arm), []).append(cell)
 
     splits: list[Any] = []
@@ -1670,7 +1670,7 @@ def build_stage_d_manifest(root: Path) -> tuple[Any, list[str]]:
     configs, config_notes = _config_digests()
     operators, operator_notes = _operator_sets()
 
-    stage_d_problems = sorted({c.problem for c in STAGE_D_CELLS})
+    stage_d_problems = sorted({c.problem for c in STAGE_D_CERTIFICATION_CELLS})
     policy = OperatorSetPolicy(
         policy="uniform_per_method",
         statement=(
@@ -1697,7 +1697,7 @@ def build_stage_d_manifest(root: Path) -> tuple[Any, list[str]]:
         build=build,
         configs=configs,
         operator_set_policy=policy,
-        arms=sorted({c.arm for c in STAGE_D_CELLS}),
+        arms=sorted({c.arm for c in STAGE_D_CERTIFICATION_CELLS}),
         seeds=[STAGE_D_SEED],
         alphabet_version=ALPHABET_VERSION,
         node_constraint=STAGE_D_CONSTRAINT,
@@ -1824,7 +1824,7 @@ def render_markdown(
         f"- **Root**: `{root}`",
         f"- **Generated**: {generated_at}",
         f"- **Blocking failures**: {n_blocking}",
-        f"- **Cells**: {len(STAGE_D_CELLS)} at {STAGE_D_MAX_TIME_S} s search budget",
+        f"- **Cells**: {len(STAGE_D_CERTIFICATION_CELLS)} at {STAGE_D_MAX_TIME_S} s search budget",
         "",
         "## Framing",
         "",
@@ -1999,7 +1999,7 @@ def main(argv: list[str] | None = None) -> int:
     payload["generated_at"] = generated_at
     payload["root"] = str(root)
     payload["n_blocking_failures"] = n_blocking_failures
-    payload["n_cells"] = len(STAGE_D_CELLS)
+    payload["n_cells"] = len(STAGE_D_CERTIFICATION_CELLS)
     payload["wall_s"] = float(args.wall_s)
     payload["max_time_s"] = float(args.max_time)
 
