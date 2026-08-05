@@ -9,7 +9,7 @@
 experiment:
   name: udfs_cherrypicked
   method: udfs
-  n_seeds: 20
+  n_seeds: 30
 
 benchmarks:
   cherrypicked:

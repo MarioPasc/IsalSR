@@ -3,7 +3,7 @@
 experiment:
   name: bingo_nguyen
   method: bingo
-  n_seeds: 20
+  n_seeds: 30
 
 benchmarks:
   nguyen:

@@ -24,7 +24,13 @@
 experiment:
   name: bingo_hard_trace
   method: bingo
-  n_seeds: 20
+  # Tracks bingo_hard.yaml (20 -> 30 on 2026-08-05, §0.4a superseded).  Inert
+  # here -- the trace cell's seed is passed explicitly, `--seeds 102` from
+  # slurm/c2_stage_d/worker.sh:246 -- but this file declares itself to be
+  # bingo_hard.yaml with ONE key changed, and leaving it at 20 would have made
+  # that two.  Enforced by
+  # test_c2_slot_plan.py::test_trace_config_differs_from_its_parent_by_one_key.
+  n_seeds: 30
 
 benchmarks:
   hard:

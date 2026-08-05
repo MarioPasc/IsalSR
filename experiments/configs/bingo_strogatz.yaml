@@ -14,8 +14,14 @@
 # the invariant that matters is that for a fixed (method, problem) the operator
 # set is identical across the baseline, hash and isalsr arms.
 #
-# Seeds: 20, per EXECUTION-PLAN.md §0.4a.  Not 30 — read the boxed note in §0.4
-# before changing this.
+# Seeds: 30 (Mario, 2026-08-05).  This SUPERSEDES §0.4a's 20-seed decision and
+# the boxed note in §0.4, whose premise was cost: that arithmetic assumed a 12 h
+# run for both hosts.  Measured 2026-08-05 — UDFS saturates 12 h on 100 % of
+# runs (n=600, mean=median=max=12.00 h) but Bingo does not (mean 5.15 h, median
+# 4.04 h), so C2 costs ≈107,100 core-h at 30 seeds, not 151,200: 7.5 d at the
+# measured 592 cores.  All 14 campaign configs must carry the SAME value —
+# a split seed count silently unbalances the paired design (§5.5), which is
+# worse than a smaller one.  Locked by tests/unit/test_budget_uniformity.py.
 #
 # train/test: the Strogatz datasets are PUBLISHED FIXED data (400 rows each),
 # not generated.  300/100 is SRBench's 75/25 split; the per-problem `sampling`
@@ -24,7 +30,7 @@
 experiment:
   name: bingo_strogatz
   method: bingo
-  n_seeds: 20
+  n_seeds: 30
 
 benchmarks:
   strogatz:
@@ -41,6 +47,12 @@ bingo:
   mutation_prob: 0.4
   max_generations: 100000
   max_time: 43200       # 12h algorithm budget (standard).
+  # F-19 (2026-08-05): this key was ABSENT and the suite silently inherited
+  # BingoConfig.max_evals = 10_000_000 (config.py:29) -- a 10x tighter budget
+  # than nguyen/feynman/hard/cherrypicked, undocumented, and pooled into the
+  # N=70 CPDT. max_evals is the BINDING budget for Bingo (max_time never fires;
+  # Stage D 2026-08-05), so this was a 10x search-budget disparity, not a detail.
+  max_evals: 100000000
   fitness_metric: "lm"
   convergence_check_frequency: 50
   snapshot_frequency: 50

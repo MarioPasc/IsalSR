@@ -13,7 +13,7 @@
 experiment:
   name: udfs_hard
   method: udfs
-  n_seeds: 20
+  n_seeds: 30
 
 benchmarks:
   hard:
