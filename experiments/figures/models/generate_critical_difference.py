@@ -1,9 +1,15 @@
 """Generate Critical Difference diagrams for IsalSR model validation.
 
 Produces:
-  1. CD diagram for R² test (4 groups: UDFS-BL, UDFS-IS, Bingo-BL, Bingo-IS)
-  2. CD diagram for NRMSE test (same 4 groups)
+  1. CD diagram for R² test (one group per (method, arm) pair)
+  2. CD diagram for NRMSE test (same groups)
   3. 2D CD diagram: R² test + Reduction Factor (joint view)
+
+The arm list is a parameter, not a constant. Until check E5 caught it, both
+loaders iterated a hardcoded ``["baseline", "isalsr"]``, so a three-arm root
+produced four-group diagrams with the hash arm silently absent -- the arm R1.4
+asks about, missing from every critical-difference figure with nothing in the
+output saying so.
 
 Uses critdd (Bunse, 2024): https://github.com/mirkobunse/critdd
 
@@ -20,6 +26,7 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -39,6 +46,47 @@ log = logging.getLogger(__name__)
 
 
 # ======================================================================
+# Arms
+# ======================================================================
+
+# Arms plotted when the caller does not say. The two-arm default reproduces
+# every C1-era invocation byte-identically.
+DEFAULT_CD_VARIANTS: tuple[str, ...] = ("baseline", "isalsr")
+
+# Display name per arm. An unknown arm keeps its own name rather than being
+# silently folded into one of these.
+VARIANT_LABELS: dict[str, str] = {
+    "baseline": "native DAG",
+    "hash": "Naive-Hash",
+    "isalsr": "IsalSR",
+}
+
+
+def _resolve_cd_variants(variants: Sequence[str] | None) -> list[str]:
+    """Normalise a caller-supplied arm list, preserving order.
+
+    Args:
+        variants: Requested arms, or None for the two-arm default.
+
+    Returns:
+        The arms to plot, duplicates removed.
+    """
+    requested = list(DEFAULT_CD_VARIANTS) if variants is None else list(variants)
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for variant in requested:
+        if variant not in seen:
+            seen.add(variant)
+            ordered.append(variant)
+    return ordered
+
+
+def _variant_label(method: str, variant: str) -> str:
+    """Build the CD group label for one ``(method, arm)`` pair."""
+    return f"{method.upper()} {VARIANT_LABELS.get(variant, variant)}"
+
+
+# ======================================================================
 # Data loading
 # ======================================================================
 
@@ -48,22 +96,31 @@ def _load_problem_means(
     methods: list[str],
     benchmark: str,
     metric_extractor: callable,
+    variants: Sequence[str] | None = None,
 ) -> tuple[np.ndarray, list[str], list[str]]:
     """Build the (n_problems x n_groups) matrix for Friedman/CD analysis.
 
+    Args:
+        results_dir: Root results directory.
+        methods: Method names, in group order.
+        benchmark: Benchmark suite to load.
+        metric_extractor: Callable mapping a RunLog to the scalar to rank.
+        variants: Arms to plot, in group order. Defaults to the two-arm set.
+
     Returns:
         X: shape (n_problems, n_groups) — mean metric per problem per group.
-        group_names: list of group labels (e.g., "UDFS baseline").
+        group_names: list of group labels (e.g., "UDFS native DAG").
         problem_names: list of problem names.
     """
     # Collect per-problem means for each (method, variant)
+    variant_list = _resolve_cd_variants(variants)
     group_data: dict[str, dict[str, float]] = {}
     group_names: list[str] = []
     all_problems: set[str] = set()
 
     for method in methods:
-        for variant in ["baseline", "isalsr"]:
-            label = f"{method.upper()} {'native DAG' if variant == 'baseline' else 'IsalSR'}"
+        for variant in variant_list:
+            label = _variant_label(method, variant)
             group_names.append(label)
             group_data[label] = {}
 
@@ -115,15 +172,31 @@ def _load_reduction_factor_matrix(
     results_dir: Path,
     methods: list[str],
     benchmark: str,
+    variants: Sequence[str] | None = None,
 ) -> tuple[np.ndarray, list[str], list[str]]:
-    """Build RF matrix. Baseline RF = 1.0 by definition."""
+    """Build the reduction-factor matrix.
+
+    The baseline arm's rho is 1.0 *by construction* -- it carries no dedup hook,
+    and ``bingo/runner.py`` sets ``n_unique_canonical = total_evals`` there. The
+    hash arm does deduplicate, so its rho is read from the run log like IsalSR's.
+
+    Args:
+        results_dir: Root results directory.
+        methods: Method names, in group order.
+        benchmark: Benchmark suite to load.
+        variants: Arms to plot, in group order. Defaults to the two-arm set.
+
+    Returns:
+        X, group_names and the problems complete across every group.
+    """
+    variant_list = _resolve_cd_variants(variants)
     group_data: dict[str, dict[str, float]] = {}
     group_names: list[str] = []
     all_problems: set[str] = set()
 
     for method in methods:
-        for variant in ["baseline", "isalsr"]:
-            label = f"{method.upper()} {'native DAG' if variant == 'baseline' else 'IsalSR'}"
+        for variant in variant_list:
+            label = _variant_label(method, variant)
             group_names.append(label)
             group_data[label] = {}
 
@@ -215,6 +288,7 @@ def generate_cd_r2(
     output_dir: Path,
     methods: list[str],
     benchmarks: list[str],
+    variants: Sequence[str] | None = None,
 ) -> None:
     """Generate CD diagram for R² test across all benchmarks combined."""
     # Combine all benchmarks into one matrix
@@ -227,6 +301,7 @@ def generate_cd_r2(
             methods,
             benchmark,
             metric_extractor=lambda rl: min(max(rl.regression.r2_test, 0.0), 1.0),
+            variants=variants,
         )
         if X.size > 0:
             all_X.append(X)
@@ -254,6 +329,7 @@ def generate_cd_nrmse(
     output_dir: Path,
     methods: list[str],
     benchmarks: list[str],
+    variants: Sequence[str] | None = None,
 ) -> None:
     """Generate CD diagram for NRMSE test (lower is better)."""
     all_X = []
@@ -264,6 +340,7 @@ def generate_cd_nrmse(
             methods,
             benchmark,
             metric_extractor=lambda rl: rl.regression.nrmse_test,
+            variants=variants,
         )
         if X.size > 0:
             all_X.append(X)
@@ -363,6 +440,7 @@ def generate_cd_2d(
     output_dir: Path,
     methods: list[str],
     benchmarks: list[str],
+    variants: Sequence[str] | None = None,
 ) -> None:
     """Generate 3-row CD diagram: R² test + Reduction Factor + Wall-clock time.
 
@@ -384,11 +462,13 @@ def generate_cd_2d(
             methods,
             benchmark,
             metric_extractor=lambda rl: min(max(rl.regression.r2_test, 0.0), 1.0),
+            variants=variants,
         )
         X_rf, _, problems_rf = _load_reduction_factor_matrix(
             results_dir,
             methods,
             benchmark,
+            variants=variants,
         )
         # Negate time: maximize_outcome=True → higher (less negative) = faster
         X_time, _, problems_time = _load_problem_means(
@@ -396,6 +476,7 @@ def generate_cd_2d(
             methods,
             benchmark,
             metric_extractor=lambda rl: -rl.time.wall_clock_total_s,
+            variants=variants,
         )
         if not group_names and gn:
             group_names = gn
@@ -460,6 +541,7 @@ def generate_cd_per_benchmark(
     output_dir: Path,
     methods: list[str],
     benchmarks: list[str],
+    variants: Sequence[str] | None = None,
 ) -> None:
     """Generate separate CD diagrams per benchmark (for appendix/supplementary)."""
     for benchmark in benchmarks:
@@ -468,6 +550,7 @@ def generate_cd_per_benchmark(
             methods,
             benchmark,
             metric_extractor=lambda rl: min(max(rl.regression.r2_test, 0.0), 1.0),
+            variants=variants,
         )
         if X.size == 0:
             continue
@@ -493,21 +576,31 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, help="Figure output directory")
     parser.add_argument("--methods", default="udfs,bingo", help="Comma-separated methods")
     parser.add_argument("--benchmarks", default="nguyen,feynman", help="Comma-separated benchmarks")
+    parser.add_argument(
+        "--variants",
+        default=",".join(DEFAULT_CD_VARIANTS),
+        help=(
+            "Comma-separated arms, in group order (e.g. 'baseline,hash,isalsr'). "
+            "Defaults to the two-arm campaign."
+        ),
+    )
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)
     output_dir = Path(args.output_dir)
     methods = [m.strip() for m in args.methods.split(",")]
     benchmarks = [b.strip() for b in args.benchmarks.split(",")]
+    variants = [v.strip() for v in args.variants.split(",") if v.strip()]
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     log.info("Generating CD diagrams from %s", results_dir)
+    log.info("Arms: %s -> %d groups", ", ".join(variants), len(methods) * len(variants))
 
-    generate_cd_r2(results_dir, output_dir, methods, benchmarks)
-    generate_cd_nrmse(results_dir, output_dir, methods, benchmarks)
-    generate_cd_2d(results_dir, output_dir, methods, benchmarks)
-    generate_cd_per_benchmark(results_dir, output_dir, methods, benchmarks)
+    generate_cd_r2(results_dir, output_dir, methods, benchmarks, variants=variants)
+    generate_cd_nrmse(results_dir, output_dir, methods, benchmarks, variants=variants)
+    generate_cd_2d(results_dir, output_dir, methods, benchmarks, variants=variants)
+    generate_cd_per_benchmark(results_dir, output_dir, methods, benchmarks, variants=variants)
 
     log.info("All CD diagrams saved to %s", output_dir)
 

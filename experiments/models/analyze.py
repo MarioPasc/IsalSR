@@ -39,6 +39,10 @@ from experiments.models.analyzer.aggregation import (  # noqa: E402
     benchmark_summary,
     compute_paired_stats,
 )
+from experiments.models.analyzer.completeness import (  # noqa: E402
+    CampaignIntegrityError,
+    enforce_integrity,
+)
 from experiments.models.analyzer.cross_method import (  # noqa: E402
     compare_reduction_factors,
     cross_method_friedman,
@@ -1186,6 +1190,8 @@ def run_analysis(
     methods: list[str],
     benchmarks: list[str],
     variants: Sequence[str] | None = None,
+    allow_incomplete: bool = False,
+    allow_mixed_provenance: bool = False,
 ) -> None:
     """Run the full analysis pipeline.
 
@@ -1196,11 +1202,65 @@ def run_analysis(
         variants: Arms present in this campaign. Defaults to
             ``("baseline", "isalsr")``, which reproduces the two-arm pipeline
             exactly. Arm directories that are absent are skipped, never fatal.
+        allow_incomplete: Analyse a root with missing cells. The cells are named
+            in the log and in ``campaign_integrity.json`` either way; this only
+            decides whether their presence aborts the run (check E6).
+        allow_mixed_provenance: Analyse a root pooling more than one commit,
+            build or configuration. Required for known-heterogeneous smoke roots
+            and never for a campaign root (check E7, EXECUTION-PLAN §5.1).
+
+    Raises:
+        CampaignIntegrityError: If the root is incomplete or mixes provenance
+            and the corresponding override was not requested.
     """
     analysis_dir = results_dir / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
     variant_list = resolve_variants(variants)
     log.info("Analysing arms: %s", ", ".join(variant_list))
+
+    # Checks E6/E7. Run before any statistic is computed: a number derived from
+    # an incomplete or provenance-mixed root should never reach a table, and C1
+    # shows that discovering it afterwards costs a forensic pass.
+    log.info("=== Campaign integrity (E6 completeness, E7 provenance) ===")
+    try:
+        completeness, provenance = enforce_integrity(
+            results_dir,
+            methods,
+            benchmarks,
+            variant_list,
+            allow_incomplete=allow_incomplete,
+            allow_mixed_provenance=allow_mixed_provenance,
+        )
+    except CampaignIntegrityError as exc:
+        integrity_path = analysis_dir / "campaign_integrity.json"
+        with integrity_path.open("w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "completeness": exc.completeness.to_dict() if exc.completeness else None,
+                    "provenance": exc.provenance.to_dict() if exc.provenance else None,
+                    "aborted": True,
+                    "reason": str(exc).splitlines()[0],
+                },
+                handle,
+                indent=2,
+            )
+        log.error("Integrity report written to %s", integrity_path)
+        raise
+
+    integrity_path = analysis_dir / "campaign_integrity.json"
+    with integrity_path.open("w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "completeness": completeness.to_dict(),
+                "provenance": provenance.to_dict(),
+                "aborted": False,
+                "allow_incomplete": allow_incomplete,
+                "allow_mixed_provenance": allow_mixed_provenance,
+            },
+            handle,
+            indent=2,
+        )
+    log.info("Saved campaign integrity report: %s", integrity_path)
 
     all_benchmark_summaries: dict[str, list[dict[str, Any]]] = {}
     all_contrast_summaries: dict[str, dict[str, list[dict[str, Any]]]] = {}
@@ -1393,6 +1453,24 @@ def main() -> None:
             "are skipped."
         ),
     )
+    parser.add_argument(
+        "--allow-incomplete",
+        action="store_true",
+        help=(
+            "Analyse a root with missing cells (check E6). The missing cells are "
+            "always named in the log and in campaign_integrity.json; this flag "
+            "only decides whether they abort the analysis."
+        ),
+    )
+    parser.add_argument(
+        "--allow-mixed-provenance",
+        action="store_true",
+        help=(
+            "Analyse a root pooling more than one commit, build or configuration "
+            "(check E7). Required for known-heterogeneous smoke roots; never "
+            "correct for a campaign root."
+        ),
+    )
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)
@@ -1400,7 +1478,18 @@ def main() -> None:
     benchmarks = [b.strip() for b in args.benchmarks.split(",")]
     variants = [v.strip() for v in args.variants.split(",") if v.strip()]
 
-    run_analysis(results_dir, methods, benchmarks, variants=variants)
+    try:
+        run_analysis(
+            results_dir,
+            methods,
+            benchmarks,
+            variants=variants,
+            allow_incomplete=args.allow_incomplete,
+            allow_mixed_provenance=args.allow_mixed_provenance,
+        )
+    except CampaignIntegrityError as exc:
+        log.error("Analysis refused: %s", exc)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

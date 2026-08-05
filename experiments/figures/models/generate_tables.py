@@ -326,6 +326,44 @@ _PROBLEM_LABELS = {
 }
 
 
+def _latex_escape(text: str) -> str:
+    """Escape the LaTeX specials that appear in our identifiers.
+
+    Only ``_`` occurs in practice (suite and problem directory names), but the
+    others are cheap to cover and a suite named with one would fail the same way.
+
+    Args:
+        text: Raw identifier.
+
+    Returns:
+        The identifier safe to typeset outside math mode.
+    """
+    for char in ("\\", "_", "%", "&", "#", "$"):
+        text = text.replace(char, "\\" + char) if char != "\\" else text
+    return text
+
+
+def _problem_label(problem: str) -> str:
+    """Return the display label for a problem directory, LaTeX-safe.
+
+    ``_PROBLEM_LABELS`` covers the D1 suites. Anything outside it -- the whole
+    T05 D2 extension, whose directory names carry underscores (``strogatz_vdp1``,
+    ``liv_19``) -- previously fell through raw, and a bare ``_`` outside math
+    mode aborts pdflatex. The tables therefore *emitted* cleanly and then failed
+    to compile, on exactly the 18 rows the coverage extension added. Check E4.
+
+    Args:
+        problem: Problem directory name.
+
+    Returns:
+        The mapped label, or the raw name with underscores escaped.
+    """
+    label = _PROBLEM_LABELS.get(problem)
+    if label is not None:
+        return label
+    return _latex_escape(problem)
+
+
 def _load_cpdt(
     results_dir: Path,
     method: str,
@@ -559,7 +597,7 @@ def generate_table1(
             ratio_str = f"{ratio:.1f}" if ratio < 100 else f"{ratio:.0f}"
 
             method_label = method.upper()
-            bench_label = benchmark.capitalize()
+            bench_label = _latex_escape(benchmark.capitalize())
 
             if np.isfinite(cpdt_p):
                 cpdt_p_str = _fmt_cpdt_p(cpdt_p)
@@ -689,7 +727,7 @@ def generate_table2(
                 elif p_adj < 0.05:
                     sig = "$^{*}$"
 
-                label = _PROBLEM_LABELS.get(prob, prob)
+                label = _problem_label(prob)
 
                 # Add midrule between benchmarks
                 if benchmark != prev_bench and rows:
@@ -721,7 +759,9 @@ def generate_table2(
             if cpdt and "r2_test" in cpdt and "error" not in cpdt["r2_test"]:
                 cr = cpdt["r2_test"]
                 cpdt_label = (
-                    f"CPDT ({cpdt_bench})" if cpdt_bench != "all" else "\\textbf{CPDT (all)}"
+                    f"CPDT ({_latex_escape(cpdt_bench)})"
+                    if cpdt_bench != "all"
+                    else "\\textbf{CPDT (all)}"
                 )
                 n_p = cr["n_problems"]
                 w = cr["n_wins"]
@@ -962,7 +1002,7 @@ def generate_table_supplementary(
                 elif not all_rows:
                     prev_bench = benchmark
 
-                label = _PROBLEM_LABELS.get(prob, prob)
+                label = _problem_label(prob)
 
                 # R² test. Pairwise deletion: a seed whose expression is
                 # undefined on part of the test domain is a missing
@@ -1047,7 +1087,9 @@ def generate_table_supplementary(
             if cpdt and "r2_test" in cpdt and "error" not in cpdt["r2_test"]:
                 cr = cpdt["r2_test"]
                 cpdt_label = (
-                    f"CPDT ({cpdt_bench})" if cpdt_bench != "all" else "\\textbf{CPDT (all)}"
+                    f"CPDT ({_latex_escape(cpdt_bench)})"
+                    if cpdt_bench != "all"
+                    else "\\textbf{CPDT (all)}"
                 )
                 n_p = cr["n_problems"]
                 w, t_cnt, lo = cr["n_wins"], cr["n_ties"], cr["n_losses"]
