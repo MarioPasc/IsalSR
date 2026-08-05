@@ -658,3 +658,77 @@ HOME: all wave/Stage-D logs redirected to FSCRATCH via the launchers' existing
 Pending at the time of writing: re-cert verdict (gates Stage D submission),
 probe artefact check (`rss_timeseries.csv` + trace flag), post-wave deploy of
 `9b351e7`, then the three Stage D groups + `c2d_certify`.
+
+### 7.3 Shadow sketches — what they are, measured cost, and the decision (Mario, 2026-08-04)
+
+**Definition.** In the `isalsr` arm only, per candidate DAG, the runner computes
+four extra serialisations and feeds each into a HyperLogLog sketch (p = 16,
+64 KB, ±0.41 %): three **fixed-order hashes** (insertion / topological /
+topological-commutative) over the *adapter's renumbered* DAG, and one
+**host-native** hash (Bingo `command_array` row order, UDFS `node_dict` order).
+They never affect the search — nothing is deduplicated by them; they only count
+distinct values beside the real canonical dedup. Fields:
+`shadow_distinct_{insertion,topological,topological_commutative,host_native}`.
+
+**Measured cost** (v4 wave, 900 s, 210 cells per arm, median share of wall
+clock, from the `shadow_time_s` field added by F-7):
+
+| Host | shadow % of wall | method overhead % (canon + conversion) |
+|---|---|---|
+| Bingo `isalsr` | **17.6 %** | 14.8 % |
+| UDFS `isalsr` | 0.034 % | 0.042 % |
+
+On Bingo the instrumentation costs **more than the method it instruments**, and
+it is paid by one arm inside a fixed budget. The C1 trajectory replay
+(§11.1, 2026-08-04) showed Bingo's paired effect eroding **69 %** from 12 h to
+8 h; a 17.6 % cut aimed at the `isalsr` arm alone is that mechanism pointed at
+our own effect, whose Bingo `d` is already 0.034.
+
+**Decisions.**
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Stage D | **13 cells**: the 12 locked cells run shadow **OFF** (so D1.6/D1.7 compare to C1 without a budget penalty C1 never paid), plus one extra Bingo × Pagie-1 × `isalsr` cell with trace **and** shadow ON, which produces the D2 stream, the D3 replay input and a 12 h shadow-cost figure for the record. Cost +12 core-hours |
+| 2 | C2 production | **Shadow OFF on both hosts.** Uniform, simplest to state, both `isalsr` arms run at full budget |
+| 3 | Source of the fixed-order numbers | **Stage D trace + D3 Mode-1 replay only.** Cross-arm approximation and dedicated side-runs both declined |
+
+**Revision of F-8 / §2.9 — the "steel-man" obligation is withdrawn (Mario's
+challenge, accepted).** The audit recommended reporting the adapter-order
+fixed-order ρ alongside the live host-native ρ, on the reasoning that the live
+number could read as a strawman. That reasoning does not survive scrutiny: the
+adapter's renumbering is *part of IsalSR's own preprocessing*, so the
+adapter-order rung is not an independent naive competitor but a hybrid that
+cannot be built without our adapter. R1.4 asks what a practitioner obtains
+**without** IsalSR, and that is the committed T04 design — hash the
+representation the host already stores. Publishing two ρ_hash numbers invites
+"which one is the baseline?" and dilutes the single clean contrast.
+
+What replaces it, and it is stronger: **state which representation the naive
+hash keys on and why that is the naive one**, and answer the "UDFS ρ_hash =
+1.0000 looks rigged" objection *mechanistically* — UDFS's systematic
+enumeration emits structurally distinct `node_dict`s, so a representation-order
+hash has nothing to merge; its redundancy is purely isomorphic and therefore
+invisible without an isomorphism-invariant key. That is the paper's thesis
+demonstrated, not a caveat. The adapter-order rung remains computable offline
+from D3 on the traced stream and is **held in reserve** for the response letter
+if a reviewer asks whether a cleverer ordering was tried — never as a second
+baseline in the tables.
+
+**Consequence carried, not hidden.** With shadow off everywhere and only
+trace + D3 as the source, the F-12 verbatim-clone decomposition narrows from a
+per-problem table to **one worked example (the traced Bingo × Pagie-1 cell)
+plus the mechanism** — VarAnd emits `parent.copy()` offspring at
+`(1 − P_cx)(1 − P_mut)` ≈ 36 %, already established by B12. Bingo's redundancy
+claim must therefore be phrased as "candidate evaluations avoided by structural
+deduplication, of which a measured share on the traced problem are verbatim
+copies the host's own clone-skipping already avoids", rather than as a
+portfolio-wide decomposition. This is a reporting limitation, not a defect.
+
+**Sequencing consequence — the config change must precede the final re-cert.**
+Turning shadow off is a *configuration* change (`shadow_hash: false` in the
+`isalsr:` block), so it moves `config_sha256`. Under §5.1's one-commit,
+one-configuration rule the order is: land the config change → run the clean
+Stage C wave (v5, which was needed anyway: 161 of v4's 1,260 cells recorded
+`a455d6c-dirty` from the mid-wave `sed`) → read its verdict → submit Stage D's
+13 cells. Stage D must not run under a configuration no Stage C wave has
+certified.
