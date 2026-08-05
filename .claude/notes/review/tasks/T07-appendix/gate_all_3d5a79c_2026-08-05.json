@@ -1,0 +1,267 @@
+{
+  "schema_version": "1.0",
+  "pass": true,
+  "reason": null,
+  "self_comparison": false,
+  "self_comparison_note": null,
+  "provenance": {
+    "git_commit": "3d5a79c",
+    "build_info": {
+      "build_hash": "298fc1188bf1b051",
+      "ndebug": "1",
+      "avx512f": "0",
+      "fma": "1",
+      "avx2": "1",
+      "isa_level": "x86-64-v3",
+      "cplusplus": "201703",
+      "compiler": "gcc 12.2.0",
+      "engine": "cpp"
+    },
+    "engine": "cpp",
+    "engine_a": "python",
+    "engine_b": "cpp",
+    "capability_probe": {
+      "method": "fast_canonical_string_backend_probe",
+      "cpp_canonical_available": true,
+      "detail": "fast_canonical_string(backend='cpp') succeeded on 1-VAR probe DAG; C++ canonicaliser is live"
+    },
+    "seed": 20260101,
+    "quick_mode": false,
+    "gates_run": [
+      "gate1",
+      "gate2",
+      "gate3"
+    ],
+    "timestamp_start": "2026-08-05T18:00:01Z",
+    "timestamp_end": "2026-08-05T18:00:06Z",
+    "elapsed_seconds": 4.91,
+    "python_version": "3.11.15 (main, Mar 11 2026, 17:20:07) [GCC 14.3.0]"
+  },
+  "gate1": {
+    "dags_tested": 33,
+    "comparisons_made": 54765,
+    "mismatches_cross_engine": 0,
+    "mismatches_invariance": 0,
+    "errors": 0,
+    "pass": true,
+    "cap_dags_per_k": {
+      "1": 5,
+      "2": 5,
+      "3": 5,
+      "4": 5,
+      "5": 5,
+      "6": 5,
+      "7": 2,
+      "8": 1
+    },
+    "k_max": 8,
+    "per_k": [
+      {
+        "k": 1,
+        "num_vars": 1,
+        "dags_tested": 5,
+        "perms_per_dag": 1,
+        "comparisons": 5,
+        "mismatches_cross_engine": 0,
+        "mismatches_invariance": 0,
+        "errors": 0
+      },
+      {
+        "k": 2,
+        "num_vars": 1,
+        "dags_tested": 5,
+        "perms_per_dag": 2,
+        "comparisons": 10,
+        "mismatches_cross_engine": 0,
+        "mismatches_invariance": 0,
+        "errors": 0
+      },
+      {
+        "k": 3,
+        "num_vars": 1,
+        "dags_tested": 5,
+        "perms_per_dag": 6,
+        "comparisons": 30,
+        "mismatches_cross_engine": 0,
+        "mismatches_invariance": 0,
+        "errors": 0
+      },
+      {
+        "k": 4,
+        "num_vars": 1,
+        "dags_tested": 5,
+        "perms_per_dag": 24,
+        "comparisons": 120,
+        "mismatches_cross_engine": 0,
+        "mismatches_invariance": 0,
+        "errors": 0
+      },
+      {
+        "k": 5,
+        "num_vars": 2,
+        "dags_tested": 5,
+        "perms_per_dag": 120,
+        "comparisons": 600,
+        "mismatches_cross_engine": 0,
+        "mismatches_invariance": 0,
+        "errors": 0
+      },
+      {
+        "k": 6,
+        "num_vars": 2,
+        "dags_tested": 5,
+        "perms_per_dag": 720,
+        "comparisons": 3600,
+        "mismatches_cross_engine": 0,
+        "mismatches_invariance": 0,
+        "errors": 0
+      },
+      {
+        "k": 7,
+        "num_vars": 2,
+        "dags_tested": 2,
+        "perms_per_dag": 5040,
+        "comparisons": 10080,
+        "mismatches_cross_engine": 0,
+        "mismatches_invariance": 0,
+        "errors": 0
+      },
+      {
+        "k": 8,
+        "num_vars": 2,
+        "dags_tested": 1,
+        "perms_per_dag": 40320,
+        "comparisons": 40320,
+        "mismatches_cross_engine": 0,
+        "mismatches_invariance": 0,
+        "errors": 0
+      }
+    ],
+    "mismatch_cases": []
+  },
+  "gate2": {
+    "dags_tested": 10000,
+    "comparisons_made": 10000,
+    "mismatches": 0,
+    "errors": 0,
+    "pass": true,
+    "corpus_seed": 20260101,
+    "dags_generated": 43222,
+    "dags_discarded_unreachable": 33222,
+    "discard_rate": 0.7686,
+    "k_distribution": [
+      {
+        "k": 1,
+        "count": 116
+      },
+      {
+        "k": 2,
+        "count": 326
+      },
+      {
+        "k": 3,
+        "count": 509
+      },
+      {
+        "k": 4,
+        "count": 572
+      },
+      {
+        "k": 5,
+        "count": 620
+      },
+      {
+        "k": 6,
+        "count": 573
+      },
+      {
+        "k": 7,
+        "count": 607
+      },
+      {
+        "k": 8,
+        "count": 664
+      },
+      {
+        "k": 9,
+        "count": 663
+      },
+      {
+        "k": 10,
+        "count": 611
+      },
+      {
+        "k": 11,
+        "count": 581
+      },
+      {
+        "k": 12,
+        "count": 638
+      },
+      {
+        "k": 13,
+        "count": 638
+      },
+      {
+        "k": 14,
+        "count": 589
+      },
+      {
+        "k": 15,
+        "count": 569
+      },
+      {
+        "k": 16,
+        "count": 459
+      },
+      {
+        "k": 17,
+        "count": 425
+      },
+      {
+        "k": 18,
+        "count": 320
+      },
+      {
+        "k": 19,
+        "count": 197
+      },
+      {
+        "k": 20,
+        "count": 173
+      },
+      {
+        "k": 21,
+        "count": 84
+      },
+      {
+        "k": 22,
+        "count": 43
+      },
+      {
+        "k": 23,
+        "count": 16
+      },
+      {
+        "k": 24,
+        "count": 4
+      },
+      {
+        "k": 25,
+        "count": 3
+      }
+    ],
+    "mismatch_cases": []
+  },
+  "gate3": {
+    "dags_tested": 10000,
+    "comparisons_made": 20000,
+    "mismatches_engine_a": 0,
+    "mismatches_engine_b": 0,
+    "errors": 0,
+    "pass": true,
+    "dags_with_oversaturated_binary": 15,
+    "max_binary_indegree_seen": 4,
+    "mismatch_cases": []
+  }
+}

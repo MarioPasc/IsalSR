@@ -15,6 +15,28 @@
 
 ---
 
+## Gate-3 completeness counterexamples — CLOSED 2026-08-05
+
+The five gate-3 round-trip failures escalated to this ticket on 2026-08-03 are
+**resolved and were never a defect in the representation.** Re-running the full
+B4 harness on `3d5a79c` gives gate 1 54,765 / 0, gate 2 10,000 / 0 and **gate 3
+10,000 DAGs / 20,000 comparisons / 0 mismatches on both engines** — with 15
+over-saturated binary nodes present in the corpus, so the check still bites.
+
+The cause was **T18**: `is_isomorphic` compared the whole `ordered_inputs` list,
+while Σ_SR encodes `ordered_inputs(v)[0]` and nothing further. The checker was
+therefore strictly finer than the canonical string, and the "unsound merges" were
+its own false positives. Locked by `tests/unit/test_t18_operand_order_completeness.py`.
+
+**This does not discharge T07.** What remains is §7bis.2 — Ezequiel's five Lemma
+3.14/A.2 gaps plus the Theorem 3.13 domain mismatch. Those are alphabet- and
+engine-independent and are unaffected by this result.
+
+Evidence: `T07-appendix/gate_all_3d5a79c_2026-08-05.json`; EXECUTION-PLAN §11.1,
+2026-08-05.
+
+---
+
 ## T16 impact — Branch B is IMPLEMENTED, and one scope clarification is owed to the completeness theorem (added 2026-07-30)
 
 **Branch B is no longer a decision, it is code.** Both adapters emit the paper's
