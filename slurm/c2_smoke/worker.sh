@@ -81,10 +81,34 @@ TASK_ID="${SLURM_ARRAY_TASK_ID:-1}"
 # short seed list is the exact failure that made 2/3 of the first wave die with
 # "index out of range" while the other 1/3 produced correct-looking cells.
 SEEDS="${SEEDS//:/,}"
-N_SEEDS_DECODED=$(awk -F, '{print NF}' <<<"${SEEDS}")
+
+# 🔴 The count must EXPAND ranges.  `c2_task_spec` accepts both an explicit list
+# ("0,101,102") and a range ("1-30"), and the campaign profile ships the range --
+# so a plain field count sees ONE field and this guard killed all 12,600 campaign
+# tasks in seconds on 2026-08-06, with "decoded to 1 seed(s): '1-30'".
+#
+# The guard itself is right and stays: a silently short seed list is what made
+# 2/3 of an early wave die with "index out of range" while the other 1/3 produced
+# correct-looking cells.  It was the ARITHMETIC that did not know about ranges.
+#
+# Why no wave caught it: Stage C runs the smoke profile, whose seeds are
+# "0,101,102".  The campaign's "1-30" was therefore never executed by any of the
+# four certification waves, and `sbatch --test-only` accepts a job without ever
+# running the worker -- so 42/42 "accepted" proved nothing about the payload.
+# The campaign profile now has its own decode check (Stage F G12).
+N_SEEDS_DECODED=$(awk -F, '{
+    n = 0
+    for (i = 1; i <= NF; i++) {
+        if ($i ~ /^[0-9]+-[0-9]+$/) { split($i, r, "-"); n += r[2] - r[1] + 1 }
+        else if ($i != "")          { n += 1 }
+    }
+    print n
+}' <<<"${SEEDS}")
 if [[ "${N_SEEDS_DECODED}" -lt 2 ]]; then
     echo "[FATAL] C2_SEEDS decoded to ${N_SEEDS_DECODED} seed(s): '${SEEDS}'." >&2
-    echo "        Stage C requires three. Check the launcher's --export quoting." >&2
+    echo "        At least two are required. Check the launcher's --export quoting;" >&2
+    echo "        sbatch --export is comma-separated, so a comma inside a VALUE is" >&2
+    echo "        parsed as the next variable and truncates the list." >&2
     exit 1
 fi
 

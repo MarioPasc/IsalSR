@@ -305,6 +305,45 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# G12 -- the CAMPAIGN payload decodes.  `--test-only` never runs the worker.
+# ---------------------------------------------------------------------------
+# 🔴 This gate exists because its absence cost the whole first submission.  On
+# 2026-08-06 all 12,600 campaign tasks died within seconds of starting:
+# the campaign profile ships `C2_SEEDS=1-30`, the worker counted
+# comma-separated fields, saw ONE, and aborted.  Four Stage C waves had passed
+# and G10 had reported 42/42 accepted -- because Stage C runs the SMOKE profile
+# ("0,101,102") and `sbatch --test-only` validates a job's resource request
+# without ever executing its payload.
+#
+# So: exercise the worker's own seed arithmetic against the CAMPAIGN spec, and
+# decode real task indices through the real task-spec module.  No queue time.
+CAMPAIGN_SEEDS="$(sed -n 's/^ *DEF_SEEDS="\(1-[0-9]*\)".*/\1/p' \
+                  "${REPO_LOCAL}/slurm/c2_smoke/launcher.sh" | head -1)"
+AWK_PROG="$(sed -n "/N_SEEDS_DECODED=\$(awk -F, '/,/^}' <<</p" \
+            "${REPO_LOCAL}/slurm/c2_smoke/worker.sh" \
+            | sed -e "s/^.*awk -F, '//" -e "s/'\s*<<<.*$//")"
+
+if [[ -z "${CAMPAIGN_SEEDS}" || -z "${AWK_PROG}" ]]; then
+    bad "G12" "payload: could not extract the campaign seed spec or the worker's guard"
+else
+    N_DECODED="$(awk -F, "${AWK_PROG}" <<<"${CAMPAIGN_SEEDS}" 2>/dev/null)"
+    N_EXPECTED=30
+    FIRST="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" "${PY}" -m experiments.scripts.c2_task_spec \
+             --config "${REPO_LOCAL}/experiments/configs/bingo_nguyen.yaml" \
+             --seeds "${CAMPAIGN_SEEDS}" --index 1 2>/dev/null)"
+    LAST="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" "${PY}" -m experiments.scripts.c2_task_spec \
+            --config "${REPO_LOCAL}/experiments/configs/bingo_nguyen.yaml" \
+            --seeds "${CAMPAIGN_SEEDS}" --index 360 2>/dev/null)"
+    if [[ "${N_DECODED}" != "${N_EXPECTED}" ]]; then
+        bad "G12" "payload: worker guard decodes '${CAMPAIGN_SEEDS}' to ${N_DECODED}, expected ${N_EXPECTED} -- every task would abort"
+    elif [[ -z "${FIRST}" || -z "${LAST}" ]]; then
+        bad "G12" "payload: c2_task_spec could not decode index 1 or 360 at '${CAMPAIGN_SEEDS}'"
+    else
+        ok "G12" "payload: '${CAMPAIGN_SEEDS}' -> ${N_DECODED} seeds; idx 1='${FIRST}', idx 360='${LAST}'"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 echo ""
 echo "==========================================================================="
 printf 'Stage F pre-flight: %d PASS, %d FAIL\n' "${N_PASS}" "${N_FAIL}"
