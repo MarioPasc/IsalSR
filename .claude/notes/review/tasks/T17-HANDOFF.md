@@ -1,9 +1,10 @@
-# C2 handoff — Stage D is running; what is left
+# C2 handoff — pre-flight A–E are GO; what is left
 
 **Rewritten**: 2026-08-05 (supersedes the 2026-08-03 version entirely)
 **Branch**: `feature/cpp-core-port`, pushed. Deployed commit: `00635ae`
-**Campaign state**: pre-flight A–C complete and signed; **Stage D running**;
-Stage E ready to start in parallel; C2 itself **not submitted** (SP-0: Mario only)
+**Campaign state**: pre-flight **A–E complete** — A–C signed, **Stage D GO**
+(13/13 cells, 8/8 criteria) and **Stage E GO** (7/7 checks, 2026-08-05);
+C2 itself **not submitted** (SP-0: Mario only)
 
 ---
 
@@ -68,12 +69,28 @@ because HOME is over quota with grace expiring. Results:
 
 ## 3. Open work, in priority order
 
-### 3.1 Stage E — startable now, in parallel with D
-Input is `c2_smoke_v4/` (1,260 runs, 3 arms × 3 seeds, all 60 fields, 420 valid
-paired-stat files). A8 is closed, so E1/E2/E4/E5 have real three-arm input.
-**Read `audit.md` §6.1 and §7.3 before touching the analyzer.** E3 and E6 are
-the adversarial checks (inject a NaN; delete a run) and are the point of the
-stage. Nothing in Stage E writes to a campaign root.
+### 3.1 ✅ Stage E LANDED 2026-08-05 — `GO`, 7/7 checks, 182 s
+Ran **locally** on `c2_smoke_v4/` (1,260 runs, 3 arms × 3 seeds). Harness
+`experiments/scripts/stage_e_certify.py`; write-up
+`docs/md_files/changes/stage_e_design.md`; runbook `slurm/c2_stage_e/RUNBOOK.md`.
+
+**Four defects found, three of which every generator exited 0 on:**
+
+| # | Defect | Fix |
+|---|---|---|
+| **E4** | The D2 extension **broke LaTeX compilation** — identifiers typeset raw, and every T05 D2 name carries an underscore (`strogatz_vdp1`, `liv_19`, `pagie_2`, `feynman_remainder`). **18 rows per table × 4 tables**: exactly the rows the coverage extension added | `_latex_escape` at three emission sites |
+| **E5** | The **hash arm vanished from every CD diagram** — `generate_critical_difference.py` iterated a hardcoded `["baseline","isalsr"]`, giving 4 groups where 2 methods × 3 arms gives 6. `cross_method.py` had been extended for three arms; the figure generator had not | `--variants` threaded through both loaders, all four generators and both CLIs |
+| **E6/E7** | **Neither check existed.** `reconcile()` sat unused in `status_ledger.py`; there was no provenance check at all | `analyzer/completeness.py`, failing closed with exit 2 |
+
+**Two carries.** `git_commit` is `None` on all 1,260 runs, so a guard keyed on it
+would pass **vacuously on every campaign** (the SP-6 trap) — the guard keys on
+`git_describe`/`git_dirty`/`build_hash` and reports absent keys as
+*non-informative*, never as agreement. And the guard **independently rediscovered
+v4's dirty split**, so the owed clean Stage C wave is now enforced by code.
+
+🔴 **Owed: re-run Stage E on v5.** It passed on v4 only with
+`--allow-mixed-provenance`. On v5 it must pass **without** it, or the
+`campaign/c2` tag must not be cut.
 
 ### 3.2 ✅ Stage D LANDED 2026-08-05 — `GO`, 13/13 cells, 8/8 criteria
 

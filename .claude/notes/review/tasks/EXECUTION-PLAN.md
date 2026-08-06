@@ -12,7 +12,7 @@ disagree about a launch, **this file wins**; update the ticket.
 | Budget per run | `max_time = 43,200 s` (12 h), 1 core |
 | Core-hours | **100,800** committed |
 | Launch model | **one gated launch, all six arrays** — nothing submits until every blocker and every pre-flight gate in §4 has passed |
-| Status | **NOT SUBMITTED.** Pre-flight A–C complete and signed; **Stage D running** (§4.4, 13 cells, jobs 1769422–1769425); Stage E ready to start in parallel on `c2_smoke_v4/`. Remaining before launch: Stage D verdict, D3, E1–E7, one clean Stage C wave on the final config, HOME quota, Stage F sign-off, `campaign/c2` tag |
+| Status | **NOT SUBMITTED.** Pre-flight A–E complete: A–C signed, **Stage D GO** (§4.4, 13/13 cells, 8/8 criteria) and **Stage E GO** (§4.5, 7/7 checks, 2026-08-05, `stage_e_certification.json`). Remaining before launch: D3, one clean Stage C wave (**v5**) on the final config, HOME quota, Stage F sign-off, `campaign/c2` tag. ⚠ **Stage E must be re-run on v5** and must then pass **without** `--allow-mixed-provenance`; v4 needed it because 161 of its cells recorded `a455d6c-dirty` |
 | Number freeze | 2026-09-10 |
 
 ---
@@ -629,6 +629,23 @@ framing in the paper changes and §10.1 must record that we knew.
 
 ### 4.5 Stage E — analysis dry-run on the pre-flight data
 
+> ✅ **EXECUTED 2026-08-05 on `c2_smoke_v4/`: GO, 7/7, 182 s.** Harness
+> `experiments/scripts/stage_e_certify.py`; runbook `slurm/c2_stage_e/RUNBOOK.md`;
+> write-up `docs/md_files/changes/stage_e_design.md`. Per-check evidence in
+> §11.2; the four defects it found are in §11.1 (2026-08-05).
+>
+> **It runs locally, not on Picasso** — every failure needed an analyzer fix and
+> a deploy is a config edit (defect 10), `analyze.py`/`generate_tables`/the figure
+> suite are the local step in September anyway, E3/E6/E7 mutate copies of the
+> root, and E4 needs `pdflatex`. Cost is a soft probe: the analyzer is 49 s on
+> 1,260 runs ⇒ **≈5.5 min at 8,400**, which must not be confused with the
+> orchestrator's `--postprocess only` aggregation (1 h 35 m ⇒ ≈11 h).
+>
+> 🔴 **Owed: re-run on the v5 root.** E1 passed on v4 only with
+> `--allow-mixed-provenance`, because the guard rediscovered v4's own dirty split
+> (`a455d6c` ×1,099 vs `a455d6c-dirty` ×161). On v5 it must pass **without** that
+> flag; if it does not, the wave was not clean and `campaign/c2` must not be cut.
+
 The analysis pipeline has **never** been run on three arms. Discovering that in
 September is the single most expensive failure mode left.
 
@@ -1223,7 +1240,7 @@ wrong at cost:
 | D | D1.1–D1.8 | 12-task full-length certification | 2026-08-05 | ✅ **GO — 13/13 cells COMPLETED, 8/8 criteria PASS, 0 blocking failures.** D1.1 min headroom 25.0 % of the 16 h wall; D1.2 min headroom 96.2 %; D1.3 12/12 artefact sets; **D1.4 2/2 finite — the C1 NaN does not recur**; D1.5 0/4 ρ violations; **D1.6 0 ρ and 0 R² excursions over 8 comparisons**; D1.7 12/12 with T_canon and T_eval > 0; D1.8 manifest validated. ⚠ D1.6 came back **SKIP** on Picasso — its C1 reference is a workstation path the compute node cannot see — and was re-run locally to a PASS. Evidence: `c2_stage_d/c2_preflight/stage_d_certification{,_with_c1}.{json,md}` | `stage_d_certification_with_c1.md` |
 | D | D2 | Detailed single-problem trace | 2026-08-05 | **RUNNING as cell 13.** Bingo × Pagie-1 × isalsr at **seed 102** under `bingo_hard_trace.yaml` (`shadow_hash: true`), sampling 1 candidate in 100 (571.7 B/record measured). Split from cell 10 so the certification cells stay clean — audit.md §7.3 | `c2_trace/` |
 | D | D3 | T04 Mode 1 replay + soundness | | **Ready, gated on D2's stream.** `experiments/scripts/stage_d_mode1_replay.py`: ρ_exact/ρ_iso/ρ_total per method stratified by `k`, hash soundness (equal fixed-order hash ⇒ equal canonical string, a loud failure) and IsalSR soundness spot-check. **Now also the sole source of the fixed-order numbers**, since the shadow sketches are off campaign-wide (§7.3) | |
-| E | E1–E7 | Analysis dry-run on 3 arms | | **READY TO START — runs in parallel with Stage D.** Input is `c2_smoke_v4/` (1,260 runs, 3 arms × 3 seeds, all 60 fields, 420 valid paired-stat files). A8's machinery is closed, so E1/E2/E4/E5 have real three-arm input. **Read audit.md §6.1 and §7.3 first**: ρ is descriptive against the definitional baseline and inferential only on isalsr-vs-hash, main tables print `p_value_holm`, and the ρ CPDT footer must never render `$nan$` | |
+| E | E1–E7 | Analysis dry-run on 3 arms | 2026-08-05 | ✅ **VERDICT: GO — 7/7 checks PASS**, 182 s end to end on `c2_smoke_v4` (1,260 runs, 3 arms × 3 seeds). **E1** 103 artefacts, all 6 families, all 3 arms, 49 s ⇒ ≈5.5 min at C2's 8,400. **E2** 3 contrasts × 5 metrics × 16 files; audit §6.1 policy holds on real data — ρ `descriptive` vs baseline, two-sided where unregistered, ρ inferential only on `isalsr_vs_hash` with a Holm family of 1; Friedman over 6 groups. **E3** injected NaN never bolded, paired N 3→2, table discloses `[2]`, conservative substitution present. **E4** 6 tables emitted, **6 compiled**, zero `nan` cells. **E5** all 10 CD diagrams at 6 groups. **E6** refused with exit 2, named `udfs/nguyen/nguyen_1/baseline/seed_00`, 395/396 reconciled. **E7** refused with exit 2, named `build_hash`/`config_sha256`/`git_describe`. **Four defects found and fixed — three invisible to an exit code** (§11.1, 2026-08-05). ⚠ **Re-run on v5 and it must pass E7 without `--allow-mixed-provenance`, or the tag must not be cut** | `c2_stage_e/artefacts/stage_e_certification.{json,md}`, `docs/md_files/changes/stage_e_design.md`, `slurm/c2_stage_e/RUNBOOK.md` |
 | F | — | Sign-off (Mario) | | | |
 
 ### 11.3 Launch ledger
