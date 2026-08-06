@@ -40,19 +40,59 @@ discoverable from the application code.
 
 ```bash
 # 0. From the workstation, repo root, on the commit to be tagged.
+#    If the tree carries another agent's uncommitted work, deploy from a clean
+#    clone of the branch tip -- deploy.sh refuses a dirty tree and it is right
+#    (defect 14).  Never commit someone else's files.
 bash slurm/c2_smoke/deploy.sh          # rsync incl. .git, verify SP-1, rebuild, verify SP-2
 
 # 1. The gate. Submits nothing; exits non-zero on any failure.
 bash slurm/c2_campaign/stage_f_preflight.sh
 
-# 2. Dry run, then the cluster-side accept test, then the campaign.
+# 2. Preview, then submit.  PACED -- see the box below.
 bash slurm/c2_campaign/launch.sh --dry-run
-bash slurm/c2_campaign/launch.sh --test-only     # runs ON Picasso (defect 15)
-bash slurm/c2_campaign/launch.sh                 # 42 arrays, 12,600 tasks
+ssh picasso 'cd $REPO && bash slurm/c2_campaign/submit_paced.sh --dry-run'
+ssh picasso 'cd $REPO && bash slurm/c2_campaign/submit_paced.sh'
 ```
 
+> ### 🔴 Submit with `submit_paced.sh`, not `launch.sh`
+>
+> `launch.sh` submits all 42 arrays in a tight loop. On 2026-08-06 that got
+> `Slurm temporarily unable to accept job / Resource temporarily unavailable`
+> after **29 of 42**, aborting *before* it wrote `job_ids.txt` or submitted the
+> aggregation — leaving 29 untracked arrays on the cluster. Re-submitting the
+> remaining 13 with a 20 s gap succeeded with **zero** refusals, so the binding
+> constraint is slurmctld RPC **rate**, not `MaxJobCount`.
+>
+> `submit_paced.sh` paces at 20 s (`C2_SLEEP` to raise it) and is **idempotent**:
+> it skips arrays that already exist, so re-running after an abort completes the
+> set instead of duplicating it. It submits the aggregation only once all 42
+> exist. `launch.sh` remains the gate-plus-delegation entry point and is correct
+> for a smoke-sized wave.
+>
+> **Your first act after any submission error is `squeue`** — assume jobs exist
+> until proven otherwise.
+
 `launch.sh` refuses to submit unless `stage_f_preflight.sh` passes, so step 1 is
-a preview of the gate rather than a separate obligation.
+a preview of the gate rather than a separate obligation. `submit_paced.sh` does
+**not** run the gate: run it yourself, or use it only to finish a partial
+submission the gate already cleared.
+
+### 2a. Verify the payload before trusting the submission
+
+`sbatch --test-only` validates a **resource request** and never runs the worker.
+On 2026-08-06 it reported 42/42 accepted while every task was about to abort on
+its seed spec. Gate **G12** now decodes the campaign seed spec through the
+worker's own arithmetic, but the strongest check is cheap and takes four
+minutes:
+
+```bash
+# 42 real campaign-profile tasks, short payload, throwaway root
+C2_PROFILE=campaign C2_MAX_TIME=240 \
+C2_RESULTS_DIR=$FSCRATCH/results/isalsr/c2_probe \
+C2_LOGS_DIR=$FSCRATCH/execs/isalsr/c2_probe/logs \
+  bash slurm/c2_smoke/launcher.sh --one-task
+# expect: 42/42 COMPLETED, 42 run_log.json, three arms x 14
+```
 
 ---
 

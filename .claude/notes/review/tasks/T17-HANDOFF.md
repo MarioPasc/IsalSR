@@ -9,6 +9,46 @@ C2 itself **not submitted** (SP-0: Mario only)
 
 ---
 
+## 🔴 2026-08-06 — C2 WAS SUBMITTED AND FAILED. Read this before resubmitting.
+
+**All 12,600 tasks died within seconds of starting**, with
+
+```
+[FATAL] C2_SEEDS decoded to 1 seed(s): '1-30'.
+```
+
+`c2_task_spec` accepts both an explicit seed list and a range; the campaign
+profile ships the range `1-30`; `worker.sh`'s guard counted comma-separated
+fields, saw one, and aborted. The range was correct everywhere else — index 1 →
+`Nguyen-1` seed 1, 30 → seed 30, 31 → `Nguyen-2` seed 1, 360 → `Nguyen-12` seed
+30. **Near-zero core-hours burned** (tasks exited on startup); the cost was a
+submission cycle.
+
+**Why nothing caught it — the transferable lesson.** Stage C runs the **smoke**
+profile (`0,101,102`), so the campaign's `1-30` had never been executed by v5,
+v5b, v5c or v5d. And G10's "42/42 accepted" came from `sbatch --test-only`,
+which validates a *resource request* and never runs the payload. Both checks
+were green and neither was looking at the thing that broke.
+
+**Closed in `2ff0050`** — range-aware guard (verified non-vacuous),
+`test_worker_seed_decode.py` (extracts the awk program *from `worker.sh`* so it
+cannot drift, and fails if a profile gains an uncovered spec), Stage F **G12**,
+and a **live 42-task campaign-profile probe**: 42/42 COMPLETED, three arms × 14,
+provenance `campaign/c2-2-g2ff0050`.
+
+⚠ **The `campaign/c2` tag currently points at `24f83a0`, whose `worker.sh` cannot
+run.** It must be moved onto the v5e-certified commit before resubmission
+(procedure §4). Do not submit against the tag as it stands.
+
+**Submission rate, not `MaxJobCount`.** The same launch got
+`Resource temporarily unavailable` after 29 of 42 arrays submitted in a tight
+loop; a 20 s gap cleared it with zero refusals. Largest single array is **420**,
+so the per-array 1,000-job threshold was never in play. Use
+`slurm/c2_campaign/submit_paced.sh`, which paces and is idempotent — re-running
+after an abort completes the set rather than duplicating it.
+
+---
+
 ## 2026-08-06 — what changed today, read this first
 
 **Stage F was approved, and two blocking defects were found on the way to it.**
