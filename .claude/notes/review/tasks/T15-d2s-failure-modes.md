@@ -7,10 +7,10 @@
 | Owner | **Mario** (+ Claude Code); theory half needs **Ezequiel** |
 | Depends on | T01 (C++ engine, for the real-data half) |
 | Blocks | T06 (its violation-rate definition), T07 (the theorem's hypotheses) |
-| Status | **IN PROGRESS** — AC-1…AC-7 all met; **fix applied** (minimal CONST repair, both engines). AC-4's UDFS half closed 2026-07-28 from T06 (array `1672959`, 234,865 DAGs, 0 failures). Remaining: **AC-3′** (Ezequiel) and the Status/close decision, which is Mario's. |
+| Status | **IN PROGRESS — everything Mario owns is met and re-verified against HEAD; the close decision is pending Mario.** AC-0…AC-7 met. The minimal `Const`-creation repair is shipped and confirmed in **both** engines (`labeled_dag.py:701–715`, `labeled_dag.cpp:339–375`), and the canonicaliser and `is_isomorphic` do **not** apply it in either engine (`canonical.py:192–201`/`:252–261`/`:388–397`, `canonical.cpp:409–418`, `labeled_dag.py:472–481`). AC-4's UDFS half closed 2026-07-28 from T06 (array `1672959`, 234,865 DAGs, 0 failures). **Open: AC-3′, which is Ezequiel's** (a cost/termination clause beside a correctness theorem, not a correctness gap). **Recommendation: close as DONE and move AC-3′ to T07 §7bis.2** — evidence and the counter-argument in §7's 2026-08-06 entry. **Not closed here; that is Mario's decision.** |
 | Target | 2026-08-17 (before Wave 1, because the real-data half needs campaign instrumentation) |
 | Opened | 2026-07-27, by Mario, from a T01 finding |
-| Last worked | 2026-07-27 — mechanism corrected, fix applied to both engines, Bingo half of AC-4 measured |
+| Last worked | 2026-08-06 — re-verified against HEAD; three statements in §3, §5.2 and §7 found stale and annotated; close recommendation written |
 
 > **Start here if you are picking this up fresh.** §3 has the confirmed root
 > cause, §2 lists every file you need with line numbers, and §7 records what was
@@ -549,6 +549,100 @@ fix**. Results: `…/results/t15_norm_arms/{synthetic_100k.json,bingo_local/}`.
 - **`methodology.tex` Table 3 line 830** still describes the old relocation
   (`// redirect all Const creation edges to x_1`). Ezequiel's call; the theorem
   itself now holds as stated, which is the cheaper outcome.
+
+### 2026-08-06 — re-verified against HEAD; three statements above are stale; close recommendation
+
+The ticket's claims were checked line by line against the shipped code. **The
+substance holds.** Where the ticket and the code disagree, the code is newer and
+the code wins: T15's last dated entry is 2026-07-27, with an embedded update on
+2026-07-28, while `canonical.cpp` last moved 2026-07-29, `canonical.py`
+2026-07-31 and `labeled_dag.py` 2026-08-04. Everything below follows the code.
+
+**What is confirmed in HEAD, both engines.**
+
+| Claim | Where it lives now |
+|---|---|
+| The repair adds `x_i → c` **only** for `Const` nodes of in-degree 0, taking the lowest-indexed variable that does not close a cycle, and removes no edge | `src/isalsr/core/labeled_dag.py:701–715`; `native/src/labeled_dag.cpp:339–375` |
+| The canonicaliser does **not** apply the repair, at any of its three entry points | `src/isalsr/core/canonical.py:192–201`, `:252–261`, `:388–397`; `native/src/canonical.cpp:409–418` |
+| `is_isomorphic` does not apply it either | `src/isalsr/core/labeled_dag.py:472–481` |
+| Production DAGs are repaired producer-side instead | `experiments/models/bingo/adapter.py`, `experiments/models/udfs/adapter.py`, `_normalize_const_edges` |
+| Both engines refuse an unencodable input rather than silently repairing it | `canonical.py:1199`, `canonical.cpp:313` |
+
+One mechanism detail is worth stating precisely, because it is described loosely
+in several places. There is **no dedicated precondition check**. An in-degree-0
+`Const` is refused because the D2S sweep runs out of legal operations, which
+surfaces as the generic exhaustion error. The effect is what the ticket claims;
+the mechanism is not a guard.
+
+**Three statements above are stale and must not be quoted.**
+
+1. **§3, the 6/6 failure table**, is framed as "`fast_canonical_string` (applies
+   normalisation) → 6/6 fail". The canonicaliser has not applied normalisation
+   since 2026-07-29. The table is a historical record of the diagnosis, not a
+   description of current behaviour.
+2. **§5.2** says the repair "anchors every `Const` to node 0 unconditionally".
+   That is false of `normalize_const_creation` and has been since the fix. It is
+   still true of the **adapters'** `_normalize_const_edges`, which is a different
+   function with a different precondition; the two were conflated.
+3. **§7's `fast_canonical_string_raw` distinction** treated "raw" as the variant
+   that skips normalisation. Production skips it too, so the distinction no longer
+   separates anything.
+
+By the same token, **AC-2's and AC-3's numbers are archival**: they were measured
+against a canonicaliser that applied normalisation, and that code path no longer
+exists. They remain valid as evidence for the decision they justified. They cannot
+be reproduced from HEAD, and nothing reader-facing should cite them as current.
+
+**A code-hygiene defect, recorded but not fixed here.** `canonical.py:190–191`
+still carries a comment saying normalisation is applied before canonical
+computation, directly above the line that says it is not. Cosmetic, contradictory,
+and a trap for the next reader. Left for whoever next edits that file.
+
+**Per-item sign-off.** Read this as the review surface; nothing below needs
+re-deriving.
+
+| AC | Owner | State | Evidence, re-checked against HEAD |
+|---|---|---|---|
+| AC-0 | Mario | ✅ met | §7, four dated entries including this one |
+| AC-1 | Mario | ✅ met | the six DAGs characterised with figure and common structural feature, `docs/md_files/changes/d2s_canonicalisation_failures.md` |
+| AC-2 | Mario | ✅ met, **numbers archival** | bypassing the old normalisation took 6/6 failures to 0/6; measured against a code path that no longer exists, so do not cite it as current behaviour |
+| AC-3 | Mario | ✅ met, **numbers archival** | 10⁵ random S2D DAGs, zero genuine failures under the repaired policy against 48 under the old one; 0 edges dropped, 0 disagreements against no-normalisation |
+| AC-4 | Mario | ✅ met, both hosts | Bingo 12,176,790 DAGs / 0 failures, Wilson 95 % upper 3.1×10⁻⁷; UDFS 234,865 DAGs / 0 failures in all three arms, Wilson 95 % upper 1.64×10⁻⁵ |
+| AC-5 | Mario | ✅ met | the refusal path is documented; note the mechanism is D2S exhaustion, not a dedicated precondition guard (`canonical.py:1199`, `canonical.cpp:313`) |
+| AC-6 | Mario | ✅ met | `tests/unit/test_const_normalization_repair.py`, parametrised over both engines; twelve old-contract tests rewritten in place, none suppressed |
+| AC-7 | Mario | ✅ met | §8 filled, with hand-over to T07, T06 and T02 |
+| **AC-3′** | **Ezequiel** | ⬜ **open** | termination within a budget: 46 of 100,000 precondition-satisfying DAGs at k = 24–30 exceed the probe's 10 s; production allows 60 s and sees none |
+| Status / close | **Mario** | ⬜ **pending** | recommendation below; not decided here |
+
+**Recommendation on the close decision — Mario's call, not this entry's.**
+
+**Recommended: close T15 as DONE and move AC-3′ to T07 §7bis.2.** The evidence:
+
+- The ticket's own deliverables are all discharged. The root cause is confirmed
+  and corrected in `§7`, the six cases are characterised, the fix is shipped in
+  both engines, and the real-data half is measured on both hosts
+  (12,176,790 Bingo DAGs and 234,865 UDFS DAGs, zero failures in every arm).
+- Its outputs have already been consumed downstream and have shipped. T06 took the
+  violation-rate definition, T07 took the hypothesis, and both R1.2 and R1.3 are
+  written into `reviews/response_to_reviewers.tex` on the strength of them.
+- AC-3′ is not a correctness gap. It asks for a cost clause beside a correctness
+  theorem: the reachability hypothesis is sufficient for success but says nothing
+  about time, and 46 of 100,000 synthetic DAGs at k = 24–30 exceed a ten-second
+  probe budget. That is a statement about a theorem, and the theorems are T07's.
+- The reviewer-facing obligation AC-3′ creates is **already discharged**. R2.1
+  volunteers the termination-versus-cost limitation in the letter, with the 46 of
+  100,000 figure and the 10,286,517 Bingo and 265,092 UDFS candidates that meet the
+  sixty-second production budget without a single failure. Keeping T15 open no
+  longer protects anything the reviewers will see.
+- The counter-argument, which is why this is a recommendation and not a decision:
+  moving an open item across tickets is how items get lost, and T07's §7bis is
+  already carrying six things for Ezequiel. If the preference is to keep the owner
+  and the item together, leave T15 open at **IN PROGRESS** and close it when
+  Ezequiel signs off; the cost of that is only that a ticket with no Mario-side
+  work sits open for a few weeks.
+
+Whichever way it goes, the three stale statements above should be struck or
+annotated before anyone reads this ticket cold.
 
 ---
 

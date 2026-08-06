@@ -7,7 +7,7 @@
 | Owner | **Ezequiel** (primary — proofs, `methodology.tex`) · **Mario** (empirical verification, tests) |
 | Depends on | — (can start immediately; independent of compute) |
 | Blocks | T03 phase 3, T06, T13 |
-| Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis. The **T16 alphabet fork is RESOLVED (2026-07-30, Branch B — the code aligns to the paper)**, so `𝓝 = {Pow}` and Definition 3.9(iv), Rule 1's prose and Definition 3.2 all stand as submitted: **D-2 and D-3 evaporate and §7bis.3 is now empty of work.** What remains for Ezequiel is §7bis.2 alone: the five Lemma 3.14/A.2 gaps plus a sixth, the Theorem 3.13 domain mismatch. All of it is alphabet-independent and none of it is blocked. Remaining for Mario: AC-9 (page cost → T13) and AC-10 (§8). |
+| Status | **Mario's half COMPLETE.** `𝒩` removed from the canonicaliser and `is_isomorphic` in both engines; 7/7 properties hold (`t07_property_check.py`); 4,605 unit + 474 property/integration tests pass; 21 old-contract tests rewritten in place, none suppressed. **AC-5, AC-6, AC-7, AC-8 met** — Theorems 3.13/3.14/3.15 stand **exactly as submitted**. **Proofs NOT STARTED (AC-1…AC-4, Ezequiel)** — see §7bis. The **T16 alphabet fork is RESOLVED (2026-07-30, Branch B — the code aligns to the paper)**, so `𝓝 = {Pow}` and Definition 3.9(iv), Rule 1's prose and Definition 3.2 all stand as submitted: **D-2 and D-3 evaporate and §7bis.3 is now empty of work.** What remains for Ezequiel is §7bis.2 alone: the five Lemma 3.14/A.2 gaps plus a sixth, the Theorem 3.13 domain mismatch. All of it is alphabet-independent and none of it is blocked. **Nothing remains for Mario: AC-9 (page cost, +2 pp attributable to T07 in the main paper) and AC-10 (§8 reconciled against the shipped letter) were both closed 2026-08-06** — see the sign-off table at the end of §7. |
 | Target | 2026-08-24 |
 | Proof patch | **Ezequiel's AC-1…AC-4 patch, with all four blocking repairs applied, is INTEGRATED into `reviews/internal_copy_reviewed_article/` (2026-08-03), changes in blue, review notes stripped.** B0 numbering fixed (3.13/3.14/3.15 preserved; new material at 3.16–3.18), B1 `fcs:=fcs∘𝒩` removed everywhere, B2 CDLL-timing claim replaced by a topological induction, B3 non-emptiness restated over the `𝒫ₙ` sweep, B4 Theorem 3.13 widened. Both documents compile clean. Review: `T07-appendix/ezequiel_patch_review_2026-08-02.md`. **Nothing pushed to Overleaf; `article/` untouched.** |
 | R2.1 answer | **WRITTEN** in `reviews/response_to_reviewers.tex`, with `fig_operand_order.pdf`. R1.3 gains the Lemma 3.17 / Corollary 3.18 paragraph. |
@@ -1171,6 +1171,58 @@ numbered lemma (it would renumber, so it needs a deliberate pass over every
 literal the reviewers quote), and the T18.4 wording fork recorded in
 `T18-canonical-completeness-operand-order.md` §8.
 
+### 2026-08-06 — AC-9 measured, §8 reconciled against the letter, per-item sign-off
+
+**AC-9, page cost — measured, declared, and not acted on.** Trimming and the page
+budget belong to Karl, and the twelve-page limit is explicitly not a constraint on
+this ticket right now, so this is a figure to record rather than a reduction to
+perform. Measured by compiling `HEAD:article/` in a scratch tree against the
+annotated copy, three passes each:
+
+| Document | Submitted | Annotated (all tickets) | Delta |
+|---|---|---|---|
+| `paper/main.pdf` | 12 pp | 15 pp | **+3 pp** |
+| `supplementary/supplementary.pdf` | 10 pp | 13 pp | **+3 pp** |
+
+T07's share of the paper delta was isolated by rebuilding the annotated paper with
+`methodology.tex` reverted to `HEAD` and everything else left in place: that build
+is **13 pp**, so **T07's methodology changes cost +2 of the 3 added pages**, and
+the remaining +1 comes from the other tickets' edits to
+`computational_experiments.tex` (+91/−23 lines) and `introduction.tex` (+56/−13).
+Source deltas for the two files T07 touches: `methodology.tex` +209/−24 lines
+(+10,698 characters), `supplementary.tex` +349/−60 lines (+18,010 characters, of
+which T07 owns the five-step Lemma A.2 proof, Theorem A.1's restatement, Lemma
+3.17 with its four-clause proof, and the Table 2 and Table 3 edits; the rest is
+Appendix D's incidence measurement and the suite text). **Reported to T13.**
+
+**Per-item sign-off.** Read this as the review surface; nothing below needs
+re-deriving.
+
+| AC | Owner | State | Evidence |
+|---|---|---|---|
+| AC-0 | Mario | ✅ met | this §7, ten dated entries |
+| AC-1 | **Ezequiel** | ⬜ open | five Lemma 3.14/A.2 gaps, §7bis.2. Ezequiel's patch is integrated in the annotated copy with the four blocking repairs applied, but the proof is his to sign off |
+| AC-2 | **Ezequiel** | ⬜ open | resolved in the integrated patch by deriving `𝒞_j = 𝒟_j`, so the pool claim is now a derivation rather than an assertion; needs his confirmation |
+| AC-3 | **Ezequiel** | ⬜ open | the hypothesis is used at Step 3, base case and closure, in the integrated proof |
+| AC-4 | **Ezequiel** | ⬜ open | termination by a measure argument over `|E|` accepted operations, Step 4 |
+| AC-5 | Mario | ✅ met | Definition 3.16 with pseudocode, properties and complexity `O(|C| m (|V|+|E|))`; present in the built PDF |
+| AC-6 | Mario | ✅ met | answered by removing `𝒩` from the canonicaliser; Theorems 3.13/3.14/3.15 stand as submitted and keep their numbers in the rebuilt PDF |
+| AC-7 | Mario | ✅ met | 22/22 checks on both engines, `experiments/scripts/t07_theorem_verification.py`, output pinned at `reviews/t07_theorem_verification_output.txt` |
+| AC-8 | Mario | ✅ met | precondition wording unchanged from `methodology.tex`, so T06's rates and phrasing stand |
+| **AC-9** | Mario | ✅ **met, this entry** | +2 pp attributable to T07 in the main paper; supplementary delta is cumulative |
+| AC-10 | Mario | ✅ met | §8 reconciled against the shipped letter text, including the display-object inventory and both `\changeref` bodies |
+
+**Mario's half is complete.** What is left is AC-1 through AC-4, all Ezequiel's,
+all in §7bis.2, and none of it blocked. §7bis is untouched by this entry.
+
+**One check worth recording because it was flagged as open and is not.** T15's
+work log notes that `methodology.tex`'s Table 3 still described the old "redirect
+all `Const` creation edges to `x_1`" relocation. It does not: that pseudocode sits
+inside the `\begin{comment}` block spanning `methodology.tex:883–950` and no
+longer typesets, and the Appendix C replacement in `supplementary.tex:558–562`
+states the precondition in blue. The T15 note predates the 2026-08-03 patch
+integration and is stale.
+
 ---
 
 ## 7bis. Hand-over to Ezequiel — what is left, and what is now settled
@@ -1435,6 +1487,56 @@ five steps as prose; report the free-choice verification; volunteer the
 termination-versus-cost limitation; state that no reported number changes;
 cross-link R1.3 and R2.4.
 
+#### Reconciled against the shipped text, 2026-08-06
+
+Both blocks open on the same three words, **"The reviewer is correct."**
+
+**R2.1**, `reviews/response_to_reviewers.tex`. One display object, the figure
+`fig:operandorder`, "Why Definition~3.5 requires the first-operand restriction".
+No definition, lemma, corollary, algorithm or table environment. The
+no-change sentence shipped twice: "No proof changes as a consequence, and no
+canonical string changes, because the implemented procedure has always applied
+the restriction", and later "None of these corrections changes a reported
+number." Cross-links R1.3 and R2.4. Numbers quoted: the fourteen-line submitted
+proof; five steps; `|E|` accepted operations; 2,000 runs isomorphic in every one;
+4,081 of 4,548 runs excluded a candidate and all 4,548 terminated; 3,538 of 4,548
+(77.79 %) non-isomorphic without the restriction; 13,261 DAGs containing `Pow` of
+which 1,507 exercised an exclusion; 400 random DAGs with agreement on all 400;
+near-$O(k^2)$; 100,000 synthetic DAGs of which 46 at k = 24–30 exceed a
+ten-second budget; 10,286,517 Bingo and 265,092 UDFS candidate DAGs at a
+sixty-second budget. Its `\changeref` names Definition 3.5 and Table 2 of
+Appendix C, the widening of Theorem 3.13, the five-step replacement of Lemma
+A.2's proof, the removal of the first-operand argument from Definition 3.8, the
+separation of the complexity statement from the termination argument, and the
+Table 4 → Table 3 repair shared with R2.4.
+
+**R1.3.** Six display objects: figure `fig:constnorm` on `sin(x₁)+c`; an `rdefn`
+"Normalisation of constant creation edges"; an `algorithm` for `𝒩(D)`; table
+`tab:incidence` over four populations; an `rlemma` "The interface step
+establishes the precondition"; and its `rcoro`. The no-change sentence shipped
+as: "As reported in the preceding paragraph, this correction changes no number
+in the paper." Cross-links R1.2. Its `\changeref` names the new numbered
+definition of `𝒩` in Section 3, the interface lemma and corollary after Theorem
+3.15 with proofs in Appendix A, the first line of Table 3 (Appendix C) replaced
+by the precondition, Appendix D's incidence measurement and k-stratification,
+and Section 6's future-work remark.
+
+**The retracted numbers stayed out.** Neither block quotes ρ ≈ 288, the 99.39 %
+round-trip figure, the 13,394-DAG Rule 1 run, the `Const`-free equivariance
+population, or the synthetic drop-arm round-trip counts. The quoted values match
+§7's post-correction entries.
+
+**The old relocation is disclosed, in R1.3 only**, which is correct because the
+reviewer quoted that policy's own description there: "``Redirect all \textsc{Const}
+creation edges to $x_1$'' describes a relocation: delete the existing in-edges of
+a constant and replace them with an edge from $x_1$. That operation is not
+sound", followed by "The revised manuscript states the operation as in the
+definition above and does not use the word ``redirect''." That is now true of the
+sources: the pseudocode carrying the old gloss sits inside the
+`\begin{comment}` block at `methodology.tex:883–950` and no longer typesets, and
+Appendix C's replacement in `supplementary.tex:558–562` states the precondition
+in blue instead.
+
 ### 8.4 Residual risk
 
 > Candidates: the new proof being judged terse again — mitigate by discharging each
@@ -1442,3 +1544,20 @@ cross-link R1.3 and R2.4.
 > weakening of the headline claim (it is a *correction*, and should be framed as
 > making explicit what the implementation always did); page cost in a paper R2 wants
 > shorter.
+
+Updated 2026-08-06:
+
+- **Page cost is measured and is not a blocker.** See §7's AC-9 entry: +2 pages in
+  the main paper for the methodology half of T07. Trimming and the page budget are
+  delegated to Karl, and the twelve-page limit is explicitly not a constraint on
+  this ticket, so AC-9 is discharged as a declaration rather than as a reduction.
+- **The terseness risk is retired**: the shipped Lemma A.2 proof runs five
+  separately identified steps, and R2.1 walks them in prose so the reviewer sees
+  each gap discharged by name.
+- **Theorem 3.15 was never amended**, so the "reads as a weakening" risk does not
+  arise. It stands exactly as submitted because `𝒩` left the canonicalisation
+  path; the letter says so.
+- **Live risk, unchanged**: the proofs are Ezequiel's and the five Lemma 3.14/A.2
+  gaps plus the Theorem 3.13 domain mismatch in §7bis.2 remain open. R2.1 already
+  ships describing the proof the annotated copy contains, so any change Ezequiel
+  makes to that proof must be reflected back into the letter before submission.

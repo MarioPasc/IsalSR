@@ -7,7 +7,7 @@
 | Owner | **Mario** (`discussion.tex`, `results.tex`) · **Ezequiel** (`conclusion.tex`) |
 | Depends on | T02 (the new `S`), T01 (§8.1 projection), T03 (if Gray changes cost) |
 | Blocks | T12, T13 |
-| Status | NOT STARTED |
+| Status | **IN PROGRESS — text half done, numbers pending T02.** The R1.1 answer is written into `reviews/response_to_reviewers.tex` with every campaign-dependent value wrapped in a new `\pendingnum{}` macro (7 placeholders, listed in §8). E3 is **complete**: "near-linear" is gone from `discussion.tex` and `conclusion.tex` in the annotated copy, and the relation between the O(k^0.7) fit and the near-O(k²) bound is stated once. "Approximately neutral" is gone. AC-2, AC-4, AC-5, AC-6, AC-7, AC-8 met; AC-0 met; **AC-1 met with a negative result** (§8: the §4 formula does **not** follow from the code's `S`); **AC-3 blocked on T02** and re-scoped away from the formula. |
 | Target | 2026-09-10 |
 
 ---
@@ -186,7 +186,122 @@ trust. Then report the measured `T_c/T_e` per method and the implied break-even 
 
 ## 8. Work log
 
-_(empty — to be filled by the implementing agent)_
+### 2026-08-06 — `S` verified against the code; §4's break-even formula does not survive it
+
+**AC-1, and it came out negative.** The formula proposed in §4,
+
+```
+S  =  ρ / (1 + ρ · T_c / T_e)
+```
+
+is **not** what the code computes, and it must not be published. What the code
+computes, and what the manuscript defines, is a ratio of two *measured* times:
+
+| Where | Statement |
+|---|---|
+| `computational_experiments.tex:186–195` | `T_search = T_total − T_canon`; baseline has `T_canon = 0`; `S = T_search^BL / T_search^IS` |
+| `experiments/models/bingo/translator.py:116–124` | `search_only = wall_clock − canonicalization_time − conversion_time − shadow_time` |
+| `experiments/models/udfs/translator.py:116–124` | identical |
+| `experiments/models/analyzer/aggregation.py:397–398` | `speedups.append(m.baseline_mean / m.isalsr_mean)`, guarded to time metrics |
+
+So `S` is an empirical ratio of realised search times, not a model. Two
+consequences, both of which changed what got written:
+
+1. **Under an exhausted, equal wall-clock budget `S > 1` is forced.** If both arms
+   run for the same `T`, then `T_search^BL = T` and `T_search^IS = T − T_canon`, so
+   `S = T/(T − T_canon) ≥ 1` identically. Bingo's `S = 0.93` is therefore only
+   possible because Bingo terminates on convergence rather than on the budget
+   (`evolve_until_convergence(max_time=…)`), so the two arms stop at different wall
+   clocks. The supplementary per-problem table corroborates this: Bingo's `T_BL`
+   and `T_IS` differ per row and sit far below 43,200 s on many problems, while
+   every UDFS row is pinned at the budget.
+2. **The submitted discussion sentence was wrong in a second way**, beyond the
+   adjective. "The wall-clock effect is approximately neutral *after the
+   search-time savings offset the canonicalisation cost*" describes an end-to-end
+   quantity, but `S` has the canonicalisation cost **already removed** from the
+   IsalSR arm before the ratio is taken. `S < 1` therefore says something sharper
+   than "the overhead was not recovered": with the overhead discounted, the
+   deduplicated search still needed more time. That is the reading the letter now
+   uses, and it is the strongest honest form of the concession.
+
+Any correct break-even model would need an extra assumption about the termination
+rule (budget-exhausted versus convergence-terminated), and would give a different
+expression in each case. **§4's derivation and §6 step 1–2 are therefore
+retired**; AC-3 is re-scoped from "state the formula" to "state the condition in
+terms of the two measured quantities `ρ` and `T_eval/T_canon`, and report the
+measured crossover", which is what the letter and the discussion now do. This is
+exactly the risk §9.4 anticipated.
+
+### 2026-08-06 — R1.1 written with visible placeholders; E3 closed
+
+**R1.1.** Written into `reviews/response_to_reviewers.tex`, replacing
+`\todoblock{R1.1}`. A macro was added to the letter preamble next to `\todoblock`:
+
+```latex
+\newcommand{\pendingnum}[1]{{\color{todored}\textsf{[PENDING: #1]}}}
+```
+
+Seven placeholders, all campaign-dependent, all rendered red:
+
+| # | Awaits |
+|---|---|
+| 1 | median per-DAG `T_eval/T_canon`, Bingo |
+| 2 | median canonicalisation overhead as % of total run time, Bingo |
+| 3 | search-only speedup `S`, Bingo, suite-level value for Table 2 |
+| 4 | median per-DAG `T_eval/T_canon`, UDFS |
+| 5 | search-only speedup `S`, UDFS, suite-level value for Table 2 |
+| 6 | the ρ range over which Bingo's `S ≥ 1`, **or** an explicit statement that no such range occurs |
+| 7 | count of suite problems where Bingo's IsalSR arm finishes in less total wall-clock time, with the suite size |
+
+Placeholder 6 is deliberately phrased so it cannot be filled with a
+direction-assuming number. The answer contains **no table**: a table of pending
+cells is worse than none.
+
+Two values are quoted outright because they are facts about the **submitted**
+manuscript rather than about the campaign, and both are traced to §3.1: `S = 0.93`
+(which the reviewer quoted) and `4 of 50` Bingo problems with `T_IS < T_BL`. Both
+stay true whichever way the re-execution moves.
+
+The answer also discloses, unprompted, that the submitted numbers came from a
+Python canonicaliser and from the pre-T16 encoding, that the compiled engine
+lowers the per-canonicalisation cost while the commutative normal form raises it,
+and that we do not predict the net effect. It volunteers the protocol limitation
+(equal wall-clock budgets; an evaluation-count budget would report a different
+number) without claiming which direction that would move.
+
+**E3 — complete, no campaign number needed.** Three occurrences in the annotated
+copy:
+
+| Location | Was | Now |
+|---|---|---|
+| `conclusion.tex:11` | "in near-linear time" | "in near-$O(k^2)$ time", blue |
+| `discussion.tex:97` | "runs in near-linear time" | "runs in near-$O(k^2)$ time", blue |
+| `discussion.tex:21–26` | two median timings "indicate near-linear behavior" | the medians now evidence that the greedy path is taken almost always; growth attributed to the near-$O(k^2)$ analysis of `Section~\ref{sec:canonical}`, blue |
+
+The relation is stated once, at `discussion.tex:100–107`: the `O(k^0.7)` power law
+is a log--log fit over `k ≤ 9` on synthetic DAGs, so it characterises the
+benchmarked range and not the asymptotics, and it sits below the `O(k^2)` bound
+because backtracking seldom fires at those sizes.
+
+`related_work.tex:70` also contains "near-linear", but it describes **1-WL
+hashing's ability to distinguish graphs**, not our canonicalisation cost. It is
+correct and was left alone. `introduction.tex:82` and `related_work.tex:81` were
+already correct.
+
+**AC-5 sweep.** The one surviving unconditional wall-clock claim was
+`discussion.tex:72–74`, "at neutral wall-clock cost". It is gone. `conclusion.tex`
+makes no wall-clock claim.
+
+**Verification.** Letter: two `pdflatex` passes, exit 0 both, `Overfull` 0,
+unresolved references 0. Annotated paper: three passes, `^!` 0, undefined
+references 0, `color{red}` 0, review notes 0; Theorems 3.13/3.14/3.15 keep their
+numbers. `article/` untouched.
+
+**One warning is not ours.** The letter's log carries
+`LaTeX Warning: Float too large for page by 3.64752pt` on the summary-of-changes
+table, which a parallel agent was editing during this session. `git show HEAD` of
+the letter compiles with zero warnings, and nothing in the R1.1 block or the
+preamble macro enters that float. Owner of that table needs to shorten a cell.
 
 ---
 
@@ -196,57 +311,83 @@ _(empty — to be filled by the implementing agent)_
 
 | Quantity | Submitted | Revised | Source |
 |---|---|---|---|
-| `S`, Bingo | **0.93** | | T02 |
-| `S`, UDFS | 1.07 | | T02 |
-| Discussion characterisation | "approximately neutral" | | AC-2 |
-| Break-even condition stated | no | | AC-3 |
-| `T_c / T_e`, Bingo | 3.3 : 1 | | |
-| `T_c / T_e`, UDFS | 1 : 64 | | |
-| Break-even ρ, Bingo | ≈ 1.85 (implicit) | | AC-3 |
-| Problems with `T_IS < T_BL`, Bingo | 4 / 50 (supplementary only) | | AC-4 |
-| Median canon overhead, Bingo | 39.2 % | | |
-| Complexity in conclusion | "near-linear" | | AC-6 |
-| Complexity in discussion | "near-linear" | | AC-6 |
-| Complexity in introduction | near-O(k²) ✓ | unchanged | |
-| Complexity in related work | near-quadratic ✓ | unchanged | |
-| Relationship of O(k^0.7) to O(k²) | unstated | | AC-6 |
-| Answer chosen | — | A / B | §4 |
+| `S`, Bingo | **0.93** | `\pendingnum` 3 | T02 |
+| `S`, UDFS | 1.07 | `\pendingnum` 5 | T02 |
+| Discussion characterisation | "approximately neutral" | **removed**; net cost stated outright, regime given as a joint condition on ρ and `T_eval/T_canon` | AC-2 ✅ |
+| Break-even condition stated | no | **yes, as a condition on the two measured ratios** — not as §4's formula, which the code refutes (§8) | AC-3, re-scoped |
+| `T_c / T_e`, Bingo | 3.3 : 1 | `\pendingnum` 1 | T02 |
+| `T_c / T_e`, UDFS | 1 : 64 | `\pendingnum` 4 | T02 |
+| Break-even ρ, Bingo | ≈ 1.85 (implicit) | `\pendingnum` 6, phrased so "no such range" is a legal answer | AC-3 |
+| Problems with `T_IS < T_BL`, Bingo | 4 / 50 (supplementary only) | **now in the main text**, `discussion.tex`; re-executed value is `\pendingnum` 7 | AC-4 ✅ |
+| Median canon overhead, Bingo | 39.2 % | `\pendingnum` 2 | T02 |
+| Complexity in conclusion | "near-linear" | near-$O(k^2)$ | AC-6 ✅ |
+| Complexity in discussion (×2) | "near-linear" | near-$O(k^2)$ | AC-6 ✅ |
+| Complexity in introduction | near-O(k²) ✓ | unchanged | AC-7 ✅ |
+| Complexity in related work | near-quadratic ✓ | unchanged | AC-7 ✅ |
+| Relationship of O(k^0.7) to O(k²) | unstated | stated once, `discussion.tex:100–107` | AC-6 ✅ |
+| Answer chosen | — | **A**, and structured so it stays true if T02 delivers B | §4 |
+
+Answer A was chosen not because the data favoured it but because the data does not
+exist yet. The text concedes, characterises the regime, and defers only the
+numbers; if T02 returns `S > 1` for Bingo, filling the placeholders converts it
+into Answer B without rewriting a sentence.
 
 ### 9.2 Changes made to the manuscript
 
+Applied to `reviews/internal_copy_reviewed_article/`, in blue. **Not** applied
+under `article/` and **not** pushed to Overleaf.
+
 | File | Lines (revised) | Change |
 |---|---|---|
-| `article/paper/discussion.tex` | | |
-| `article/paper/conclusion.tex` | | |
-| `article/paper/results.tex` | | |
+| `paper/discussion.tex` | 21–31 | the growth-rate inference from two median timings withdrawn; the medians reattributed to backtracking frequency; growth pointed at `Section~\ref{sec:canonical}` |
+| `paper/discussion.tex` | 65–82 | "approximately neutral" removed; net wall-clock cost stated with `S = 0.93` and 4 of 50; sign of `S − 1` given as the joint condition on ρ and `T_eval/T_canon`; "at neutral wall-clock cost" replaced |
+| `paper/discussion.tex` | 100–113 | "near-linear" → near-$O(k^2)$; the `O(k^{0.7})` fit qualified as a range description, with why it sits below the bound |
+| `paper/conclusion.tex` | 10–11 | "near-linear" → near-$O(k^2)$ |
+| `paper/results.tex` | — | untouched; it was already conditional, which is the whole point of the fix |
+| `reviews/response_to_reviewers.tex` | preamble, R1.1 | `\pendingnum` macro added; R1.1 answer written |
 
-### 9.3 Draft response text
+### 9.3 Response text — WRITTEN
 
-```latex
-%% --- R1.1 ---
-\begin{response}
-%% Structure that works here:
-%%  1. Accept the criticism without qualification in the first sentence. The
-%%     reviewer is right; "approximately neutral" was not supportable at S = 0.93.
-%%  2. Answer A: state the regime characterisation and the break-even condition,
-%%     and give the 4-of-50 count. Do not bury it in the supplementary.
-%%     Answer B: give the new S, say plainly that the earlier figure reflected a
-%%     Python implementation, and give the break-even condition anyway so the
-%%     result generalises past our own engine.
-%%  3. Note that the Results section was already conditional and that the fix
-%%     brings the Discussion into line with it, rather than weakening a result.
-%%  4. Volunteer E3 here as well: the same over-reach affected the complexity
-%%     claim ("near-linear" in the discussion and conclusion versus near-O(k^2)
-%%     everywhere else). The reviewer's own B2 statement uses near-O(k^2), so
-%%     they will notice; conceding it unprompted is cheap and reads well.
-\changeref{}
-\end{response}
-```
+In `reviews/response_to_reviewers.tex`, replacing `\todoblock{R1.1}`. Nine
+paragraphs of prose, no display objects, no table, seven `\pendingnum{}`
+placeholders.
+
+The sketch above was followed except on one point. It planned to "state the
+break-even condition as a formula"; the formula is refuted by the code (§8), so
+the letter states the condition in terms of the two quantities that are actually
+measured, `ρ` and `T_eval/T_canon`, and defers the crossover to a placeholder.
+
+R1.1 runs: concede at `S = 0.93` and remove the phrase; say what `S` actually
+measures and show that the submitted sentence described a quantity `S` does not
+report; locate the defect as the mismatch between our own results and discussion
+sections; give the regime as a joint condition on `ρ` and `T_eval/T_canon`;
+disclose that the numbers are being re-measured, why, and that the engine change
+and the alphabet correction push the cost in opposite directions; give the count
+of problems where IsalSR wins end to end, with the submitted 4 of 50 stated
+outright; volunteer the equal-wall-clock-budget limitation; volunteer E3
+unprompted, including that R1's own significance statement already used
+near-$O(k^2)$; `\changeref` to Section 6 and Section 7.
+
+The answer deliberately contains **no** "no reported number changes" sentence.
+Numbers do change here, and claiming otherwise would be the same failure mode the
+comment is about.
 
 ### 9.4 Residual risk
 
-> Candidates: if Answer B is used, a reviewer asking whether the engine change is
-> what produced the improvement rather than the method (it is — say so plainly, and
-> keep the break-even formula so the claim is engine-independent); the break-even
-> formula not matching the code's `S` definition; a remaining unconditional claim
-> in a section not swept.
+- **The placeholders must not ship.** Seven of them, all red. Whoever closes T02
+  fills them from the campaign and re-reads §9.1 for the two hard-coded submitted
+  values (`0.93`, `4 of 50`), which must then be restated as "in the submitted
+  manuscript" or removed if the surrounding sentence no longer needs them.
+- **Anticipated and realised**: "the break-even formula not matching the code's
+  `S` definition" (§9.4 as originally written). It did not match. Handled in §8.
+- If T02 returns `S > 1` for Bingo, a reviewer may ask whether the engine change
+  rather than the method produced it. The letter already answers this: it states
+  the engine change and the alphabet correction up front and declines to predict
+  their net effect, so the improvement is never attributed to the representation.
+- `discussion.tex:65–82` still carries `S = 0.93`, `39\%`, `1.07`, `34\%`, `1.83`,
+  `1.56` and "the $50$ problems". These are the submitted campaign's numbers and
+  are T02/T09's to refresh **as a block**; the calibration change is orthogonal to
+  them and must not be read as having endorsed them.
+- `conclusion.tex` is listed as Ezequiel's in the header. The E3 edit there is one
+  hyphenated complexity claim, made to keep the letter's statement true; flag it to
+  him rather than assuming silent consent.
