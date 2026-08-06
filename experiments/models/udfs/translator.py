@@ -156,6 +156,7 @@ class UDFSTranslator(ResultTranslator):
             max_internal_nodes_seen=max_k,
             theoretical_reduction_bound=theoretical,
             redundancy_rate=redundancy,
+            n_nonstructural=r.n_nonstructural,
         )
 
         # Best expression with IsalSR/canonical strings

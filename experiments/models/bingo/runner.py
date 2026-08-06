@@ -87,6 +87,12 @@ class BingoRawResult(RawRunResult):
     n_total_dags: int = 0
     n_unique_canonical: int = 0
     n_skipped: int = 0
+    # Candidates with zero internal nodes (bare input variables).  Outside the
+    # canonical-string invariant's domain -- every one canonicalises to "" -- so
+    # they are scored by the host but never deduplicated and never counted in
+    # rho.  Recorded per run so the exclusion is a measured quantity rather than
+    # a claim.  See experiments/models/structural_scope.py (D3, 2026-08-06).
+    n_nonstructural: int = 0
     canonicalization_time_s: float = 0.0
     search_only_time_s: float = 0.0
     # Wrapper work inside the wall-clock budget that is not canonicalisation:

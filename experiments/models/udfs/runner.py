@@ -55,6 +55,10 @@ class UDFSRawResult(RawRunResult):
     n_total_dags: int = 0
     n_unique_canonical: int = 0
     n_skipped: int = 0
+    # Zero-internal-node candidates, excluded from dedup and from rho.  Expected
+    # to stay 0 for UDFS (n_calc_nodes = 5 campaign-wide), so a non-zero value
+    # is itself the finding.  See experiments/models/structural_scope.py.
+    n_nonstructural: int = 0
     canonicalization_time_s: float = 0.0
     search_only_time_s: float = 0.0
     # Wrapper work inside the wall-clock budget that is not canonicalisation:

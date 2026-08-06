@@ -104,6 +104,8 @@ def _run_log(spec: StageDCell) -> dict[str, Any]:
         "n_canon_raised": 0 if dedup else None,
         "n_atlas_hits": 42 if dedup else None,
         "n_conversion_failures": 0 if dedup else None,
+        # Structural-scope exclusion (D3, 2026-08-06).
+        "n_nonstructural": 7 if dedup else None,
     }
     return {
         "metadata": {

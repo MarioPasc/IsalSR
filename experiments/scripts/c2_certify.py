@@ -152,6 +152,15 @@ RUN_LOG_FIELD_SPEC: tuple[tuple[tuple[str, ...], tuple[type, ...], bool], ...] =
     (("results", "search_space", "n_canon_timeouts"), (int,), True),
     (("results", "search_space", "n_canon_raised"), (int,), True),
     (("results", "search_space", "n_atlas_hits"), (int,), True),
+    # --- results.search_space (structural-scope exclusion) --------------- #
+    # Deliberately NOT added to LEDGER_FIELDS or FALLBACK_PATH_FIELDS.  Those
+    # five paths are FAILURES of the representation to apply (precondition
+    # violation, timeout, conversion refusal, canon raised) and they are T06's
+    # reachability denominator, which R1.2 quotes.  A k = 0 candidate is not a
+    # failure: it is outside the invariant's domain by construction, since at
+    # k = 0 the relabeling group is 0! = 1 and there is nothing to collapse.
+    # Folding it in would inflate T06's failure rate with a non-failure.
+    (("results", "search_space", "n_nonstructural"), (int,), True),
     # --- results.search_space (effective-population disclosure) ---------- #
     (("results", "search_space", "penalised_in_population_mean"), _NUM, False),
     (("results", "search_space", "penalised_in_population_max"), _NUM, False),

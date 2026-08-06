@@ -47,6 +47,7 @@ from experiments.models.bingo.runner import (
 )
 from experiments.models.fallback_ledger import FallbackLedger
 from experiments.models.stage_d_trace import StageDTracer
+from experiments.models.structural_scope import STRUCTURAL_SCOPE_REASON, is_structural
 from isalsr.baselines import FixedOrder, HyperLogLog, fixed_order_hash, serialise
 from isalsr.baselines.host_native import (
     HostNativeRecord,
@@ -244,6 +245,12 @@ class _CanonicalDeduplicator:
         self.n_unique: int = 0
         self.n_skipped: int = 0
         self.n_rejected_duplicates: int = 0  # Population-level rejections
+        # Candidates outside the invariant's domain: zero internal nodes, so
+        # the canonical string is "" for every m and every output variable.
+        # Scored by the host, never deduplicated, never cached, and excluded
+        # from rho so they neither inflate nor deflate it.  See
+        # experiments/models/structural_scope.py (D3, 2026-08-06).
+        self.n_nonstructural: int = 0
         self.canon_time_total: float = 0.0
         # Adapter conversion cost (host AGraph -> LabeledDAG).  Inside the
         # wall-clock budget and part of the method, so it must be subtracted
@@ -638,6 +645,31 @@ class IsalSREvaluation(Evaluation):
             dt_canon = time.perf_counter() - t0
             self.dedup.canon_time_total += dt_canon
 
+            # --- Structural scope (D3, 2026-08-06) -------------------------
+            # A candidate with zero internal nodes is a bare input variable.
+            # Every such DAG canonicalises to "" whatever m is and whatever
+            # variable it returns, because Sigma_SR encodes only the
+            # instructions that BUILD internal nodes and the variables are
+            # pre-inserted.  Using "" as a dedup or fitness-cache key would
+            # hand f(x)=x_1 the fitness of f(x)=x_0.
+            #
+            # These candidates are outside the invariant's domain, not a
+            # special case of it: at k=0 the relabeling group is 0! = 1, so
+            # there is no redundancy to collapse and rho is undefined.  Score
+            # normally, cache nothing, count nothing.  See structural_scope.py.
+            if not is_structural(dag):
+                self.dedup.n_nonstructural += 1
+                if not indv.fit_set:
+                    indv.fitness = self._traced_fitness(indv)
+                if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
+                    self._best_fitness = indv.fitness
+                tracer.record(
+                    dag=dag,
+                    t_canon=dt_canon,
+                    fallback=STRUCTURAL_SCOPE_REASON,
+                )
+                continue
+
             if self._enforce_dedup:
                 # --- Population-level dedup with fitness caching ---
 
@@ -951,6 +983,7 @@ class IsalSRBingoRunner(ModelRunner):
             n_total_dags=dedup.n_total,
             n_unique_canonical=dedup.n_unique,
             n_skipped=dedup.n_skipped,
+            n_nonstructural=dedup.n_nonstructural,
             canonicalization_time_s=dedup.canon_time_total,
             search_only_time_s=search_only,
             conversion_time_s=dedup.conversion_time_total,

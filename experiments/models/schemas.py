@@ -167,6 +167,26 @@ class SearchSpaceResults:
     # actually produced.  ``None`` = the arm never converted anything.
     n_conversion_failures: int | None = None
 
+    # Candidates with ZERO internal nodes -- bare input variables.  Every such
+    # DAG canonicalises to the empty string, for every m and for every choice of
+    # output variable, because Sigma_SR encodes only the instructions that build
+    # internal nodes and the variables are pre-inserted.  Keying deduplication on
+    # "" therefore merges f(x) = x_0 with f(x) = x_1, which is why these
+    # candidates are scored by the host but excluded from deduplication, from the
+    # fitness cache and from rho (experiments/models/structural_scope.py).
+    #
+    # The exclusion is principled rather than defensive: at k = 0 the relabeling
+    # group is 0! = 1, so there is no redundancy for the invariant to collapse
+    # and rho is undefined.  Completeness is claimed for k >= 1.
+    #
+    # Persisted for the same reason as the two fields above -- the runner acts
+    # silently, so without this counter the size of the excluded class would be
+    # unrecoverable after the fact.  Measured at 0.0593 % of the Bingo stream
+    # (Stage D, Pagie-1); expected to be exactly 0 for UDFS, whose campaign
+    # configs all pin n_calc_nodes = 5.  ``None`` = the arm never converted
+    # anything.
+    n_nonstructural: int | None = None
+
     # ------------------------------------------------------------------ #
     # T06 reachability / fallback ledger (EXECUTION-PLAN C1.9-BUG)
     # ------------------------------------------------------------------ #

@@ -74,6 +74,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from experiments.models.structural_scope import is_structural
 from isalsr.baselines.fixed_order_hash import (
     FixedOrder,
     SerialisationError,
@@ -551,8 +552,24 @@ def check_isalsr_soundness(records: list[StreamRecord], max_classes: int) -> dic
     Returns:
         The outcome, with any failing pair named.
     """
+    # Restrict to the invariant's domain.  A candidate with zero internal nodes
+    # is a bare input variable; every such DAG canonicalises to "" whatever m is
+    # and whatever variable it returns, because Sigma_SR encodes only the
+    # instructions that BUILD internal nodes.  Comparing two of them against
+    # is_isomorphic therefore tests a claim we do not make: at k = 0 the
+    # relabeling group is 0! = 1, so there is no redundancy to collapse.  The
+    # runners exclude these from deduplication for the same reason
+    # (experiments/models/structural_scope.py), so checking them here would
+    # measure a code path that no longer exists.
+    #
+    # The exclusion is COUNTED, never silent: a reader must be able to see how
+    # much of the stream the check declined to look at.
     classes: dict[str, list[StreamRecord]] = defaultdict(list)
+    n_nonstructural = 0
     for record in records:
+        if not is_structural(record.dag):
+            n_nonstructural += 1
+            continue
         classes[record.canonical].append(record)
     largest = sorted(classes.values(), key=len, reverse=True)[: max(0, max_classes)]
 
@@ -588,6 +605,12 @@ def check_isalsr_soundness(records: list[StreamRecord], max_classes: int) -> dic
         "n_pairs_checked": n_pairs,
         "n_failures": len(failures),
         "failures": failures[:5],
+        "n_nonstructural_excluded": n_nonstructural,
+        "scope": (
+            "k >= 1 only; zero-internal-node candidates are outside the "
+            "invariant's domain and are excluded from deduplication by the "
+            "runners (see experiments/models/structural_scope.py)"
+        ),
     }
 
 

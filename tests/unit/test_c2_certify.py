@@ -48,6 +48,10 @@ def _run_log(method: str, arm: str, seed: int) -> dict[str, Any]:
         "n_canon_raised": 0 if dedup else None,
         "n_atlas_hits": 5 if dedup else None,
         "n_conversion_failures": 1 if dedup else None,
+        # Structural-scope exclusion (D3, 2026-08-06): zero-internal-node
+        # candidates, evaluated but never deduplicated.  None on the baseline
+        # arm, which converts nothing.
+        "n_nonstructural": 3 if dedup else None,
     }
     rho = {"baseline": 1.0, "hash": 1.4, "isalsr": 1.9}[arm]
     return {

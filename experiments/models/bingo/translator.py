@@ -151,6 +151,7 @@ class BingoTranslator(ResultTranslator):
             max_internal_nodes_seen=max_k,
             theoretical_reduction_bound=theoretical,
             redundancy_rate=redundancy,
+            n_nonstructural=r.n_nonstructural,
             penalised_in_population_mean=r.penalised_in_population_mean,
             penalised_in_population_max=r.penalised_in_population_max,
         )

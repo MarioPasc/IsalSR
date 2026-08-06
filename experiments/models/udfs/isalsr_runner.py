@@ -33,6 +33,7 @@ from experiments.models.alphabet_guard import validate_udfs_operators
 from experiments.models.base_runner import ModelRunner
 from experiments.models.fallback_ledger import FallbackLedger
 from experiments.models.stage_d_trace import StageDTracer
+from experiments.models.structural_scope import STRUCTURAL_SCOPE_REASON, is_structural
 from experiments.models.udfs.adapter import compgraph_to_labeled_dag
 from experiments.models.udfs.config import UDFSConfig
 from experiments.models.udfs.runner import TrajectorySnapshot, UDFSRawResult
@@ -190,6 +191,12 @@ class _CanonicalDeduplicator:
         self.n_total = 0
         self.n_unique = 0
         self.n_skipped = 0
+        # Zero-internal-node candidates: outside the invariant's domain, so
+        # scored but never deduplicated and excluded from rho.  Expected to
+        # stay 0 for UDFS (n_calc_nodes = 5 campaign-wide); a non-zero value
+        # means the search reached a configuration this campaign did not
+        # anticipate.  See experiments/models/structural_scope.py.
+        self.n_nonstructural = 0
         self.canon_time_total = 0.0
         # Adapter conversion cost (host CompGraph -> LabeledDAG).  Inside the
         # wall-clock budget and part of the method, so it must be subtracted
@@ -477,6 +484,31 @@ class _CanonicalDeduplicator:
                 tracer.record(dag=labeled_dag, t_canon=key.t_canon_s, fallback=key.fallback)
                 return result
 
+            # --- Structural scope (D3, 2026-08-06) -------------------------
+            # Zero internal nodes => a bare input variable, whose canonical
+            # string is "" for every m and every output variable.  Keying the
+            # dedup on "" would make UDFS SKIP evaluating x_i for i > 0 once
+            # x_0 had been seen.  Outside the invariant's domain (0! = 1: no
+            # redundancy to collapse), so score it and count nothing.
+            #
+            # In practice unreachable here -- all seven campaign configs pin
+            # n_calc_nodes = 5, so UDFS cannot emit k = 0 -- but the guard is
+            # symmetric with Bingo's on purpose: an arm-specific dedup rule is
+            # exactly the kind of asymmetry the paired design cannot tolerate.
+            if not is_structural(labeled_dag):
+                self.n_nonstructural += 1
+                result = self._traced_evaluate(cgraph, X, loss_fkt, opt_mode, loss_thresh)
+                consts, loss = result
+                if np.isfinite(loss) and loss < self._best_loss:
+                    self._best_loss = loss
+                self._maybe_snapshot()
+                tracer.record(
+                    dag=labeled_dag,
+                    t_canon=key.t_canon_s,
+                    fallback=STRUCTURAL_SCOPE_REASON,
+                )
+                return result
+
             is_duplicate = canon_hash in self.canonical_seen
             if is_duplicate and self.dedup_enabled:
                 self.n_skipped += 1
@@ -696,6 +728,7 @@ class IsalSRUDFSRunner(ModelRunner):
             n_total_dags=dedup.n_total,
             n_unique_canonical=dedup.n_unique,
             n_skipped=dedup.n_skipped,
+            n_nonstructural=dedup.n_nonstructural,
             canonicalization_time_s=dedup.canon_time_total,
             search_only_time_s=search_only,
             conversion_time_s=dedup.conversion_time_total,
