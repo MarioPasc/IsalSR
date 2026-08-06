@@ -14,8 +14,18 @@
 # Submitted with --dependency=afterany so it also runs when some arrays failed
 # -- a partial ledger naming the gaps is worth more than no ledger.
 #
-# Environment (exported by launcher.sh):
-#   ISALSR_REPO_DIR, C2_RESULTS_DIR, C2_CONFIG_LIST (space-separated paths)
+# Environment (exported by launcher.sh), BY ROLE:
+#   both roles     : ISALSR_REPO_DIR, C2_RESULTS_DIR
+#   array role only: C2_CONFIG_LIST (space-separated paths)
+#   ledger role    : C2_LEDGER_ONLY=1, C2_EXPECTED_TASKS, C2_MAX_TIME
+#
+# 🔴 C2_CONFIG_LIST is required by the ARRAY role only, and asserting it here
+# killed the ledger job in 2 s (job 1783830, Stage C v5): the launcher does not
+# export it to the dependent ledger job -- correctly, since a full-root walk
+# needs no config -- so `${C2_CONFIG_LIST:?}` under `set -u` aborted before the
+# role was even selected.  The cost was the whole point of the job: no
+# status_ledger.csv and no Stage C verdict, on a wave that was otherwise
+# 1,260/1,260 clean.  Assert each variable inside the role that uses it.
 # =============================================================================
 set -euo pipefail
 
@@ -23,7 +33,7 @@ START_TIME=$(date +%s)
 
 REPO_DIR="${ISALSR_REPO_DIR:?ERROR: ISALSR_REPO_DIR not set}"
 RESULTS_DIR="${C2_RESULTS_DIR:?ERROR: C2_RESULTS_DIR not set}"
-CONFIG_LIST="${C2_CONFIG_LIST:?ERROR: C2_CONFIG_LIST not set}"
+CONFIG_LIST="${C2_CONFIG_LIST:-}"
 
 for mod in openmpi_gcc/5.0.9_gcc7 openmpi_gcc/5.0.9_gcc15 openmpi_gcc/5.0.9_gcc14; do
     module load "$mod" 2>/dev/null && break
@@ -66,6 +76,11 @@ FAILED=0
 
 if [[ "${C2_LEDGER_ONLY:-0}" != "1" ]]; then
     IDX="${SLURM_ARRAY_TASK_ID:?ERROR: aggregate_worker needs SLURM_ARRAY_TASK_ID or C2_LEDGER_ONLY=1}"
+    # Asserted HERE, in the role that actually consumes it -- see the header.
+    [[ -n "${CONFIG_LIST}" ]] || {
+        echo "[FATAL] the aggregation array role requires C2_CONFIG_LIST" >&2
+        exit 1
+    }
     # shellcheck disable=SC2206
     CFG_ARRAY=(${CONFIG_LIST})
     N_CFG=${#CFG_ARRAY[@]}
