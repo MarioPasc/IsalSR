@@ -25,23 +25,37 @@ Both were found by checks that exist precisely to find them, and both are fixed.
 2. **The v5 ledger job died in 2 s** (`b786d20`). `aggregate_worker.sh` asserted
    `C2_CONFIG_LIST` at file scope; the ledger job is not given it. A
    1,260/1,260 clean wave produced no ledger and no verdict.
-3. **The k=0 guard's own ρ accounting was wrong** (`040beab`), and **v5b passed
-   19/19 with ρ still inflated** — which is the lesson worth keeping: a green
-   certification is not proof that a *new* quantity is right, because no
-   criterion was watching it yet. `n_total` counts a candidate when it is first
-   seen, before the DAG exists to classify, so k=0 was excluded from `n_unique`
-   but not from `n_total`. Measured over the whole wave, **bingo/hash +12.15 %,
-   bingo/isalsr +13.86 %** — in the direction that flatters us. UDFS unaffected.
-   **The 0.0593 % incidence quoted on 2026-08-06 is superseded: it is 12.2 %
-   campaign-wide and 18.2 % on Nguyen-3.** The trace it came from is a 1-in-100
-   subsample of a single hard problem.
+3. **The k=0 guard's ρ accounting went wrong twice, and the second time in our
+   own disfavour** (`040beab` → `793a17c`). `n_total` counts a candidate when it
+   is first seen, before the DAG exists to classify, so `040beab` excluded k=0
+   from `n_unique` but not `n_total` — a ratio over two populations. The remedy
+   then over-shot by removing them from *both*, which understated ρ by **12.2 %**.
+
+   Four treatments on the same v5b stream (hash / isalsr): **T1** all k=0 → one
+   `""` class, C1 and history, **2.0045 / 2.1102**; **T3** out of both,
+   **1.7872 / 1.8534**; **T4** sound key, counted, **2.0044 / 2.1102**. **T4 = T1
+   to four decimals** — the unsound merge conflates ~1.5 classes out of 289,000
+   per run. So the collision is a **search-correctness defect, not a ρ defect**.
+   k=0 now takes the fixed-order insertion serialisation as its key and follows
+   the normal path.
+
+   🔴 **Retracted**: the claim that C1's Bingo RF was inflated ~13.9 % is
+   withdrawn. C1 used T1 and is unaffected on this axis.
+
+   **Two lessons worth keeping.** v5b passed **19/19 with ρ already wrong** — a
+   green certification is evidence about the checks that exist, not the ones that
+   do not, and `n_nonstructural` was one hour old. And the 0.0593 % incidence
+   first quoted came from a **1-in-100 subsample of a single hard problem**; it is
+   12.2 % campaign-wide and 18.2 % on Nguyen-3.
 
 **Sequence executed today**: deploy `115bf89` → Stage C **v5** (1,260/1,260,
 single provenance, 18/19 — C1.2 fails only because v5 predates
 `n_nonstructural`) → k=0 and ledger fixes → archive `c2_smoke_v4` and
 `c2_smoke_v5` → deploy `b786d20` → **v5b** (1,260/1,260, **19/19 GO**, 0 SKIPs)
 → ρ-accounting defect found *in* v5b's own data → archive `c2_smoke_v5b` →
-deploy `040beab` → Stage C **v5c**, the wave the tag will rest on.
+deploy `040beab` → **v5c** → Mario's review found `040beab` over-corrected →
+v5c cancelled mid-flight and its partial root removed → deploy `793a17c` →
+Stage C **v5d**, the wave the tag will rest on.
 
 Every archive was tarred, its entry count verified against the source (7,932
 each), and only then removed.
