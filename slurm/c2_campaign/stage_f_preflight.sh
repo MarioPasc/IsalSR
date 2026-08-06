@@ -127,14 +127,20 @@ if seeds & {0, 101, 102}:
 if sorted(seeds) != list(range(1, 31)):
     problems.append("campaign seed set is not exactly 1..30")
 
-cfgs = [p for p in sorted(pathlib.Path("experiments/configs").glob("*.yaml"))
-        if any(p.stem.endswith("_" + s) or p.stem == f"{m}_{s}"
-               for s in CAMPAIGN for m in ("udfs", "bingo"))]
-cfgs = [p for p in cfgs if "trace" not in p.stem]
+# Name the 14 exactly.  A glob sweeps in debug_*.yaml and the trace config, and
+# `n_seeds` lives under `experiment:`, not at the top level -- reading the wrong
+# key returned None for all 18 and reported a failure that was the check's own.
+root = pathlib.Path("experiments/configs")
+cfgs = [root / f"{m}_{s}.yaml" for m in ("udfs", "bingo") for s in sorted(CAMPAIGN)]
+missing_files = [str(p) for p in cfgs if not p.exists()]
+if missing_files:
+    problems.append(f"missing config files: {missing_files}")
+cfgs = [p for p in cfgs if p.exists()]
+
 declared = {}
 for c in cfgs:
     d = yaml.safe_load(c.read_text()) or {}
-    declared[c.name] = d.get("n_seeds")
+    declared[c.name] = (d.get("experiment") or {}).get("n_seeds")
 
 if len(cfgs) != 14:
     problems.append(f"expected 14 campaign configs, found {len(cfgs)}")
