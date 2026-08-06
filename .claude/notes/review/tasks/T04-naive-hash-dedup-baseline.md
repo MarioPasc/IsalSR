@@ -425,6 +425,42 @@ persisted stream is for verification and stratification only.
 
 ## 7. Work log
 
+### 2026-08-06 — the manuscript half is written (annotated copy only)
+
+Until today the naive-hash comparator existed in the code, in this ticket and in the
+shipped R1.4 answer, but **not in the manuscript**. A reviewer reading the letter
+beside the paper would have found a promised arm that no section described. That gap
+is now closed in `reviews/internal_copy_reviewed_article/`, blue-marked; the clean
+tree under `article/` is untouched and the promotion remains a separate step.
+
+**Main paper.** A host-solver interface subsection, and the comparator introduced as
+the third arm of every comparison. The arm is named **naive hash** throughout, fixed
+by decision so that the manuscript and the shipped R1.4 answer use one term.
+
+**Supplementary.** A full appendix: the fixed-order serialization and the key derived
+from it, the soundness argument, the incompleteness argument, the measurement
+protocol, the per-host and per-problem reporting layout, and the remarks relating the
+key to canonicalization.
+
+**Every campaign-dependent value became a marked placeholder** rather than a stale
+number, in floats and in prose alike. Each float keeps its float, its `\label` and its
+`\caption`; only the body is replaced, because the labels were verified across
+documents one commit earlier and destroying one breaks a reference silently. Label
+sets confirmed intact: paper 61 → 72, supplementary 35 → 48, **none lost**. Every
+removed value is recorded with its file, line and replacement description in
+`PENDING_LEDGER_paper.md` and `PENDING_LEDGER_supplementary.md`, so filling the
+numbers back in after the campaign is mechanical rather than archaeological.
+
+Both documents compile clean — paper 17 pages, supplementary 14 pages, no errors, no
+undefined references or citations.
+
+**Caveat on this entry.** The two agents that did the work were terminated by a
+session limit *after* completing the manuscript edits but *before* writing their own
+work logs. This entry was reconstructed by the orchestrator from the compiled
+documents, the label diff and the ledgers, and verified against them. It has not been
+cross-checked against those agents' reasoning, which was lost. The §8.2 change tables
+are correspondingly still empty and should be filled from the ledgers.
+
 ### 2026-07-31 — plan of record (orchestrator)
 
 **Scope of this session.** AC-3 and AC-5 need C2 to have *run*, and SP-0 forbids any

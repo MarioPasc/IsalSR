@@ -273,6 +273,37 @@ Requirements:
 
 ## 8. Work log
 
+### 2026-08-06 — the manuscript half is written (annotated copy only)
+
+The extension existed in the benchmark definitions, in this ticket and in the shipped
+R3.1 answer, but the manuscript still described a 50-problem suite. That is now
+corrected in `reviews/internal_copy_reviewed_article/`, blue-marked; `article/` is
+untouched and the promotion remains a separate step.
+
+The suite is described as **70** problems throughout — the 14 ODE-Strogatz problems
+plus the 6 AI Feynman problems drawn by the pre-registered rule. This is written as a
+real number, not a placeholder, because it is settled and owes nothing to the campaign.
+
+**Section 4.2's inclusion argument was re-attributed.** Criterion (ii) turned out to
+exclude only a handful of the candidates, so it cannot carry the exclusion on its own;
+the argument now rests on criterion (iv) and on compute cost, matching the shipped
+R3.1 answer, whose `\changeref` points at that exact location.
+
+One methodological refinement was added that this ticket had not specified: the
+cross-problem test is reported at **both** $N=50$ and $N=70$. Without it, a change in
+the pooled result could not be attributed between the suite extension and the larger
+denominator. Retained deliberately — it costs nothing and it forecloses an obvious
+round-2 question.
+
+The benchmark-*definition* tables `tab:strogatz` and `tab:feynman_ext` were already
+present and correct, and were left alone; they are definitions, not results.
+
+**Caveat on this entry.** The agents that did the work were terminated by a session
+limit after completing the manuscript edits but before writing their own work logs.
+This entry was reconstructed by the orchestrator from the compiled documents and the
+pending-value ledgers and verified against them; the agents' reasoning was lost. §8.2
+is still empty and should be filled from the ledgers.
+
 ### 2026-08-02 — plan
 
 Dependency note: T05 lists `Depends on T02`, and T02 is `NOT STARTED`. The

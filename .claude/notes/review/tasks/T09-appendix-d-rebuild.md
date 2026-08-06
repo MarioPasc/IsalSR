@@ -627,6 +627,59 @@ is the work AC-7 has left, and it is now countable instead of guessed.
 final-pass `main.tex` **0 errors, 0 undefined references, 12 pages**;
 `supplementary.tex` **0 errors, 10 pages**. Both unchanged from the submission.
 
+### 2026-08-06 — the annotated supplementary brought level with the response letter
+
+**The letter promised supplementary content that did not exist, and every results
+float still carried superseded C1 numbers.** Worked only in
+`reviews/internal_copy_reviewed_article/supplementary/`; `article/` untouched
+(`git status` clean at start and unchanged under `article/` at end).
+
+Written into Appendix D (blue): the 70-problem, nine-source composition with the
+44/130 ground-truth-track count; the **pre-registered selection rule** for the 20
+added problems, which R3.1 promises and which was nowhere in the document (pool
+`|E| = 92`, seed `2 547 107 438` derived from the sorted eligible identifiers, no
+stratification, nothing removed post-draw); the three-arm campaign shape and its
+multiplicity consequence (Holm over three contrasts, Friedman/Nemenyi over three
+arms).
+
+**New Appendix E, `The naive hash comparator`** — R1.4's `\changeref` names
+`Appendix~E` twice, and `paper/results.tex:187` already pointed there for the
+per-problem breakdown, so the letter and the parallel agent agreed on the letter
+E before this appendix existed. Contains σ and the key computed from the *host's
+own* stored structure, Lemma E.1 (soundness) with proof, an explicit
+incompleteness counter-example on `sin(x₀)+cos(x₁)` with φ = (2 3), the Δ/φ
+definitions and the ρ-form identity, the one-stream requirement, and the
+HyperLogLog protocol at m = 2¹⁶ (0.41 % s.e.).
+
+🔴 **Appendix lettering shifted: E→F, F→G, G→H.** This breaks three references in
+`paper/discussion.tex` (`:35` E.2, `:57` E.1, `:138` E.1) which must become F.2,
+F.1, F.1. **Not fixed here — `paper/` belongs to the parallel agent.** It also
+makes the letter's R2.4 location "Appendices F.2 and G" stale (now G.2 and H).
+
+| Check | Result |
+|---|---|
+| Labels before → after | 39 → 48; **0 lost**, 9 added (all `sec:supp_hash*`, `lem:hash_sound`, `tab:supp_hash_phi`) |
+| Compile | 0 errors, 0 undefined refs, 0 undefined citations |
+| Overfull hboxes | **0** — improved on HEAD, which had 1 (10.32 pt, `tab:synthetic_scalability`) |
+| `color{red}` / `[MPG` | 0 / 0 (pending scaffolding uses a named colour `pendingred`) |
+| Pages | 13 → 14 |
+| Placeholders | 28 `\pendingnum` + 6 `\pendingblock` = 34, all ledgered |
+| Supplementary→main cross-refs | 19 walked, **19 pass** — all are content references (Definition 3.x, Theorem 3.15) or number-free descriptions, and all sit in Appendix A, which was not edited |
+
+**Deliberately not changed**: the run count stays a placeholder, not `8,400`. AC-4's
+rule is honoured — the realised count comes from the C2 manifest. The seed count is
+*also* a placeholder, because the letter says 20 and the live campaign says 30 (see
+§8.2).
+
+**Left alone as campaign-independent**, after checking each: `tab:supp_shortest_path`,
+`fig:shortest_path`, `tab:supp_neighbourhood`, `fig:neighbourhood`. These are
+Levenshtein distances and neighbourhood counts computed from the canonicaliser on
+fixed example expressions; none uses Sub or Div, so T16's decomposition does not
+move them, and none derives from a benchmark run. The synthetic ρ = k! and 100 %
+invariance rows were kept as real values for the same reason — they are properties
+of the construction — while only that table's **timing column** was placeholdered,
+since the engine was re-timed.
+
 ---
 
 ## 8. Proposed answer
