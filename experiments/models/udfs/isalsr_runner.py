@@ -496,6 +496,13 @@ class _CanonicalDeduplicator:
             # symmetric with Bingo's on purpose: an arm-specific dedup rule is
             # exactly the kind of asymmetry the paired design cannot tolerate.
             if not is_structural(labeled_dag):
+                # n_total is incremented on first sight, before the DAG exists
+                # to be classified.  Undo it, so total_dags_explored and
+                # unique_canonical_dags describe the SAME population and their
+                # ratio is a meaningful rho.  Leaving it in inflated rho by
+                # 12-14 % on Bingo in Stage C v5b.  Candidates seen stays
+                # recoverable as total_dags_explored + n_nonstructural.
+                self.n_total -= 1
                 self.n_nonstructural += 1
                 result = self._traced_evaluate(cgraph, X, loss_fkt, opt_mode, loss_thresh)
                 consts, loss = result

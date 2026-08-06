@@ -88,6 +88,54 @@ class TestPredicate:
         assert STRUCTURAL_SCOPE_REASON == "k0_nonstructural"
 
 
+class TestRhoAccounting:
+    """rho must be a ratio over ONE population.
+
+    Regression for the bias found in Stage C v5b: ``n_total`` is incremented
+    when a candidate is first seen, several steps before the DAG exists to be
+    classified.  The first version of the guard left k=0 candidates in
+    ``n_total`` while excluding them from ``n_unique``, so
+    ``rho = n_total / n_unique`` mixed two populations and came out **12.15 %**
+    too high on bingo/hash and **13.86 %** on bingo/isalsr -- in the direction
+    that flatters IsalSR.
+    """
+
+    def test_recording_a_nonstructural_candidate_undoes_n_total(self) -> None:
+        pytest.importorskip("bingo")
+        from experiments.models.bingo.isalsr_runner import _CanonicalDeduplicator
+
+        d = _CanonicalDeduplicator()
+        d.n_total = 10
+        d.n_unique = 4
+
+        d.record_nonstructural()
+
+        assert d.n_nonstructural == 1
+        assert d.n_total == 9, (
+            "n_total must exclude the k=0 candidate, or rho is a ratio over "
+            "two different populations"
+        )
+
+    def test_candidates_seen_stays_recoverable(self) -> None:
+        pytest.importorskip("bingo")
+        from experiments.models.bingo.isalsr_runner import _CanonicalDeduplicator
+
+        d = _CanonicalDeduplicator()
+        seen = 0
+        for i in range(20):
+            d.n_total += 1
+            seen += 1
+            if i % 4 == 0:
+                d.record_nonstructural()
+
+        assert d.n_total + d.n_nonstructural == seen, (
+            "total_dags_explored + n_nonstructural must reconstruct the number "
+            "of candidates the host actually produced"
+        )
+        assert d.n_nonstructural == 5
+        assert d.n_total == 15
+
+
 class TestAdapterLevelCollision:
     """The end-to-end statement, on the real Bingo adapter."""
 

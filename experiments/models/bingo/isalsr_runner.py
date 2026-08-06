@@ -266,6 +266,25 @@ class _CanonicalDeduplicator:
         self.atlas_lookup_time: float = 0.0
         self.canon_fallback_time: float = 0.0
 
+    def record_nonstructural(self) -> None:
+        """Account one candidate that lies outside the invariant's domain.
+
+        🔴 This MUST also undo ``n_total``, and getting that wrong inflated rho
+        by 12-14 % on both Bingo dedup arms in Stage C v5b before it was caught.
+        ``n_total`` is incremented when the candidate is first seen, several
+        steps before the DAG exists to be classified; a k=0 candidate that stays
+        in ``n_total`` while contributing nothing to ``n_unique`` makes
+        ``rho = n_total / n_unique`` a ratio over two different populations, and
+        the error flatters IsalSR.
+
+        ``total_dags_explored`` therefore counts STRUCTURAL candidates, so that
+        it and ``unique_canonical_dags`` describe the same population and their
+        ratio is meaningful.  Nothing is lost: candidates seen is recoverable as
+        ``total_dags_explored + n_nonstructural``, both of which are persisted.
+        """
+        self.n_total -= 1
+        self.n_nonstructural += 1
+
     def representation_string(self, dag: Any, host: Any = None) -> str:
         """Return the string whose hash is this arm's deduplication key.
 
@@ -658,7 +677,7 @@ class IsalSREvaluation(Evaluation):
             # there is no redundancy to collapse and rho is undefined.  Score
             # normally, cache nothing, count nothing.  See structural_scope.py.
             if not is_structural(dag):
-                self.dedup.n_nonstructural += 1
+                self.dedup.record_nonstructural()
                 if not indv.fit_set:
                     indv.fitness = self._traced_fitness(indv)
                 if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
