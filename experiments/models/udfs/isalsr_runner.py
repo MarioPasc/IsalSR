@@ -33,7 +33,7 @@ from experiments.models.alphabet_guard import validate_udfs_operators
 from experiments.models.base_runner import ModelRunner
 from experiments.models.fallback_ledger import FallbackLedger
 from experiments.models.stage_d_trace import StageDTracer
-from experiments.models.structural_scope import STRUCTURAL_SCOPE_REASON, is_structural
+from experiments.models.structural_scope import is_structural, nonstructural_key
 from experiments.models.udfs.adapter import compgraph_to_labeled_dag
 from experiments.models.udfs.config import UDFSConfig
 from experiments.models.udfs.runner import TrajectorySnapshot, UDFSRawResult
@@ -496,25 +496,12 @@ class _CanonicalDeduplicator:
             # symmetric with Bingo's on purpose: an arm-specific dedup rule is
             # exactly the kind of asymmetry the paired design cannot tolerate.
             if not is_structural(labeled_dag):
-                # n_total is incremented on first sight, before the DAG exists
-                # to be classified.  Undo it, so total_dags_explored and
-                # unique_canonical_dags describe the SAME population and their
-                # ratio is a meaningful rho.  Leaving it in inflated rho by
-                # 12-14 % on Bingo in Stage C v5b.  Candidates seen stays
-                # recoverable as total_dags_explored + n_nonstructural.
-                self.n_total -= 1
+                # k=0: "" is not a usable key -- it equates x_0 with x_1, so
+                # UDFS would mark the second a duplicate and never evaluate it.
+                # Substitute a sound key and fall through: these are ordinary
+                # redundancy and belong in rho.  See structural_scope.py.
                 self.n_nonstructural += 1
-                result = self._traced_evaluate(cgraph, X, loss_fkt, opt_mode, loss_thresh)
-                consts, loss = result
-                if np.isfinite(loss) and loss < self._best_loss:
-                    self._best_loss = loss
-                self._maybe_snapshot()
-                tracer.record(
-                    dag=labeled_dag,
-                    t_canon=key.t_canon_s,
-                    fallback=STRUCTURAL_SCOPE_REASON,
-                )
-                return result
+                canon_hash = hash(nonstructural_key(labeled_dag))
 
             is_duplicate = canon_hash in self.canonical_seen
             if is_duplicate and self.dedup_enabled:

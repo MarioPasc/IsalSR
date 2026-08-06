@@ -15,9 +15,11 @@ import numpy as np
 import pytest
 
 from experiments.models.structural_scope import (
+    NONSTRUCTURAL_KEY_PREFIX,
     STRUCTURAL_SCOPE_REASON,
     count_internal_nodes,
     is_structural,
+    nonstructural_key,
 )
 from isalsr.core.canonical import fast_canonical_string
 from isalsr.core.labeled_dag import LabeledDAG
@@ -25,10 +27,16 @@ from isalsr.core.node_types import NodeType
 
 
 def _vars_only(n_vars: int) -> LabeledDAG:
-    """A DAG of ``n_vars`` isolated VAR nodes: the initial state, k = 0."""
+    """A DAG of ``n_vars`` isolated VAR nodes: the initial state, k = 0.
+
+    ``var_index`` is set because the host adapters set it and
+    :func:`isalsr.baselines.serialise` requires it -- a VAR node without one is
+    not a shape any adapter emits.
+    """
     dag = LabeledDAG(max_nodes=max(n_vars, 4))
-    for _ in range(n_vars):
-        dag.add_node(NodeType.VAR)
+    for i in range(n_vars):
+        node = dag.add_node(NodeType.VAR)
+        dag.node_data(node)["var_index"] = i
     return dag
 
 
@@ -88,52 +96,54 @@ class TestPredicate:
         assert STRUCTURAL_SCOPE_REASON == "k0_nonstructural"
 
 
-class TestRhoAccounting:
-    """rho must be a ratio over ONE population.
+class TestNonstructuralKey:
+    """k=0 candidates get a SOUND key, and stay in the rho accounting.
 
-    Regression for the bias found in Stage C v5b: ``n_total`` is incremented
-    when a candidate is first seen, several steps before the DAG exists to be
-    classified.  The first version of the guard left k=0 candidates in
-    ``n_total`` while excluding them from ``n_unique``, so
-    ``rho = n_total / n_unique`` mixed two populations and came out **12.15 %**
-    too high on bingo/hash and **13.86 %** on bingo/isalsr -- in the direction
-    that flatters IsalSR.
+    Two errors are locked out here, and they pull in opposite directions:
+
+    * Keying k=0 on the canonical string equates ``x_0`` with ``x_1`` -- a
+      search-correctness defect (the fitness cache hands the second the first's
+      fitness; UDFS skips it entirely).
+    * *Excluding* k=0 from the accounting to avoid that is an over-correction.
+      Bare-variable candidates are ordinary redundancy -- on a one-variable
+      problem every one is literally the same DAG -- and dropping them
+      understated rho by 12.2 % on Stage C v5b.
     """
 
-    def test_recording_a_nonstructural_candidate_undoes_n_total(self) -> None:
+    def test_key_separates_dags_the_canonical_string_equates(self) -> None:
+        one, two = _vars_only(1), _vars_only(2)
+        assert fast_canonical_string(one) == fast_canonical_string(two) == ""
+        assert nonstructural_key(one) != nonstructural_key(two), (
+            "the k=0 key must distinguish what the canonical string cannot, "
+            "or the fitness cache stays corruptible"
+        )
+
+    def test_identical_k0_dags_still_share_a_key(self) -> None:
+        """The m=1 case: all bare-variable candidates ARE the same DAG."""
+        assert nonstructural_key(_vars_only(1)) == nonstructural_key(_vars_only(1))
+
+    def test_key_cannot_collide_with_a_canonical_string(self) -> None:
+        """No Sigma_SR word begins with '#', so the namespaces are disjoint."""
+        assert nonstructural_key(_vars_only(2)).startswith(NONSTRUCTURAL_KEY_PREFIX)
+        assert NONSTRUCTURAL_KEY_PREFIX.startswith("#")
+        for dag in (_var_plus_op(), _var_plus_op(NodeType.COS)):
+            assert not fast_canonical_string(dag).startswith("#")
+
+    def test_n_total_is_not_decremented_for_k0(self) -> None:
+        """The over-correction regression.
+
+        k=0 candidates must remain in ``n_total``: they are real candidates that
+        the deduplication really does collapse. Removing them made rho 12.2 %
+        too low -- a self-inflicted penalty. ``_CanonicalDeduplicator`` must
+        therefore expose no method that walks ``n_total`` backwards.
+        """
         pytest.importorskip("bingo")
         from experiments.models.bingo.isalsr_runner import _CanonicalDeduplicator
 
-        d = _CanonicalDeduplicator()
-        d.n_total = 10
-        d.n_unique = 4
-
-        d.record_nonstructural()
-
-        assert d.n_nonstructural == 1
-        assert d.n_total == 9, (
-            "n_total must exclude the k=0 candidate, or rho is a ratio over "
-            "two different populations"
+        assert not hasattr(_CanonicalDeduplicator(), "record_nonstructural"), (
+            "record_nonstructural decremented n_total; k=0 candidates belong "
+            "in the rho accounting under a sound key instead"
         )
-
-    def test_candidates_seen_stays_recoverable(self) -> None:
-        pytest.importorskip("bingo")
-        from experiments.models.bingo.isalsr_runner import _CanonicalDeduplicator
-
-        d = _CanonicalDeduplicator()
-        seen = 0
-        for i in range(20):
-            d.n_total += 1
-            seen += 1
-            if i % 4 == 0:
-                d.record_nonstructural()
-
-        assert d.n_total + d.n_nonstructural == seen, (
-            "total_dags_explored + n_nonstructural must reconstruct the number "
-            "of candidates the host actually produced"
-        )
-        assert d.n_nonstructural == 5
-        assert d.n_total == 15
 
 
 class TestAdapterLevelCollision:

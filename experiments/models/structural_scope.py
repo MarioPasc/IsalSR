@@ -43,14 +43,26 @@ the campaign committed any core-hours.  That is what D3 is for.
 
 from __future__ import annotations
 
+from isalsr.baselines import FixedOrder, serialise
 from isalsr.core.labeled_dag import LabeledDAG
 from isalsr.core.node_types import NodeType
 
-__all__ = ["STRUCTURAL_SCOPE_REASON", "count_internal_nodes", "is_structural"]
+__all__ = [
+    "NONSTRUCTURAL_KEY_PREFIX",
+    "STRUCTURAL_SCOPE_REASON",
+    "count_internal_nodes",
+    "is_structural",
+    "nonstructural_key",
+]
 
-#: Recorded on the trace record of every skipped candidate, so the exclusion is
-#: visible in the stream rather than inferred from a counter that did not move.
+#: Recorded on the trace record of every k=0 candidate, so the substitution is
+#: visible in the stream rather than inferred from a counter.
 STRUCTURAL_SCOPE_REASON = "k0_nonstructural"
+
+#: Marks a key that is NOT a Sigma_SR word.  No canonical string can collide
+#: with it: every Sigma_SR word is over {N,P,n,p,C,c,W} plus V/v-labelled pairs,
+#: so none can begin with ``#``.
+NONSTRUCTURAL_KEY_PREFIX = "#k0:"
 
 
 def count_internal_nodes(dag: LabeledDAG) -> int:
@@ -84,3 +96,42 @@ def is_structural(dag: LabeledDAG) -> bool:
         ``True`` when :math:`k \\ge 1`, ``False`` for a bare-variable candidate.
     """
     return count_internal_nodes(dag) > 0
+
+
+def nonstructural_key(dag: LabeledDAG) -> str:
+    """Return a sound deduplication key for a k=0 candidate.
+
+    The canonical string cannot serve: it is ``""`` for every k=0 DAG, so it
+    equates ``f(x) = x_0`` with ``f(x) = x_1``.  The fixed-order insertion
+    serialisation can: it records the node count and each variable's index, so
+    ``1|x0<>`` and ``2|x0<>;x1<>`` are distinct.  It is injective on DAGs with
+    no edges, which is exactly this class.
+
+    This is a *substitution*, not an exclusion, and the distinction matters for
+    rho.  Bare-variable candidates are ordinary redundancy -- on a
+    single-variable problem every one of them is literally the same DAG, and
+    collapsing them is precisely what the deduplication is for.  Dropping them
+    from the accounting instead understates rho by ~12 % (measured on Stage C
+    v5b) and would be a self-inflicted penalty, not a correction.
+
+    No asymmetry is introduced between arms: the ``hash`` arm already keys on a
+    fixed-order serialisation for *every* candidate, so this gives the ``isalsr``
+    arm the same treatment on the one class where Sigma_SR is not a complete
+    invariant, and nothing better anywhere else.
+
+    Args:
+        dag: A candidate DAG with zero internal nodes.
+
+    Returns:
+        A key string that cannot collide with any canonical string.
+    """
+    try:
+        return NONSTRUCTURAL_KEY_PREFIX + serialise(dag, FixedOrder.INSERTION)
+    except Exception:  # noqa: BLE001
+        # Never raise from the evaluation hot loop: one malformed candidate must
+        # not kill a 12 h run.  Every adapter sets ``var_index`` on VAR nodes, so
+        # this is unreachable in production; if it ever fires, fall back to a key
+        # that is still SOUND for its purpose -- it separates DAGs by node count,
+        # which is what distinguishes the colliding shapes (1|x0<> vs
+        # 2|x0<>;x1<>).  Coarser than the serialisation, never wrong.
+        return f"{NONSTRUCTURAL_KEY_PREFIX}n{dag.node_count}"

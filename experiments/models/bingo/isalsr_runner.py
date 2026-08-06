@@ -47,7 +47,11 @@ from experiments.models.bingo.runner import (
 )
 from experiments.models.fallback_ledger import FallbackLedger
 from experiments.models.stage_d_trace import StageDTracer
-from experiments.models.structural_scope import STRUCTURAL_SCOPE_REASON, is_structural
+from experiments.models.structural_scope import (
+    STRUCTURAL_SCOPE_REASON,
+    is_structural,
+    nonstructural_key,
+)
 from isalsr.baselines import FixedOrder, HyperLogLog, fixed_order_hash, serialise
 from isalsr.baselines.host_native import (
     HostNativeRecord,
@@ -265,25 +269,6 @@ class _CanonicalDeduplicator:
         self.atlas_misses: int = 0
         self.atlas_lookup_time: float = 0.0
         self.canon_fallback_time: float = 0.0
-
-    def record_nonstructural(self) -> None:
-        """Account one candidate that lies outside the invariant's domain.
-
-        🔴 This MUST also undo ``n_total``, and getting that wrong inflated rho
-        by 12-14 % on both Bingo dedup arms in Stage C v5b before it was caught.
-        ``n_total`` is incremented when the candidate is first seen, several
-        steps before the DAG exists to be classified; a k=0 candidate that stays
-        in ``n_total`` while contributing nothing to ``n_unique`` makes
-        ``rho = n_total / n_unique`` a ratio over two different populations, and
-        the error flatters IsalSR.
-
-        ``total_dags_explored`` therefore counts STRUCTURAL candidates, so that
-        it and ``unique_canonical_dags`` describe the same population and their
-        ratio is meaningful.  Nothing is lost: candidates seen is recoverable as
-        ``total_dags_explored + n_nonstructural``, both of which are persisted.
-        """
-        self.n_total -= 1
-        self.n_nonstructural += 1
 
     def representation_string(self, dag: Any, host: Any = None) -> str:
         """Return the string whose hash is this arm's deduplication key.
@@ -669,25 +654,21 @@ class IsalSREvaluation(Evaluation):
             # Every such DAG canonicalises to "" whatever m is and whatever
             # variable it returns, because Sigma_SR encodes only the
             # instructions that BUILD internal nodes and the variables are
-            # pre-inserted.  Using "" as a dedup or fitness-cache key would
-            # hand f(x)=x_1 the fitness of f(x)=x_0.
+            # pre-inserted.  Keying on "" hands f(x)=x_1 the fitness of
+            # f(x)=x_0 -- a SEARCH-CORRECTNESS defect.
             #
-            # These candidates are outside the invariant's domain, not a
-            # special case of it: at k=0 the relabeling group is 0! = 1, so
-            # there is no redundancy to collapse and rho is undefined.  Score
-            # normally, cache nothing, count nothing.  See structural_scope.py.
+            # It is NOT a rho defect, and the two must not be conflated.  These
+            # candidates are ordinary redundancy: on a single-variable problem
+            # every one of them is literally the same DAG, and collapsing them
+            # is what deduplication is for.  So substitute a sound key and fall
+            # through the normal path; do not exclude them from the accounting.
+            # Excluding them understated rho by 12.2 % on Stage C v5b -- a
+            # self-inflicted penalty, not a correction.
             if not is_structural(dag):
-                self.dedup.record_nonstructural()
-                if not indv.fit_set:
-                    indv.fitness = self._traced_fitness(indv)
-                if np.isfinite(indv.fitness) and indv.fitness < self._best_fitness:
-                    self._best_fitness = indv.fitness
-                tracer.record(
-                    dag=dag,
-                    t_canon=dt_canon,
-                    fallback=STRUCTURAL_SCOPE_REASON,
-                )
-                continue
+                self.dedup.n_nonstructural += 1
+                canonical = nonstructural_key(dag)
+                canon_hash = hash(canonical)
+                trace_fallback = STRUCTURAL_SCOPE_REASON
 
             if self._enforce_dedup:
                 # --- Population-level dedup with fitness caching ---
