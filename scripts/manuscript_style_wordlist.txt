@@ -1,0 +1,66 @@
+# Manuscript orthography word list -- TPAMI-2026-05-1699 (IsalSR)
+#
+# Reviewer 2 comment 8(c) asked for one spelling variant throughout. The
+# variant chosen for the submitted package is AMERICAN, on three grounds:
+# the submitted sources already carried more -ization than -isation forms,
+# IEEE house style is American, and the supplementary was already broadly
+# American.
+#
+# Format: one rule per line, "<forbidden-regex><TAB><replacement>".
+# Lines beginning with '#' and blank lines are ignored.
+# Matching is case-insensitive and substring-based, so stems cover all
+# inflections (canonicalis -> canonicalisation, canonicalised, ...).
+#
+# Consumed by scripts/check_manuscript_style.sh.
+
+# --- the -ise / -ize family (stems, so all inflections are covered) -------
+canonicalis	canonicaliz
+normalis	normaliz
+standardis	standardiz
+generalis	generaliz
+specialis	specializ
+optimis	optimiz
+minimis	minimiz
+maximis	maximiz
+utilis	utiliz
+organis	organiz
+characteris	characteriz
+summaris	summariz
+penalis	penaliz
+parameteris	parameteriz
+randomis	randomiz
+regularis	regulariz
+vectoris	vectoriz
+visualis	visualiz
+recognis	recogniz
+emphasis[ei]	emphasiz
+stabilis	stabiliz
+initialis	initializ
+serialis	serializ
+tokenis	tokeniz
+
+# --- the -our / -or family ------------------------------------------------
+behaviour	behavior
+colour	color
+favour	favor
+neighbour	neighbor
+
+# --- doubled-consonant inflections ---------------------------------------
+labelled	labeled
+labelling	labeling
+labellings	labelings
+modelling	modeling
+cancelled	canceled
+travelled	traveled
+signalling	signaling
+
+# --- miscellaneous BrE/AmE pairs ------------------------------------------
+artefact	artifact
+centre	center
+fibre	fiber
+licence	license
+practise	practice
+programme	program
+analyse(?!s)	analyze
+analysing	analyzing
+acknowledgement	acknowledgment
