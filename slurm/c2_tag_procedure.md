@@ -97,11 +97,12 @@ git status --porcelain          # must be empty
 git tag -a campaign/c2 -m "Campaign C2: three-arm re-execution on the native engine.
 
 Arms:      baseline, hash, isalsr
-Seeds:     1..20
+Seeds:     1..30
 Alphabet:  decomposed (T16)
 Engine:    native
 Node pool: sr
-Cohort:    70 problems (D1 42 + D2 28), 42 arrays, 8,400 runs
+Cohort:    70 problems (D1 50 + D2 20), 42 arrays, 12,600 runs
+Scope:     canonical completeness claimed for k >= 1 (D3, 2026-08-06)
 Certified: Stage C on this commit; MANIFEST validates."
 
 # 3. Verify the tag resolves to the intended commit BEFORE pushing.

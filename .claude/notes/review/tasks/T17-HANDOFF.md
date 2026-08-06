@@ -1,10 +1,41 @@
 # C2 handoff — pre-flight A–E are GO; what is left
 
 **Rewritten**: 2026-08-05 (supersedes the 2026-08-03 version entirely)
-**Branch**: `feature/cpp-core-port`, pushed. Deployed commit: `00635ae`
+**Branch**: `feature/cpp-core-port`, pushed. Deployed commit: `b786d20`
 **Campaign state**: pre-flight **A–E complete** — A–C signed, **Stage D GO**
-(13/13 cells, 8/8 criteria) and **Stage E GO** (7/7 checks, 2026-08-05);
+(13/13 cells, 8/8 criteria), **Stage E GO** (7/7 checks, 2026-08-05) and
+**D3 GO** (2026-08-06); Stage F approved by Mario 2026-08-06;
 C2 itself **not submitted** (SP-0: Mario only)
+
+---
+
+## 2026-08-06 — what changed today, read this first
+
+**Stage F was approved, and two blocking defects were found on the way to it.**
+Both were found by checks that exist precisely to find them, and both are fixed.
+
+1. **D3 found the k=0 completeness defect** (`b223a08`). Every zero-internal-node
+   DAG canonicalises to `""`, so `f(x)=X_0` and `f(x)=X_1` shared a dedup key;
+   Bingo transferred the cached fitness between them and UDFS skipped the second
+   outright. **Pre-existing — C1 carries it too.** Fixed as a *domain
+   restriction*: at k=0 the relabeling group is 0!=1, so there is nothing to
+   collapse and ρ is undefined. k=0 candidates are scored, never deduplicated,
+   excluded from ρ; `n_nonstructural` records how many. **Completeness is now
+   claimed for k≥1** — that sentence must reach the paper.
+2. **The v5 ledger job died in 2 s** (`b786d20`). `aggregate_worker.sh` asserted
+   `C2_CONFIG_LIST` at file scope; the ledger job is not given it. A
+   1,260/1,260 clean wave produced no ledger and no verdict.
+
+**Sequence executed today**: deploy `115bf89` → Stage C **v5** (1,260/1,260,
+single provenance, 18/19 — C1.2 fails only because v5 predates
+`n_nonstructural`) → both fixes → archive `c2_smoke_v4` **and** `c2_smoke_v5`
+(7,932 entries each, verified before removal) → deploy `b786d20` → Stage C
+**v5b**, the wave the tag will rest on.
+
+**New**: `slurm/c2_campaign/` — a Stage F gate (10 checks, fails closed) and a
+launch wrapper delegating to the certified `c2_smoke/launcher.sh` under
+`C2_PROFILE=campaign`. **No worker or topology is copied**; what the smoke wave
+certifies is what launches.
 
 ---
 
