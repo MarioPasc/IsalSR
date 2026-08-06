@@ -75,23 +75,57 @@ paired-stat files). A8 is closed, so E1/E2/E4/E5 have real three-arm input.
 the adversarial checks (inject a NaN; delete a run) and are the point of the
 stage. Nothing in Stage E writes to a campaign root.
 
-### 3.2 When Stage D lands
-- Read `stage_d_certification.{json,md}` (D1.1–D1.8).
-- **D1.6 owns C5 §3.5**: is Bingo's ρ shortfall the budget gap, at 12 h vs 12 h?
-- **D1.2 is what sizes production `--mem`**, from `max(sacct MaxRSS, VmHWM)` + 30 %.
-  Stage C's 0.67 GB peak is a 900 s number and sizes nothing.
-- **D1.7's overhead is now canon + conversion**, so expect it *above* the old
-  canon-only ≈7.4 % projection. That is the correction, not a regression.
-- Then **D3** (`stage_d_mode1_replay.py`) on the D2 stream.
+### 3.2 ✅ Stage D LANDED 2026-08-05 — `GO`, 13/13 cells, 8/8 criteria
 
-### 3.3 Before the `campaign/c2` tag
-| Item | State |
+Full numbers: `T17-appendix/capacity_optimisation_worklog.md` **§14**; ledger row
+in EXECUTION-PLAN §11.1, 2026-08-05.
+
+- **D1.4 is the one that mattered and it passes.** Korns-12 and Vlad-2 on
+  Bingo-isalsr both return finite R² (−0.0217, 0.9940). The C1 NaN does not
+  recur.
+- **D1.6 answered C5 §3.5.** ρ ratios C2/C1 = 0.9973 / 0.9977 / 1.0013, UDFS rose
+  to 1.0656, zero excursions. **The Stage C shortfall was the budget gap**, not a
+  canonicaliser regression. Reconstruction cross-checked to `abs_gap` ≤ 0.0005.
+- **D1.2 sized production memory.** Peak `bingo/isalsr` **1.193 GB**; D1.2's own
+  rule recommends **8 GB**; shipped **32 GB** (4× that, 27× the peak). §3.3's
+  256 GB is superseded — see §11.1 and `c2_slot_plan.MEM_GB`.
+- **D1.7** Bingo overhead **7.83 %** of eval, UDFS 0.027 % — above the old ≈7.4 %
+  canon-only projection, which is the accounting correction, not a regression.
+- 🔴 **Trap for the next Stage D:** the Picasso certifier reported `GO` /
+  `n_blocking_failures: 0` while **D1.6 sat at `SKIP`** — its `--c1-reference` is
+  a workstation path no compute node can reach. Ship the C1 analysis dir to
+  FSCRATCH, or run `stage_d_certify.py` locally. It was re-run locally to get the
+  real verdict.
+- ⚠ **Korns-12 hash R²_test = −4.015** (baseline −0.014, isalsr −0.022). Finite,
+  so D1.4 is unaffected, but at 30 seeds it would dominate that problem's hash
+  mean. §6.4 covers NaN, not finite-but-wild. Watch it.
+- Still open: **D3** (`stage_d_mode1_replay.py`) on the D2 trace stream.
+
+### 3.3 The remaining sequence — for the agent picking this up
+
+**Nothing pushed on 2026-08-05 has executed a single task on Picasso.** The
+throttle apportionment, 32 GB, merged logs, FSCRATCH log paths, the aggregation
+array split, the vectorised bootstrap and `n_seeds: 30` are all uncertified. That
+is what v5 is for, and it is the gate in front of everything else.
+
+| # | Step | Notes |
+|---|---|---|
+| 1 | **Deploy `2838a12`** | `slurm/c2_smoke/deploy.sh`. Refuses a dirty tree — the tree is clean and pushed. **Stage D is finished, so defect 10 no longer blocks.** Verify HEAD + cleanliness *from the remote side*, which deploy.sh does |
+| 2 | **Stage C v5** | `bash slurm/c2_smoke/launcher.sh` (profile `smoke`, the default). 1,260 tasks, 1,008 apportioned slots, ~35 min, ≈315 core-h, writes to `c2_smoke/`. **Run `--test-only` first** — there is no `sbatch` on the workstation (defect 15) |
+| 3 | **v5 must pass without `--allow-mixed-provenance`** | That is the whole point: v4 had 161 `-dirty` cells. If it needs the flag, the deploy was wrong |
+| 4 | **Archive `c2_smoke_v4`** | `tar czf c2_smoke_v4.tar.gz c2_smoke_v4` → verify entry count → *then* `rm -rf`. Frees ~7,930 inodes. v3 already archived this way. **The inode guard will refuse the campaign until this is done** |
+| 5 | **Re-sign A5 at 1…30** | §11.2's A5 row is 🔴 **REOPENED** — its PASS certified 1…20. Assert `0 ∉ seeds`, 0/101/102 disjoint, `n_seeds == 30` on 14/14 configs |
+| 6 | **`campaign/c2` tag** | **Mario's.** Procedure in `slurm/c2_tag_procedure.md`, deliberately not cut |
+| 7 | **Stage F → submit C2** | **Mario's, SP-0.** `C2_PROFILE=campaign`, 12,600 tasks, ≈108,000 core-h |
+
+**Do not do 6 or 7.** Stop after 5 and report.
+
+| Other item | State |
 |---|---|
-| **One clean Stage C wave on the final config** | 🔴 owed. v4 ran the pre-shadow-off configs and 161 of its cells are `-dirty`. ~35 min at `%24`/`sr` + aggregation |
-| **HOME quota** | 🔴 0.34 / 0.28 TB, grace expiring. Mario's lane; deferred by his instruction. Campaign logs already redirected to FSCRATCH |
-| **`campaign/c2` tag** | Procedure written (`slurm/c2_tag_procedure.md`), tag deliberately **not cut** — SP-0 |
-| **Stage F** | Mario's sign-off |
+| **HOME quota** | ✅ resolved — 23.38 GB / 0.28 TB, and campaign logs now default to FSCRATCH *in the launcher*, not by override |
+| **FSCRATCH inodes** | 158.5k / 250.0k after archiving v3. 30 seeds needs 84,381 against 91,600 free — fits, but v5 (+7.9k) then v4's archive (−7.9k) is the sequence. Guard enforces |
 | **≥15,000-file support mail** | still outstanding (`soporte@scbi.uma.es`) |
+| **Gate 3 on Picasso** | ⚠ re-measured **locally** on `3d5a79c` (0/10,000, both engines). The Picasso re-run at the same provenance is owed — cheap, fold it into v5 |
 
 ---
 

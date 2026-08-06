@@ -161,6 +161,11 @@ is less safe than §11.1 currently implies.
 `sacct` on the `.batch` step (never `-X`; `JobIDRaw`), plus the Stage D workers'
 own RSS sampler:
 
+> ⚠ **Written mid-stage. Superseded by §14, which has the final 13/13 figures.**
+> The conclusion does not move — the peak rose from 1.105 GB to **1.193 GB**, and
+> D1.2's own production rule ended up recommending **8 GB**, against the 32 GB
+> shipped.
+
 | group | completed cells | `MaxRSS` range | worst |
 |---|---|---|---|
 | `bingo_std` (32 GB req.) | 5 | 0.41 – 1.14 GB | 1.144 GB |
@@ -209,8 +214,12 @@ decision:**
    C1's OOMs were **Vladislavleva-4 (18 cells)** and Korns-12 (9). **Vlad-4 —
    two thirds of the OOM population — is not in Stage D.** A 10× headroom over
    Vlad-2 still leaves 32 GB with 3× margin, but it is extrapolation.
+   → ✅ **Retired by §10.1.** The `max_evals = 100M` bound makes `n_unique ≤ 100M`
+   on *any* problem, so Vlad-4 is covered without being run.
 2. One `bingo_isalsr` cell is still RUNNING at 8:32; the dedup set grows
    monotonically, so its final `MaxRSS` can only go up.
+   → ✅ **Resolved.** It finished at 10:03:55 with `MaxRSS` **1.193 GB** — the
+   stage's peak, and the prediction held: longest cell, largest set, largest RSS.
 3. §3.3's 256 GB was **Mario's decision of 2026-08-02, taken deliberately from
    evidence and explicitly not deferred to a measurement.** §3.3 does provide for
    revision — *"if D1.2 shows 12 h MaxRSS comfortably under 128 GB … the request
@@ -918,6 +927,105 @@ Stage-F obligation.
 | §7 | **two exclusions → three**, and the false "UDFS is unaffected" sentence replaced |
 | `T07-theorem-foundation.md` | closure note at the head, pointing at the evidence and stating what remains |
 | `T07-appendix/gate_all_3d5a79c_2026-08-05.json` | the gate report, persisted out of scratch |
+
+---
+
+## 14. STAGE D FINAL — 13/13, `GO`, 8/8 (2026-08-05 21:38 UTC)
+
+**These supersede every in-flight Stage D figure above** (§1 row 2, §3.1, §3.3,
+§7 P-4, §9). Where a number moved, the direction is stated.
+
+### 14.1 Verdict
+
+13/13 cells `COMPLETED`, zero failures, on `00635ae` — one `build_hash`, two
+`config_sha256` (8 certification cells + the trace), exactly as the shadow split
+intends. UDFS landed at **12:00:12**, saturating `max_time` to the second.
+
+| | verdict | observed |
+|---|---|---|
+| D1.1 | PASS | 12/12; min wall headroom **25.0 %** of 16 h |
+| D1.2 | PASS | 12/12; min headroom **96.2 %** |
+| D1.3 | PASS | 12/12 artefact sets |
+| **D1.4** | **PASS** | **2/2 finite — the C1 NaN does not recur** |
+| D1.5 | PASS | **0/4** ρ violations |
+| **D1.6** | **PASS** | **0 ρ, 0 R² excursions over 8 comparisons** |
+| D1.7 | PASS | 12/12 with `T_canon`, `T_eval` > 0 |
+| D1.8 | PASS | manifest validated, 0 problems |
+
+### 14.2 Memory — the 32 GB decision, now doubly corroborated
+
+| group | requested | peak | D1.2's own recommendation |
+|---|---|---|---|
+| bingo/baseline | 32 G | 0.524 G | 8 G |
+| bingo/hash | 32 G | 1.231 G | 8 G |
+| **bingo/isalsr** | **256 G** | **1.193 G** | **8 G** |
+| udfs/{baseline,hash,isalsr} | 16 G | 0.524–0.586 G | 8 G |
+
+D1.2's rule is `ceil_to_8GB(peak / 0.70)` and it lands on **8 GB for every
+group**. The shipped **32 GB is 4× the certifier's recommendation and 27× the
+observed peak** — and independently 3.4× the `max_evals`-bounded 9.4 GB ceiling
+of §10.1. Two derivations that share no assumptions, same conclusion.
+
+### 14.3 D1.6 — the C5 §3.5 handoff, answered
+
+Stage C's 900 s wave put Bingo ρ **1.1–1.7 % below C1**, and C5 was signed with
+that deviation deferred here. At 12 h against 12 h it collapses:
+
+| method | problem | ρ_C2 | ρ_C1 | ratio |
+|---|---|---|---|---|
+| udfs | Pagie-1 | 1.8554 | 1.7412 | **1.0656** (rose) |
+| bingo | Pagie-1 | 1.8289 | 1.8338 | 0.9973 |
+| bingo | Korns-12 | 1.8238 | 1.8214 | 1.0013 |
+| bingo | Vlad-2 | 1.8277 | 1.8320 | 0.9977 |
+
+Zero excursions against a one-sided 10 % floor. **The Stage C shortfall was the
+budget gap, not a canonicaliser regression.** The ρ reconstruction (`1 + δ_ρ`,
+since the baseline arm reports ρ = 1 by construction) was **cross-checked, not
+assumed** — it reproduces the published `mean_reduction_factor` to `abs_gap`
+0.0005 (bingo) and 0.0 (udfs) over 50 problems. R²: 0 excursions on 4
+comparisons, largest 0.115 against a 0.15 band.
+
+### 14.4 Runtimes — the `T_bingo = 8 h` planning weight holds
+
+Ten Bingo cells: 1.00, 3.03, 3.47, 4.62, 5.22, 5.61, 6.77, 6.87, 10.05, 10.82 h
+⇒ **mean 5.75 h, max 10.82 h**. C1's n=564 gave 5.15 h, so Stage D runs slightly
+hotter — expected, these are three *hard* problems. The weight sits above the
+mean and inside the 4–12 h band `test_sensitivity_to_the_assumed_bingo_runtime`
+asserts, so the apportionment is unchanged. Both Korns-12 arms ran ~10 h; it is a
+genuinely slow problem, not one bad cell.
+
+**Overhead (D1.7, canon + conversion):** Bingo mean **7.83 %** of eval (p50 8.7,
+max 17.7), UDFS **0.027 %**. Above the old canon-only ≈7.4 % projection, which is
+the accounting correction §11.1 2026-08-04 already flagged, not a regression.
+
+### 14.5 Two things to carry
+
+🔴 **The Picasso certifier reported `GO` / `n_blocking_failures: 0` with D1.6 at
+`SKIP`.** D1.6's own rules say BLOCKING twice, but its C1 reference is a
+`/media/.../Sandisk2TB/` path no compute node can reach, so it degraded to
+advisory and the headline banked an unevaluated blocking criterion. The report is
+honest — it says SKIP, not PASS — but a reader stopping at the verdict is misled.
+Re-ran locally to get the real answer. **Before the next Stage D: ship the C1
+analysis directory to FSCRATCH, or run the certifier where C1 lives.** Same
+family as the two C1.11 defects and the first version of my own inode guard.
+
+⚠ **Korns-12 hash returned R²_test = −4.015**, against baseline −0.014 and
+isalsr −0.022. Finite, so D1.4 is unaffected (it names the *isalsr* arm). But
+R²_train is 0.0232 — that arm fit ~2 % of train variance then landed 5× worse
+than the mean on test, while baseline and isalsr both produced near-mean
+predictors. At one seed it is an anecdote; **at 30 seeds it would dominate the
+hash arm's mean on that problem**, and §6.4's policy covers NaN, not
+finite-but-wild. Direction is *away* from IsalSR, which is the direction to be
+most careful claiming. Check the hash-vs-baseline contrast on Korns-12 once real
+seeds exist.
+
+### 14.6 Artefacts
+
+Stage D pulled to
+`/media/mpascual/Sandisk2TB/research/isalsr/results/model_validation/real_benchmarks/c2_stage_d/`
+(13 run logs, 13 trajectories, 13 RSS series, 263 MB), with
+`c2_preflight/stage_d_certification{,_with_c1}.{json,md}` — the second being the
+D1.6-complete re-run.
 
 ---
 
