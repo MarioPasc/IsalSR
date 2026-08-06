@@ -92,6 +92,12 @@ the frozen MANIFEST schema, and checks P1–P3** — see `EXECUTION-PLAN.md` §2
 > **not** a pruning artefact, and all failing cases **satisfy** the reachability
 > condition stated in `methodology.tex:976` — so that hypothesis is not sufficient.
 > Blocks T07 (theorem hypotheses) and T06 (definition of a precondition violation).
+>
+> **CLOSED as DONE 2026-08-06.** The minimal `Const`-creation repair is shipped and
+> confirmed in both engines, and neither the canonicaliser nor `is_isomorphic` applies
+> it in either engine. AC-3′ — a cost/termination clause beside a correctness theorem,
+> not a correctness gap — moves to **T07 §7bis.2** as Ezequiel's item. R2.1's answer
+> already volunteers that limitation, so no part of the response letter waits on it.
 
 ### Track D — Numerical integrity
 
