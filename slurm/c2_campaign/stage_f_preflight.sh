@@ -261,6 +261,44 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# G11 -- P2: HEAD differs from the certified wave only in NON-EXECUTABLE files
+# ---------------------------------------------------------------------------
+# The tag procedure's P2 demands the tag sit on the commit Stage C ran.  Taken
+# literally that forces a fresh 1,260-task wave for a typo in a markdown file,
+# which is why it gets quietly ignored the first time it is inconvenient -- and
+# a rule that gets ignored protects nothing.
+#
+# So enforce P2's INTENT mechanically instead: the commit that runs must be
+# byte-identical to the certified one in every path that can execute during a
+# run.  Documentation may move; `src/`, `experiments/`, `benchmarks/` and the
+# deployed SLURM scripts may not.  The certified commit is read from the RUN
+# LOGS, not from a note, so it cannot be asserted into being true.
+CERTIFIED_COMMIT="$(ssh "${REMOTE}" "find ${SMOKE_ROOT} -name run_log.json -print0 2>/dev/null \
+    | xargs -0 grep -ho '\"git_describe\": \"[^\"]*\"' 2>/dev/null \
+    | sort -u | head -2" 2>/dev/null | sed 's/.*: "//;s/"//' | tr '\n' ' ')"
+N_DISTINCT="$(wc -w <<<"${CERTIFIED_COMMIT}")"
+
+if [[ "${N_DISTINCT}" -eq 0 ]]; then
+    bad "G11" "P2: could not read git_describe from the certified wave's run logs"
+elif [[ "${N_DISTINCT}" -gt 1 ]]; then
+    bad "G11" "P2: the wave spans ${N_DISTINCT} commits (${CERTIFIED_COMMIT}) -- certification void"
+else
+    CC="$(tr -d ' ' <<<"${CERTIFIED_COMMIT}")"
+    if ! git -C "${REPO_LOCAL}" rev-parse --verify -q "${CC}^{commit}" >/dev/null; then
+        bad "G11" "P2: certified commit ${CC} is not in this repository"
+    else
+        RUNTIME_DIFF="$(git -C "${REPO_LOCAL}" diff --name-only "${CC}" HEAD -- \
+            src/ experiments/ benchmarks/ slurm/c2_smoke/ pyproject.toml 2>/dev/null)"
+        if [[ -n "${RUNTIME_DIFF}" ]]; then
+            bad "G11" "P2: HEAD changes executable paths since ${CC}: $(tr '\n' ' ' <<<"${RUNTIME_DIFF}")"
+        else
+            ALL_DIFF="$(git -C "${REPO_LOCAL}" diff --name-only "${CC}" HEAD 2>/dev/null | wc -l)"
+            ok "G11" "P2: HEAD == ${CC} in every executable path (${ALL_DIFF} non-executable file(s) differ)"
+        fi
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 echo ""
 echo "==========================================================================="
 printf 'Stage F pre-flight: %d PASS, %d FAIL\n' "${N_PASS}" "${N_FAIL}"
