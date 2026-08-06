@@ -25,12 +25,26 @@ Both were found by checks that exist precisely to find them, and both are fixed.
 2. **The v5 ledger job died in 2 s** (`b786d20`). `aggregate_worker.sh` asserted
    `C2_CONFIG_LIST` at file scope; the ledger job is not given it. A
    1,260/1,260 clean wave produced no ledger and no verdict.
+3. **The k=0 guard's own ρ accounting was wrong** (`040beab`), and **v5b passed
+   19/19 with ρ still inflated** — which is the lesson worth keeping: a green
+   certification is not proof that a *new* quantity is right, because no
+   criterion was watching it yet. `n_total` counts a candidate when it is first
+   seen, before the DAG exists to classify, so k=0 was excluded from `n_unique`
+   but not from `n_total`. Measured over the whole wave, **bingo/hash +12.15 %,
+   bingo/isalsr +13.86 %** — in the direction that flatters us. UDFS unaffected.
+   **The 0.0593 % incidence quoted on 2026-08-06 is superseded: it is 12.2 %
+   campaign-wide and 18.2 % on Nguyen-3.** The trace it came from is a 1-in-100
+   subsample of a single hard problem.
 
 **Sequence executed today**: deploy `115bf89` → Stage C **v5** (1,260/1,260,
 single provenance, 18/19 — C1.2 fails only because v5 predates
-`n_nonstructural`) → both fixes → archive `c2_smoke_v4` **and** `c2_smoke_v5`
-(7,932 entries each, verified before removal) → deploy `b786d20` → Stage C
-**v5b**, the wave the tag will rest on.
+`n_nonstructural`) → k=0 and ledger fixes → archive `c2_smoke_v4` and
+`c2_smoke_v5` → deploy `b786d20` → **v5b** (1,260/1,260, **19/19 GO**, 0 SKIPs)
+→ ρ-accounting defect found *in* v5b's own data → archive `c2_smoke_v5b` →
+deploy `040beab` → Stage C **v5c**, the wave the tag will rest on.
+
+Every archive was tarred, its entry count verified against the source (7,932
+each), and only then removed.
 
 **New**: `slurm/c2_campaign/` — a Stage F gate (10 checks, fails closed) and a
 launch wrapper delegating to the certified `c2_smoke/launcher.sh` under
