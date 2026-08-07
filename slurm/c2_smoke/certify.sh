@@ -20,7 +20,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export ISALSR_REPO_DIR="${ISALSR_REPO_DIR:-/mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR}"
 RESULTS_ROOT="${C2_RESULTS_DIR:-/mnt/home/users/tic_163_uma/mpascual/fscratch/results/isalsr/c2_smoke}"
-LOGS_DIR="${C2_LOGS_DIR:-/mnt/home/users/tic_163_uma/mpascual/execs/isalsr/c2_smoke/logs}"
+# 🔴 FSCRATCH, not HOME.  `launcher.sh` writes job_ids.txt under
+# $FSCRATCH/execs/...; the HOME path is a DIFFERENT directory (verified
+# 2026-08-07: distinct inodes) that still held a job_ids.txt from an August-3
+# wave.  With the old default, the C1.11 memory profile below was built by
+# running sacct over a PREVIOUS wave's job ids, whose per-task ids appear in no
+# status.json of this root -- so the join matched ~0 rows while C1.11 still said
+# PASS.  Same family as the JobID/JobIDRaw defect documented at the sacct call.
+LOGS_DIR="${C2_LOGS_DIR:-/mnt/home/users/tic_163_uma/mpascual/fscratch/execs/isalsr/c2_smoke/logs}"
 ACCOUNT="tic_163_uma"
 # Deliberately NOT pinned, unlike launcher.sh. The certifier only reads files
 # already on disk: it generates no data and produces no timed quantity, so

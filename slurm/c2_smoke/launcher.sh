@@ -613,6 +613,17 @@ if [[ "${MODE}" == "submit" && ${#JOB_IDS[@]} -gt 0 ]]; then
 
     # The single full-root walk.  afterany on the aggregation array, so a ledger
     # naming the gaps is still produced when some configs failed.
+    #
+    # 🔴 C2_EXPECTED_TASKS is a CELL count, not a task count.  `c2_certify`
+    # documents the argument as "Number of cells the campaign should contain",
+    # and `build_expected_cells` uses the strict registry universe ONLY when
+    # `len(canonical) == expected_tasks`.  Before chunking the two were equal and
+    # this was harmless; since 2026-08-07 they are not (Stage C: 1,260 cells in
+    # 453 tasks), and passing the task count made the certifier fall through to
+    # the "disk" universe -- completeness measured against what was FOUND rather
+    # than what SHOULD exist, under which a whole absent problem directory is
+    # invisible.  Stage C v6 duly reported GO with `expected_set_source: disk`.
+    # `submit_paced.sh` always got this right; only this path was wrong.
     LEDGER_ID=$(submit \
         --job-name=c2s_ledger \
         --time="0-02:00:00" \
@@ -622,7 +633,7 @@ if [[ "${MODE}" == "submit" && ${#JOB_IDS[@]} -gt 0 ]]; then
         --dependency="afterany:${AGG_ID}" \
         --output="${LOGS_DIR}/c2s_ledger_%j.out" \
         --error="${LOGS_DIR}/c2s_ledger_%j.err" \
-        --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_RESULTS_DIR=${RESULTS_ROOT},C2_LEDGER_ONLY=1,C2_EXPECTED_TASKS=${N_TASKS_TOTAL},C2_MAX_TIME=${MAX_TIME}" \
+        --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_RESULTS_DIR=${RESULTS_ROOT},C2_LEDGER_ONLY=1,C2_EXPECTED_TASKS=${N_CELLS_TOTAL},C2_MAX_TIME=${MAX_TIME}" \
         "${SCRIPT_DIR}/aggregate_worker.sh") || exit 1
 
     if scontrol show job "${LEDGER_ID}" | grep -q 'Dependency=(null)'; then

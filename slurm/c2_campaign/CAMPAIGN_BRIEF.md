@@ -427,10 +427,50 @@ Step 2 exists.
 
 ### Step 5 — submit, PACED
 
+> ### 🔴 `C2_MIN_JOBID` is MANDATORY here (found 2026-08-07)
+>
+> `submit_paced.sh` skips arrays whose **job name** already appears in
+> `sacct -S today`, scoped by `C2_MIN_JOBID`, which **defaults to 0**. The smoke
+> and campaign profiles build the *same* 42 job names — both come from the one
+> launcher, `c2s_${METHOD:0:1}${ARM:0:1}_${SUITE}`.
+>
+> **Step 2 above requires Stage C on this very commit**, so those 42 names are
+> always in today's `sacct` by the time you reach Step 5. With the default, the
+> submission prints `SKIP (already submitted)` forty-two times, submits **zero**
+> arrays, attaches the aggregation `afterany` to the **smoke** wave, writes the
+> smoke ids to `job_ids.txt`, and **exits 0** — a silent no-op that reads as
+> success. Same family as 2026-08-06, where `--test-only` reported 42/42 while
+> every task was about to abort.
+
 ```bash
-ssh picasso "cd \$REPO && bash slurm/c2_campaign/submit_paced.sh --dry-run"
-ssh picasso "cd \$REPO && bash slurm/c2_campaign/submit_paced.sh"
+# Compute the floor FIRST -- every campaign array is submitted after this point.
+MIN=$(ssh picasso "sacct -S today -n -P -X -o JobID | cut -d_ -f1 | sort -n | tail -1")
+MIN=$(( MIN + 1 ))
+
+ssh picasso "cd \$REPO && C2_MIN_JOBID=${MIN} bash slurm/c2_campaign/submit_paced.sh --dry-run"
+#   the dry run MUST report:  already present (job id >= ${MIN}): 0
+#   and list all 42 arrays.  Any SKIP line means the floor is too low.
+
+ssh picasso "cd \$REPO && C2_MIN_JOBID=${MIN} bash slurm/c2_campaign/submit_paced.sh"
 ```
+
+> ### 🔴 Then submit the sweep arrays — `submit_paced.sh` does not
+>
+> `launcher.sh` submits a `c2w_*` sweep per array (`afterany` on the mains) and
+> extends the aggregation dependency to include them. `submit_paced.sh` has **no
+> sweep block**, so on its own it never recovers cells a task's deadline refused
+> to start (5–20 of 12,600 by the launcher's own simulation), aggregates a tree
+> missing them, and breaks the commitment made to SCBI in §6 above.
+>
+> Submit them as a second paced pass, then repoint the aggregation:
+>
+> ```bash
+> scontrol update JobId=<agg> Dependency=afterany:<42 mains>:<42 sweeps>
+> scontrol show job <agg> | tr ' ' '\n' | grep '^Dependency='   # expect 84 entries
+> ```
+>
+> Submitting them minutes later is equivalent to submitting them together: they
+> are `afterany` on the mains either way, and resume makes them additive.
 
 > 🔴 **Use `submit_paced.sh`, never `launch.sh`, for the real campaign.** `launch.sh`
 > submits in a tight loop; on 2026-08-06 that hit

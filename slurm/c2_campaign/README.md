@@ -86,10 +86,32 @@ ssh picasso 'cd $REPO && python slurm/c2_smoke/chunk_smoke_verify.py \
 bash slurm/c2_campaign/stage_f_preflight.sh
 
 # 4. Preview, then submit.  PACED -- see the box below.
+#    C2_MIN_JOBID is MANDATORY: step 2 ran Stage C today, and Stage C builds the
+#    SAME 42 job names, so the default (0) makes this a silent no-op.
 bash slurm/c2_campaign/launch.sh --dry-run
-ssh picasso 'cd $REPO && bash slurm/c2_campaign/submit_paced.sh --dry-run'
-ssh picasso 'cd $REPO && bash slurm/c2_campaign/submit_paced.sh'
+MIN=$(ssh picasso "sacct -S today -n -P -X -o JobID | cut -d_ -f1 | sort -n | tail -1")
+ssh picasso "cd \$REPO && C2_MIN_JOBID=$((MIN+1)) bash slurm/c2_campaign/submit_paced.sh --dry-run"
+ssh picasso "cd \$REPO && C2_MIN_JOBID=$((MIN+1)) bash slurm/c2_campaign/submit_paced.sh"
+
+# 5. Submit the sweep arrays -- submit_paced.sh has no sweep block, launcher.sh
+#    does.  Without them, deadline-deferred cells are never recovered.
+#    Then: scontrol update JobId=<agg> Dependency=afterany:<42 mains>:<42 sweeps>
 ```
+
+> ### 🔴 Two things `submit_paced.sh` will not do for you (found 2026-08-07)
+>
+> 1. **`C2_MIN_JOBID` defaults to 0.** It skips arrays by *job name* over
+>    `sacct -S today`, and the smoke and campaign profiles build the same 42
+>    names. After a same-day Stage C — which step 2 requires — the default
+>    yields 42 SKIPs, zero arrays submitted, the aggregation attached to the
+>    **smoke** wave, and **exit 0**. The dry run must report
+>    `already present (job id >= N): 0`.
+> 2. **It submits no sweep arrays.** `launcher.sh` does, and it extends the
+>    aggregation dependency onto them. Submit them separately and repoint the
+>    aggregation, or deadline-deferred cells are lost and §5.5 completeness
+>    fails.
+>
+> Both are recorded in `EXECUTION-PLAN` §11.1 (2026-08-07).
 
 > ### 🔴 Submit with `submit_paced.sh`, not `launch.sh`
 >

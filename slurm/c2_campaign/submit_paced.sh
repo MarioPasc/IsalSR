@@ -23,6 +23,19 @@
 #   bash slurm/c2_campaign/submit_paced.sh             # gate, then submit
 #   C2_SLEEP=30 bash slurm/c2_campaign/submit_paced.sh # slower, if refused again
 #
+# 🔴 TWO THINGS THIS SCRIPT DOES NOT DO (both found 2026-08-07):
+#
+#   1. It does not choose `C2_MIN_JOBID` for you, and the default of 0 is unsafe
+#      after a same-day Stage C -- see the fail-closed guard below.
+#
+#   2. It submits NO SWEEP ARRAYS.  `launcher.sh` submits a `c2w_*` sweep per
+#      array (`afterany` on the mains) to pick up cells a task's deadline
+#      refused to start, and extends the aggregation dependency onto them.
+#      Without that step, those cells (5-20 of 12,600 by the launcher's own
+#      simulation) are never recovered and the aggregation runs against a tree
+#      missing them -- and it breaks the commitment made to SCBI in
+#      CAMPAIGN_BRIEF.md section 6.  Run `submit_sweeps.sh` after this script.
+#
 # RUN IT ON PICASSO, from the deployed tree: it needs sbatch, and the worker
 # path recorded by sbatch must be the deployed worker (defect 15, SP-1).
 #
@@ -84,6 +97,42 @@ EXISTING="$(sacct -S today -n -P -X -o JobID,JobName 2>/dev/null \
         '{split($1,a,"_"); if (a[1]+0 >= m && $2 ~ /^c2s_/ && $2 !~ /aggregate|ledger/) print $2}' \
     | sort -u)"
 N_EXIST=$(grep -c . <<<"${EXISTING}" || true)
+
+# 🔴 FAIL CLOSED when the floor is unset and a same-day Stage C could mask the
+# whole campaign (found 2026-08-07, before it cost a submission).
+#
+# This script skips arrays by JOB NAME, and the smoke and campaign profiles
+# build the SAME names -- both from the one launcher,
+# `c2s_${METHOD:0:1}${ARM:0:1}_${SUITE}`.  The runbook REQUIRES Stage C on the
+# commit being submitted, which in practice is the same day.  So with the
+# default MIN_JOBID=0 this script would: print SKIP forty-two times, submit ZERO
+# arrays, find `ALL_IDS` = the 42 STAGE C ids, satisfy `-eq 42`, submit the
+# aggregation `afterany` on the SMOKE wave, write the smoke ids to job_ids.txt,
+# and exit 0.  A silent no-op that reads as a successful submission -- the same
+# family as 2026-08-06, where `--test-only` said 42/42 while every task was
+# about to abort.
+#
+# Refusing is right rather than auto-deriving a floor: on a genuine RECOVERY run
+# the already-submitted campaign arrays must still be skipped, and only the
+# operator knows which of the two situations this is.
+if [[ "${MIN_JOBID}" == "0" && "${N_EXIST}" -gt 0 ]]; then
+    cat >&2 <<EOF
+FATAL: ${N_EXIST} c2s_* array(s) already exist today and C2_MIN_JOBID is unset.
+
+  Stage C builds the SAME 42 job names as the campaign, so without a floor this
+  run would skip all of them, submit nothing, and attach the aggregation to the
+  Stage C wave -- while exiting 0.
+
+  If those arrays are a Stage C wave, set the floor above them:
+
+      MIN=\$(( \$(sacct -S today -n -P -X -o JobID | cut -d_ -f1 | sort -n | tail -1) + 1 ))
+      C2_MIN_JOBID=\$MIN bash \$0
+
+  If they ARE this campaign and you are completing a partial submission, pass
+  the campaign's own floor (the id of its first array), not 0.
+EOF
+    exit 1
+fi
 
 echo "Campaign C2 -- paced submission"
 echo "  repo:    ${REPO}"

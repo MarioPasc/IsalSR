@@ -12,7 +12,7 @@ disagree about a launch, **this file wins**; update the ticket.
 | Budget per run | `max_time = 43,200 s` (12 h), 1 core |
 | Core-hours | **100,800** committed |
 | Launch model | **one gated launch, all six arrays** — nothing submits until every blocker and every pre-flight gate in §4 has passed |
-| Status | **NOT SUBMITTED.** Pre-flight A–E complete: A–C signed, **Stage D GO** (§4.4, 13/13 cells, 8/8 criteria) and **Stage E GO** (§4.5, 7/7 checks, 2026-08-05, `stage_e_certification.json`). Remaining before launch: D3, one clean Stage C wave (**v5**) on the final config, HOME quota, Stage F sign-off, `campaign/c2` tag. ⚠ **Stage E must be re-run on v5** and must then pass **without** `--allow-mixed-provenance`; v4 needed it because 161 of its cells recorded `a455d6c-dirty` |
+| Status | ✅ **SUBMITTED 2026-08-07 17:52 CEST** on commit `2dd56fd`, tag `campaign/c2`. 42 arrays / 3,474 tasks / 12,600 cells, plus 42 dependent sweep arrays; aggregation `1840324` (`afterany` on all 84), ledger + certifier `1840325`. Stage C re-certified on this HEAD (**v6**: 1,260/1,260, 19/19 PASS, 0 blocking failures, single provenance, `expected_set_source: registry`); Stage F **13 PASS / 0 FAIL**; zero submission refusals; first cells report `git_describe: campaign/c2` on 100 %. Job ids in §11.3; anomalies found during launch in §11.1. 🔴 **Do not deploy while the arrays run (defect 10)** — five defects were found at launch and their fixes are deliberately NOT deployed to this campaign |
 | Number freeze | 2026-09-10 |
 
 ---
@@ -1130,6 +1130,13 @@ wrong at cost:
 
 | Date | Item | Decision / finding | Recorded by |
 |---|---|---|---|
+| 2026-08-07 | ✅ **C2 SUBMITTED — 42 arrays, 3,474 tasks, 12,600 cells, on `2dd56fd` / `campaign/c2`** | Stage C re-certified on this HEAD (**v6**, 1,260/1,260, 19/19 PASS, single provenance `campaign/c2-13-g2dd56fd`), tag re-cut and pushed, Stage F **13 PASS / 0 FAIL**, submitted paced at 20 s with **zero refusals**. First cells report `git_describe: campaign/c2` on 100 %. Ids in §11.3. Achieved concurrency during Stage C was **426 concurrent tasks** and the campaign reached **1,490 running within minutes** — comfortably above §8.2's 200–300 requirement, so **P5's contention question is answered empirically** | Claude, `submit_paced.sh` |
+| 2026-08-07 | 🔴 **The submission runbook, followed literally, submits NOTHING** | **Caught in the dry run, before the real submission.** `submit_paced.sh` is idempotent by *job name*, scoped by `C2_MIN_JOBID`, which **defaults to 0**. Its own comment (lines 48–52) names the hazard: the smoke and campaign profiles build the **same** job names, both from the one launcher — verified, `launcher.sh:458` and `submit_paced.sh:102` both compute `c2s_${METHOD:0:1}${ARM:0:1}_${SUITE}`. But §4 *requires* Stage C to be re-run on the commit being submitted, and in practice that is the same day, so `sacct -S today` returns all 42 campaign job names from the smoke wave. With the default the campaign would have: printed `SKIP (already submitted)` ×42; submitted **zero** arrays; computed `ALL_IDS` = the 42 **Stage C** ids, found `-eq 42`, and submitted the aggregation + ledger `afterany` on the **smoke** wave; written the smoke ids to `job_ids.txt`; and **exited 0**. A silent, complete no-op that reads as success — same family as 2026-08-06, where `--test-only` said 42/42 while every task was about to abort. **None of `SUBMIT_NOW.md` §4, `CAMPAIGN_BRIEF.md` §7 Step 5 or `README.md` §2 mentions `C2_MIN_JOBID`.** Submitted with `C2_MIN_JOBID=1839141` (max job id at that moment + 1); dry run then reported `already present: 0` and all 42 queued. **Root cause is the name collision, not the missing variable** — the durable fix is to distinguish the profiles in the job name, or derive `MIN_JOBID` automatically from the highest id at script start | Claude, dry run |
+| 2026-08-07 | 🔴 **`submit_paced.sh` omits the sweep arrays `launcher.sh` submits** | `launcher.sh:557-592` submits, for every array with `B > 1`, a sweep `c2w_*` with `afterany` on the mains, and then **extends the aggregation dependency to include the sweeps** — *"The aggregation must wait for the SWEEP, not just the main pass, or it aggregates a tree that is still missing its deferred cells"*, and *"a recovery step that depends on someone remembering is a recovery step that does not happen."* `submit_paced.sh` has **no sweep block at all**, so the campaign the runbooks instruct would never recover cells the per-task deadline refused to start (the launcher's own simulation: **5–20 of 12,600**) and would aggregate a tree missing them. It also breaks the written commitment to SCBI in `CAMPAIGN_BRIEF.md` §6 (*"Lo que no le da tiempo a empezar lo recoge un array dependiente (`afterany`) que enviamos en el mismo momento"*). **Handled**: 42 sweeps submitted as a second paced pass, zero refusals, and `scontrol update JobId=1840324 Dependency=afterany:<42 mains>:<42 sweeps>` verified to hold **84** entries. Equivalent to what `launcher.sh` would have done, since the sweeps are `afterany` on the mains regardless of submission time. Adds 3,474 log inodes: 78,729 needed against 86,600 free | Claude, `submit_sweeps.sh` |
+| 2026-08-07 | 🔴 **`launcher.sh` passes TASKS where the certifier wants CELLS** | `launcher.sh:625` exports `C2_EXPECTED_TASKS=${N_TASKS_TOTAL}` to the ledger job, which forwards it to `c2_certify --expected-tasks`. Since chunking that is the **task** count (453 for Stage C) while the certifier documents the argument as *"Number of cells the campaign should contain"* (`c2_certify.py:1940`). Effect is a **silent weakening, not an error**: `build_expected_cells` uses the registry universe only when `len(canonical) == expected_tasks`, so at 453 vs 1,260 it falls through to the `"disk"` universe — completeness measured against what was found rather than what should exist, under which a whole absent problem directory is invisible. The v6 chain duly reported **GO with `expected_set_source: 'disk'`**. Same family as the Stage D certifier that reported GO with a blocking criterion at SKIP. **Re-run with `C2_EXPECTED=1260` and `C2_LOGS_DIR` pointed at the real wave**: verdict still **GO, 19/19, `expected_set_source: 'registry'`, expected = observed = 1,260**, and C1.11 upgraded from the `status.json` fallback to **453 real sacct `MaxRSS` rows**. The disk-sourced verdict is kept as `stage_c_certification.disk453.json.bak`. **`submit_paced.sh:191` is correct (`N_CELLS_TOTAL`), so the campaign is unaffected** | Claude, `c2_certify` |
+| 2026-08-07 | 🔴 **`certify.sh` default `LOGS_DIR` reads a stale HOME path** | `certify.sh:23` defaults to `~/execs/isalsr/c2_smoke/logs` while `launcher.sh` writes `job_ids.txt` to `$FSCRATCH/execs/...`. These are **different directories** (distinct inodes 64202410 vs 16623422), and the HOME copy held a `job_ids.txt` from **2026-08-03** (first id 1752689). With defaults, the C1.11 memory profile — whose only purpose is to size production `--mem` — would be built by running `sacct` over a **previous wave's** job ids, whose task ids appear in no `status.json` of this root, matching ~0 rows. Same family as the JobID/JobIDRaw bug documented in that file's own comments, which *"reported a profile built from 3 % of the campaign and still said PASS"*. Worked around with an explicit `C2_LOGS_DIR`; the profile then built from the correct 42 arrays, 453 rows | Claude, inode comparison |
+| 2026-08-07 | ⚠ **G7 was validating a mirror from a different commit than the certified wave** | Stage F G7 runs the analyzer over the workstation mirror `${LOCAL_BASE}/c2_smoke`. Before this launch that mirror's run logs carried `git_describe: 793a17c`, while the Picasso root Stage C v5e certified carried `campaign/c2-2-g2ff0050`. So the gate proving *"the analyzer accepts the root with NO provenance override"* was passing against a **stale mirror of an older wave** — the provenance guard sees a single consistent commit either way, and **nothing in the gate ties the mirror to the wave**. A check that cannot fail for the right reason. Resolved for this launch by deleting the mirror and rsyncing the v6 root fresh (1,260 logs, single provenance `campaign/c2-13-g2dd56fd`). **Durable fix**: G7 should assert the mirror's `git_describe` equals G11's `CERTIFIED_COMMIT` before running the analyzer | Claude, mirror scan |
+| 2026-08-07 | ⚠ `test_numerical_audit.py` fails on HEAD — **not a launch blocker** | Unit suite on `2dd56fd`: **7,625 passed, 1 failed, 5 skipped**. The failure is `test_hand_verified_cross_file_duplicates_are_rediscovered`, which audits the **external Overleaf checkout**, touching no path that executes on a compute node. Its fixture set `{0.28, 0.82, 1.07, 1.56, 1.83}` is stale: measured against the current manuscript, `0.82`/`1.56`/`1.83` appear in **0** files and `0.28`/`1.07` in **1** each, while a cross-file duplicate needs `n_files ≥ 2`. The manuscript moved (`c8e96ca fix: report 30 seeds`, `20223c9 docs(double-blind): mirror the revision`). **The audit tool is correct; these are C1 numbers C2 exists to replace**, so the fixture must be regenerated *after* the C2 numbers land, not forced back to stale values. Belongs to T09 | Claude, pytest |
 | 2026-08-06 | 🔴 **D3 found the k=0 completeness defect** | **LAUNCH BLOCKER, found before any campaign core-hours were committed — which is exactly what §0.4d says D3 is for.** The Mode 1 replay returned exit 2 on **37 IsalSR soundness violations**, all between DAGs with **zero internal nodes**. Cause: Σ_SR encodes only the instructions that *build* internal nodes and the m variables are pre-inserted (invariant 7), so **every k=0 DAG canonicalises to `""`** — for every m and every choice of output variable. `""` is the faithful encoding of the *initial state*; what it cannot do is name an output, because a `LabeledDAG` carries no output marker (for k≥1 the output is the unique sink; at k=0 there are m sinks). **Verified on the real Bingo adapter: `f(x)=X_0` and `f(x)=X_1` share the key `""`.** Both runners acted on it — `bingo/isalsr_runner.py:670` transferred the cached fitness, `udfs/isalsr_runner.py:480` skipped evaluation outright. **Pre-existing, not from T18, so C1 carries it too.** Fix is a *domain restriction*, not a patch: at k=0 the relabeling group is 0!=1, so there is no redundancy to collapse and ρ is undefined on an object with no structure. k=0 candidates are scored, never deduplicated, never cached, excluded from ρ; **completeness is claimed for k≥1**. Incidence **0.0593 %** of the Bingo Pagie-1 stream (71/119,795 sampled) and **4.6 %** on a short synthetic 2-var run. UDFS cannot reach k=0 (`n_calc_nodes = 5` on all 7 campaign configs) but the guard is symmetric, because an arm-specific dedup rule is the asymmetry a paired design cannot tolerate. `n_nonstructural` persisted per run. **D3 now exits 0**: hash soundness 0 unsound merges on all three fixed orders (the arm's veto passes), replay fidelity 0/119,795. Commit `b223a08` | Claude, `stage_d_mode1_replay` + adapter probe |
 | 2026-08-06 | 🔴 **v5 ledger job died in 2 s** | **Stage C v5 was 1,260/1,260 COMPLETED with single provenance and still produced no `status_ledger.csv` and no verdict.** `aggregate_worker.sh` asserted `C2_CONFIG_LIST` at **file scope**, but the launcher does not export it to the dependent ledger job — correctly, since a full-root walk needs no config — so under `set -u` the `:?` form aborted **before the role was selected**. One of the 2026-08-05 aggregation-split changes T17-HANDOFF §3.3 flagged as never having executed on Picasso; v5 is what it was for. Each variable is now asserted inside the role that consumes it, the array role still failing loudly on an empty list. Re-run on v5's data: ledger in 25 s, **18/19 criteria PASS**, the one failure being C1.2 because v5 predates `n_nonstructural`. Commit `b786d20`, 4 regression tests verified non-vacuous against `HEAD~1` | Claude, job 1783830 |
 | 2026-08-06 | 🔴 **C2 SUBMITTED AND ALL 12,600 TASKS DIED IN SECONDS** | **The campaign was launched on `campaign/c2` (`24f83a0`) and every task aborted immediately with `[FATAL] C2_SEEDS decoded to 1 seed(s): '1-30'`.** `c2_task_spec` accepts both an explicit list (`0,101,102`) and a range (`1-30`), and the campaign profile ships the range; `worker.sh`'s guard counted **comma-separated fields**, saw one, and exited before any work began. The range is otherwise correct end to end — index 1 → `Nguyen-1` seed 1, 30 → seed 30, 31 → `Nguyen-2` seed 1, 360 → `Nguyen-12` seed 30, 361 → out of range. **Only the arithmetic was wrong.** Cost: queue churn and a full submission cycle; **near-zero core-hours**, because the tasks exited on startup. 🔴 **Why four waves and an 11/11 gate missed it, which is the part to keep: (a) Stage C runs the SMOKE profile, seeds `0,101,102` — the campaign's `1-30` was never executed by v5, v5b, v5c or v5d, so §10.2's claim that the smoke wave "certifies the campaign's launcher rather than a cousin of it" was false in precisely the dimension the profiles differ; (b) G10's "42/42 accepted" came from `sbatch --test-only`, which validates a RESOURCE REQUEST and never runs the payload — evidence about the scheduler, not the worker.** Fixed in `2ff0050`: the guard expands ranges (verified non-vacuous — pre-fix returns 1 for `1-30`, post-fix 30); `test_worker_seed_decode.py` extracts the awk program **from `worker.sh` itself** so it cannot drift, covers every spec the launcher ships, and **fails if a profile gains an uncovered one**; Stage F gains **G12**, decoding the campaign spec through the worker's own arithmetic and through `c2_task_spec`. **A live 42-task campaign-profile probe** then closed it empirically: 42/42 COMPLETED, 42 run logs, three arms × 14, provenance `campaign/c2-2-g2ff0050`, `n_nonstructural` populated. Wave **v5e** re-certifies `worker.sh`; **the tag must move** (procedure §4) | Claude, job logs |
@@ -1286,12 +1293,67 @@ task and Bingo ~5.15 h, so UDFS needs proportionally more concurrent slots to
 finish alongside it. Regenerate with
 `python -m experiments.scripts.c2_slot_plan --seeds 1-30 --table`.
 
-| # | Method | Arm | Suite | Tasks | Job ID | Submitted | Completed | Failed | Notes |
+> ### ✅ SUBMITTED 2026-08-07 17:52 CEST — commit `2dd56fd`, tag `campaign/c2`
+>
+> The table below is the **task** count after SCBI chunking, not the cell count.
+> Cells per array are unchanged (`suite_size × 30`); the `Tasks` column is what
+> SLURM was asked to schedule. 12,600 cells in **3,474 tasks**.
+>
+> Stage F gate: **13 PASS / 0 FAIL**. Submission: `submit_paced.sh` at 20 s,
+> **zero refusals**. Sweep arrays submitted as a second paced pass (see the
+> 2026-08-07 entry in §11.1 — `submit_paced.sh` has no sweep block) and the
+> aggregation repointed onto all 84 arrays.
+>
+> Provenance of the first cells written: **`git_describe: campaign/c2`** on
+> 100 % of them.
+
+| # | Method | Arm | Suite | Tasks | Job ID | Sweep ID | Completed | Failed | Notes |
 |---|---|---|---|---|---|---|---|---|---|
-| 1–7 | UDFS | baseline | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
-| 8–14 | UDFS | hash | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
-| 15–21 | UDFS | isalsr | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
-| 22–28 | Bingo | baseline | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
-| 29–35 | Bingo | hash | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
-| 36–42 | Bingo | isalsr | nguyen … strogatz | 240/200/200/200/160/120/280 | | | | | |
-| 43 | — | — | aggregation (`--postprocess only`, `afterany`) | 1 | | | | | |
+| 1 | UDFS | baseline | nguyen | 180 | 1839368 | 1840404 | | | B=2 |
+| 2 | UDFS | baseline | feynman | 12 | 1839369 | 1840438 | | | B=27 |
+| 3 | UDFS | baseline | hard | 150 | 1839446 | 1840439 | | | B=2 |
+| 4 | UDFS | baseline | cherrypicked | 150 | 1839450 | 1840460 | | | B=2 |
+| 5 | UDFS | baseline | roundoff | 120 | 1839451 | 1840489 | | | B=2 |
+| 6 | UDFS | baseline | feynman_remainder | 45 | 1839452 | 1840490 | | | B=4 |
+| 7 | UDFS | baseline | strogatz | 210 | 1839453 | 1840511 | | | B=2 |
+| 8 | UDFS | hash | nguyen | 180 | 1839459 | 1840536 | | | B=2 |
+| 9 | UDFS | hash | feynman | 12 | 1839499 | 1840537 | | | B=27 |
+| 10 | UDFS | hash | hard | 150 | 1839500 | 1840557 | | | B=2 |
+| 11 | UDFS | hash | cherrypicked | 150 | 1839558 | 1840576 | | | B=2 |
+| 12 | UDFS | hash | roundoff | 120 | 1839609 | 1840588 | | | B=2 |
+| 13 | UDFS | hash | feynman_remainder | 45 | 1839610 | 1840628 | | | B=4 |
+| 14 | UDFS | hash | strogatz | 210 | 1839638 | 1840647 | | | B=2 |
+| 15 | UDFS | isalsr | nguyen | 180 | 1839659 | 1840661 | | | B=2 |
+| 16 | UDFS | isalsr | feynman | 12 | 1839685 | 1840686 | | | B=27 |
+| 17 | UDFS | isalsr | hard | 150 | 1839707 | 1840699 | | | B=2 |
+| 18 | UDFS | isalsr | cherrypicked | 150 | 1839713 | 1840710 | | | B=2 |
+| 19 | UDFS | isalsr | roundoff | 120 | 1839733 | 1840711 | | | B=2 |
+| 20 | UDFS | isalsr | feynman_remainder | 45 | 1839860 | 1840747 | | | B=4 |
+| 21 | UDFS | isalsr | strogatz | 210 | 1839861 | 1840766 | | | B=2 |
+| 22 | Bingo | baseline | nguyen | 3 | 1839891 | 1840767 | | | B=164 |
+| 23 | Bingo | baseline | feynman | 3 | 1839911 | 1840902 | | | B=123 |
+| 24 | Bingo | baseline | hard | 75 | 1839915 | 1840926 | | | B=4 |
+| 25 | Bingo | baseline | cherrypicked | 100 | 1839936 | 1840927 | | | B=3 |
+| 26 | Bingo | baseline | roundoff | 60 | 1839956 | 1840955 | | | B=4 |
+| 27 | Bingo | baseline | feynman_remainder | 15 | 1839965 | 1840956 | | | B=12 |
+| 28 | Bingo | baseline | strogatz | 35 | 1839966 | 1841065 | | | B=12 |
+| 29 | Bingo | hash | nguyen | 3 | 1840005 | 1841096 | | | B=164 |
+| 30 | Bingo | hash | feynman | 3 | 1840021 | 1841099 | | | B=123 |
+| 31 | Bingo | hash | hard | 75 | 1840022 | 1841123 | | | B=4 |
+| 32 | Bingo | hash | cherrypicked | 100 | 1840055 | 1841137 | | | B=3 |
+| 33 | Bingo | hash | roundoff | 60 | 1840071 | 1841138 | | | B=4 |
+| 34 | Bingo | hash | feynman_remainder | 15 | 1840072 | 1841146 | | | B=12 |
+| 35 | Bingo | hash | strogatz | 35 | 1840097 | 1841147 | | | B=12 |
+| 36 | Bingo | isalsr | nguyen | 3 | 1840098 | 1841202 | | | B=164 |
+| 37 | Bingo | isalsr | feynman | 3 | 1840125 | 1841203 | | | B=123 |
+| 38 | Bingo | isalsr | hard | 75 | 1840151 | 1841258 | | | B=4 |
+| 39 | Bingo | isalsr | cherrypicked | 100 | 1840152 | 1841259 | | | B=3 |
+| 40 | Bingo | isalsr | roundoff | 60 | 1840178 | 1841362 | | | B=4 |
+| 41 | Bingo | isalsr | feynman_remainder | 15 | 1840198 | 1841427 | | | B=12 |
+| 42 | Bingo | isalsr | strogatz | 35 | 1840200 | 1841428 | | | B=12 |
+| 43 | — | — | aggregation (`--postprocess only`, `afterany` on all **84**) | 42 | 1840324 | — | | | dependency repointed onto the sweeps after submission |
+| 44 | — | — | status ledger + certifier (`afterany` on 43) | 1 | 1840325 | — | | | `C2_EXPECTED_TASKS=12600` (cells, correct here) |
+
+**Totals**: 3,474 tasks across 42 arrays (UDFS 867 per arm, Bingo 291 per arm),
+plus 3,474 sweep tasks that exit in seconds wherever their cells already
+completed. Job ids in `<logs>/job_ids.txt` and `<logs>/sweep_job_ids.txt`.
