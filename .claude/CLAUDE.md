@@ -220,8 +220,13 @@ population being described exists only while a search runs.
   residual instrumentation cost is common to all three and cancels in every
   arm-versus-arm contrast. Bingo describes the whole population every 25
   generations (its baseline has **no** per-candidate hook — `__call__` is
-  per-generation); UDFS every 31st candidate. Measured overhead ≈0.2 % of wall
-  clock. `complexity_sampling_mode` records which.
+  per-generation); UDFS every 31st candidate. `complexity_sampling_mode` records
+  which. **Measured overhead (probe 1814948): UDFS 0.001–0.003 %; Bingo 0.69 %
+  on its longest cell, projecting to ≈0.7 % at campaign scale.** Short converged
+  runs show up to 1.96 % purely because the fixed generation-0 sample is
+  amortised over few generations — the ratio is asymptotically flat. Raise
+  `ISALSR_COMPLEXITY_GEN_FREQ` to halve it if ever needed; generation 0 is
+  always sampled, so no run can end with `n = 0`.
 - **Never measure on the host's native representation.** `command_array` and
   `CompGraph` carry the host's alphabet, in which `Sub`/`Div` are primitive, so
   `k` would differ between arms by construction rather than by search behaviour.

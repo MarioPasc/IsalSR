@@ -321,11 +321,101 @@ in host order, so a descriptor that moved under relabelling would make every
 cross-arm comparison meaningless. Asserted as an identical tuple over **all** k!
 permutations of five hand-built DAGs plus 25 random DAGs × 20 relabellings.
 
-### 6.2 Picasso probe
+### 6.2 Picasso probe — array `1814948`, **14/14 GO**
 
-Array `1814948`, 24 tasks (2 problems × 2 seeds × 3 arms × 2 methods),
-`max_time = 900 s`, seeds 0 and 101, `--constraint=sr`, output under
-`~/execs/isalsr/t19_probe/`. Gates and results in §6.4.
+24 tasks (2 problems × 2 seeds × 3 arms × 2 methods), `max_time = 900 s`, seeds
+0 and 101, `--constraint=sr` (AMD EPYC 7H12), output under
+`~/execs/isalsr/t19_probe/`. **24/24 COMPLETED, 0 failed.**
+
+| gate | verdict | evidence |
+|---|---|---|
+| G1 cell count | PASS | 24/24 `run_log.json` |
+| G2 full factorial | PASS | every `(method, arm, problem, seed)` present |
+| G3 sidecar written | PASS | 24/24 `complexity.json` |
+| **G4 pre-T19 fields intact** | **PASS** | no pre-existing field lost or nulled |
+| **G5 frozen field spec** | **PASS** | 86 fields × 24 cells, types and nullability |
+| G6 telemetry fired | PASS | every cell sampled > 0 DAGs |
+| G7 descriptors finite | PASS | 9 descriptors × 24 cells |
+| G8 sampling mode | PASS | bingo = population, udfs = stream |
+| **G9 identical rule across arms** | **PASS** | bingo = 25, udfs = 31, no raggedness |
+| G10 unique block placement | PASS | on hash + isalsr, `None` on baseline |
+| G11 zero describe failures | PASS | 0 across all cells |
+| G12 overhead | PASS | see §6.2a |
+| G13 schema coverage | PASS | 25 fields, both directions |
+| **G14 SP-4 alphabet** | **PASS** | 0 `SUB`, 0 `DIV` over every sampled node |
+
+G4, G5 and G9 are the ones that matter. G4/G5 say the campaign's existing
+record is undisturbed — a probe proving the new block works while the old
+fields regressed would be worth nothing. G9 says the three arms sampled under
+the same rule, which is what makes an arm-versus-arm contrast a contrast on the
+search rather than on the instrument. G14 confirms the decomposed alphabet on
+the probe's own candidate stream rather than in a unit test.
+
+SP-1..SP-3 from the compute node: engine `cpp`, **`build_hash
+298fc1188bf1b051` unchanged** (D5 held — no C++ was touched), `.so` mtime
+2026-08-06, `complexity.py` SHA-256 `7bc4829b30b6a5ef` matching the local file
+byte for byte.
+
+### 6.2a Overhead — the honest number is higher than the local smoke suggested
+
+⚠ **Correcting an earlier figure in this document.** The 40 s local smoke gave
+≈0.2 %; the probe does not support that as the campaign figure.
+
+Measured `complexity_time_s / wall_clock_total_s`:
+
+| cells | overhead |
+|---|---|
+| UDFS (all 12) | **0.001 – 0.003 %** |
+| Bingo, longest cell (1,025 generations) | **0.69 %** |
+| Bingo, shortest cells (~100 generations) | **1.87 – 1.96 %** |
+
+The spread is entirely an amortisation artefact, not a scaling problem: the
+generation-0 population sample is a fixed 500-DAG cost, so a run that converges
+in three seconds charges it against almost no wall clock. The ratio is
+asymptotically flat, because both the sample count and the wall clock grow
+linearly in generations — which is why the longest cell sits at 0.69 %.
+
+**Projection for the campaign regime.** Bingo stops on `max_evals = 100M` at
+~500 evaluations per generation, i.e. ~200,000 generations, giving ~8,000
+sampling events × 500 individuals × 32.7 µs ≈ **131 s against ~18,500 s, or
+≈0.7 %** — matching the longest observed cell. Max absolute cost anywhere in
+the probe: **2.75 s**.
+
+**Why 0.7 % is acceptable even against a 7.4 % canonicalisation overhead:** the
+cost is applied under an identical rule in all three arms, so it cancels in
+every arm-versus-arm contrast, and `complexity_time_s` is recorded per run so
+any absolute overhead figure can be corrected exactly rather than estimated. If
+it must be reduced, raising `ISALSR_COMPLEXITY_GEN_FREQ` to 50 halves it
+without any code change; generation 0 is sampled unconditionally, so no run can
+be left with `n = 0`.
+
+### 6.2b Descriptive signal — **not evidence**
+
+A 900 s probe on two easy problems with two seeds proves nothing scientific,
+and the verifier prints that caveat next to the table. It is recorded only
+because a *reversed* ordering would have indicated the instrument was wrong.
+
+Bingo, mean `k` over the sampled populations:
+
+| problem | seed | baseline | hash | isalsr |
+|---|---|---|---|---|
+| Nguyen-1 | 0 | 6.53 | 8.42 | 8.94 |
+| Nguyen-1 | 101 | 6.51 | 7.89 | 9.71 |
+| Nguyen-10 | 0 | 9.26 | 10.47 | 14.79 |
+| Nguyen-10 | 101 | 5.80 | 10.15 | 10.94 |
+
+The pre-registered ordering `baseline ≤ hash ≤ isalsr` holds in **4/4** Bingo
+cells, and on all five headline descriptors simultaneously (k, depth,
+n_nonlinear, n_shared, entropy) — not only on k.
+
+UDFS shows a much weaker effect (baseline ≈ hash, isalsr marginally above),
+which is exactly what T04 predicts: UDFS's `ρ_hash = 1.0000`, so the hash arm
+merges nothing and its candidate stream is the baseline's. The one visible
+difference is that UDFS-isalsr sampled roughly twice as many candidates
+(390–425 vs 167–242) in the same budget — the budget-conversion route of §1.1,
+directly observable.
+
+⚠ Do not quote any of these numbers. C2 replaces them.
 
 ### 6.3 Concurrency note — another agent is working in this tree
 
