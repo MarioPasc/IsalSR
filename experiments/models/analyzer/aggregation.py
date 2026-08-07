@@ -88,6 +88,15 @@ def _nan_if_none(value: bool | float | None) -> float:
 
 
 # Maps metric names to functions that extract the value from a RunLog.
+#: Marker written into ``PairedStatsMetric.test_used`` when the paired
+#: differences have zero variance, so no within-problem test is identified.
+#: Such a contrast is reported descriptively: ``p_value_raw`` is NaN,
+#: ``p_value_holm`` stays ``None``, and it is excluded from the Holm family.
+#: See the branch in :func:`compute_paired_stats` for why an exact sign test is
+#: deliberately not used as a fallback.
+DEGENERATE_ZERO_VARIANCE = "degenerate_zero_variance"
+
+
 METRIC_EXTRACTORS: dict[str, Callable[[RunLog], float]] = {
     "r2_test": lambda rl: rl.regression.r2_test,
     "r2_train": lambda rl: rl.regression.r2_train,
@@ -273,6 +282,54 @@ def compute_paired_stats(
             d = float("nan")
             d_ci_lo = d_ci_hi = float("nan")
             mean_d = ci_lo = ci_hi = float("nan")
+        elif float(np.ptp(diff_clean)) == 0.0:
+            # ---------------------------------------------------------------
+            # Every paired difference is identical, so the differences have
+            # zero variance and NO within-problem test is identified.
+            #
+            # What the previous code did: Shapiro-Wilk returns p = 1.0 on
+            # constant input, so the normal branch was taken, and the paired
+            # t-test divided by that zero variance -- SciPy returns t = ±inf
+            # and p = 0.0.  Meanwhile ``cohens_d_paired`` guards ``sd < 1e-10``
+            # and returns 0.0.  The record therefore read "negligible effect"
+            # beside "infinitely significant": not a significant result, an
+            # undefined one, and the same family of defect as T08's
+            # NaN-typeset-as-winner.
+            #
+            # Why not fall back to an exact sign test.  It is well defined here
+            # and tempting -- n identical-sign differences give two-sided
+            # p = 2 * 0.5^n.  But zero across-seed variance is precisely the
+            # evidence that the seeds are NOT independent draws: a
+            # deterministic search replicated 30 times is one observation, not
+            # 30, and a sign test would claim p = 2 * 2^-30 from it.  That
+            # would be a worse error than the one being fixed.
+            #
+            # So the contrast is reported descriptively and carries no p-value.
+            # Inference for such a metric belongs to the CPDT, whose unit of
+            # replication is the PROBLEM and which is therefore unaffected.
+            # Surfaced by T19: UDFS's enumeration is near-deterministic, so its
+            # structural descriptors can be bit-identical across every seed.
+            # ---------------------------------------------------------------
+            log.info(
+                "  %s: zero-variance paired differences over %d seeds; "
+                "reported descriptively, no p-value",
+                metric_name,
+                len(diff_clean),
+            )
+            _sw_stat, sw_p = shapiro_wilk(diff_clean)
+            stat = float("nan")
+            p_raw = float("nan")
+            test_used = DEGENERATE_ZERO_VARIANCE
+            mean_d, ci_lo, ci_hi = mean_diff_ci(diff_clean)
+            # d = mean/sd. With sd == 0 this is infinite unless the numerator is
+            # also exactly zero, in which case the arms did not differ at all
+            # and an effect size of zero is the correct reading, not a fallback.
+            if mean_d == 0.0:
+                d = 0.0
+                d_ci_lo = d_ci_hi = 0.0
+            else:
+                d = float("nan")
+                d_ci_lo = d_ci_hi = float("nan")
         else:
             # Normality test
             _sw_stat, sw_p = shapiro_wilk(diff_clean)
@@ -345,9 +402,22 @@ def apply_holm_correction(
         raw_ps = []
         indices = []
         for i, ps in enumerate(paired_stats_list):
-            if metric_name in ps.metrics:
-                raw_ps.append(ps.metrics[metric_name].p_value_raw)
-                indices.append(i)
+            if metric_name not in ps.metrics:
+                continue
+            p_raw = ps.metrics[metric_name].p_value_raw
+            # A contrast that carries no p-value is not a test, so it must not
+            # enter the family.  ``multipletests`` accepts a NaN and returns a
+            # NaN for it, which looks harmless -- but it still counts that
+            # entry towards m, so every OTHER problem is corrected more harshly
+            # than the evidence warrants (with one NaN among three, p = 0.01
+            # became 0.03 instead of 0.02).  Two paths reach here with no
+            # p-value: ``insufficient_data`` and, since T19,
+            # ``degenerate_zero_variance``.  Both leave ``p_value_holm = None``,
+            # which is the same "not measured" convention the ledger fields use.
+            if p_raw is None or not np.isfinite(p_raw):
+                continue
+            raw_ps.append(p_raw)
+            indices.append(i)
 
         if not raw_ps:
             continue

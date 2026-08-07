@@ -499,12 +499,63 @@ Mitigating facts, and why this is not a blocker:
   correctly. House policy already makes CPDT the primary test.
 - The degenerate values appear only in the per-problem supplementary detail.
 
-**Recommendation (not implemented here — it touches shared analyzer code that a
-second workstream is currently in):** in `compute_paired_stats`, when
-`std_diff == 0`, record `test_used = "degenerate_zero_variance"` and emit
-`p_value_raw = None` rather than `0.0`, exactly as the ledger fields distinguish
-"not measured" from "measured zero". Then either report the contrast
-descriptively or fall back to a sign test.
+### 6.4b ✅ FIXED 2026-08-07 — and the defect was **not** confined to T19
+
+Implemented in `compute_paired_stats` and `apply_holm_correction`; 14 regression
+tests in `tests/unit/test_paired_stats_degenerate.py`, all of which fail against
+the pre-fix code.
+
+**What the fix does.** When the paired differences have zero range,
+`test_used = "degenerate_zero_variance"`, `statistic` and `p_value_raw` are NaN,
+`p_value_holm` stays `None`, and the contrast is excluded from the Holm family.
+Descriptive fields (`mean_diff`, its CI, the two arm means, `std_diff`) are all
+still reported — the contrast is not testable, but it *is* describable, and the
+mean difference is exactly known.
+
+Cohen's d is corrected in the same branch: `d = mean/sd` with `sd = 0` is
+infinite unless the numerator is also exactly zero. It now reports `nan` for a
+constant non-zero shift and `0.0` only when the arms genuinely did not differ.
+Previously `cohens_d_paired` returned `0.0` in both cases, so the record read
+"negligible effect" beside "infinitely significant".
+
+**Why not an exact sign test.** It is well defined here — n identical-sign
+differences give two-sided `p = 2·0.5ⁿ` — and it was the obvious fallback. It is
+wrong for this data. Zero across-seed variance is *precisely the evidence* that
+the seeds are not independent draws: a deterministic search replicated 30 times
+is one observation, not 30, and a sign test would report `p = 2·2⁻³⁰` from it.
+That is a larger error than the one being fixed. Inference for such a metric
+belongs to the CPDT, whose unit of replication is the **problem**.
+
+**Two consequences that were not obvious, both now covered by tests:**
+
+1. **The Holm family was being inflated.** `multipletests` accepts a NaN and
+   returns a NaN for it, which looks harmless — but it still counts that entry
+   towards *m*. With one NaN among three, `p = 0.01` was corrected to 0.03
+   instead of 0.02, i.e. every *other* problem was penalised for a test that was
+   never run. The same was true of the old `p = 0.0` entries. Non-finite raw
+   p-values are now excluded from the family, which also repairs the
+   pre-existing `insufficient_data` path.
+2. **`benchmark_summary` was counting these as significant wins.** It falls back
+   to `p_value_raw` when `p_value_holm` is None, and `0.0 < alpha`, so every
+   degenerate contrast incremented `n_significant`.
+
+**🔴 Scope: this predates T19 and is not a complexity-metric problem.** The same
+`--postprocess only` run flagged `solution_recovered`, `model_complexity` and
+`jaccard_index` as degenerate. Measured against SciPy directly:
+
+| case | old `t` | old `p` | counted as significant? |
+|---|---|---|---|
+| identical arms (all differences 0) | `nan` | `nan` | no — always safe |
+| **constant non-zero difference** | **−inf** | **0.0** | **yes** |
+| `solution_recovered` 0 → 1 on every seed | −inf | 0.0 | yes |
+
+So the damage was confined to metrics showing the *same non-zero* difference on
+every seed — most plausibly `solution_recovered` (one arm recovers on all seeds,
+the other on none) and `model_complexity`. **C1's per-problem supplementary
+tables may therefore carry inflated `n_significant` counts and over-corrected
+Holm p-values for the other problems in those families.** The headline claims are
+CPDT-based and unaffected. Worth a check against the submitted supplementary
+material before the response letter quotes any per-problem count.
 
 ## 6.5 Stated limitations — read before writing the paper section
 
