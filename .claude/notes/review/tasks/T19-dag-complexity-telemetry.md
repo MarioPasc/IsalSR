@@ -257,13 +257,95 @@ which is defined identically in all three arms.
 
 ## 5. Changes
 
-*(filled in as they land; see §8 for the running commit log)*
+### 5.1 New modules
+
+| File | Role |
+|---|---|
+| `src/isalsr/core/complexity.py` | `DagComplexity` (15 descriptors), `describe_dag`, `describe_dag_with_labels`, `ComplexityAccumulator`. Stdlib only, per the `isalsr.core` dependency rule |
+| `experiments/models/complexity_telemetry.py` | `ComplexityTelemetry`: the sampler, the timer, the failure counter, and the two output surfaces (`scalars()` for the run log, `sidecar()` for `complexity.json`) |
+| `slurm/t19_probe/{launcher,worker}.sh`, `tasks.txt`, `verify.py` | The SP-0-capped Picasso probe and its 14-gate verifier |
+| `tests/unit/test_dag_complexity.py`, `tests/unit/test_complexity_telemetry.py` | 491 tests |
+
+### 5.2 Instrumentation points
+
+| Arm | File:line (at time of writing) | Call |
+|---|---|---|
+| Bingo baseline | `bingo/runner.py` `_TrajectoryEvaluation.__call__` | `_sample_population_complexity(...)` at gen 0 and at each `gen % snapshot_freq == 0` |
+| Bingo hash/isalsr | `bingo/isalsr_runner.py` `IsalSREvaluation.__call__` | the **same helper, same position** |
+| Bingo hash/isalsr | `bingo/isalsr_runner.py` `_serial_eval` | secondary: `observe_unique(dag)` on a sampled dedup miss, placed after the key is final and before every branch, so no `continue` can bypass it |
+| UDFS baseline | `udfs/runner.py` `_TrajectoryTracker...wrapped` | `observe_converted(cgraph, compgraph_to_labeled_dag)` on the 1-in-31 grid |
+| UDFS hash/isalsr | `udfs/isalsr_runner.py` `_CanonicalDeduplicator...wrapped` | sampling decided at the top (same candidate index as baseline), `observe(dag, unique=not is_duplicate)` once the duplicate verdict is known |
+
+`_sample_population_complexity` lives in `bingo/runner.py` and is imported by
+`isalsr_runner.py`, so the two arms cannot drift apart by editing one of them.
+
+### 5.3 Persistence
+
+Follows the existing `last_shadow` / `last_ledger` pattern exactly
+(`orchestrator.py`): the runner exposes `last_complexity`, the orchestrator
+splats `scalars()` into `SearchSpaceResults` via `dataclasses.replace` and writes
+`sidecar()` to `complexity.json`. **No change to `RawRunResult` or to either
+translator** — the pattern exists precisely so a new per-run block costs nothing
+in the host-specific layer.
+
+25 new fields on `SearchSpaceResults`, all defaulted, all declared in
+`RUN_LOG_FIELD_SPEC`.
+
+### 5.4 Analysis
+
+Nine descriptors added to `METRIC_EXTRACTORS`, which is all it takes to reach
+per-problem aggregation, the three paired contrasts and the CPDT — every one of
+them iterates that dict. Five enter `CPDT_METRIC_ALTERNATIVES` and the contrast
+policy, two-sided on all three arm pairs (§ rationale in the source).
+
+The `unique` block is deliberately **not** an extractor: it is `None` on the
+baseline arm, so a three-arm test on it would silently degrade to a two-arm test.
 
 ---
 
 ## 6. Verification
 
-*(filled in)*
+### 6.1 Local
+
+| Check | Result |
+|---|---|
+| `tests/unit/test_dag_complexity.py` + `test_complexity_telemetry.py` | **491 passed** |
+| `ruff check` on all five T19 files | clean |
+| `mypy --strict src/isalsr/core/complexity.py` | clean |
+| `tests/unit/` full suite | 3 pre-existing failures, none in T19 (see §6.3) |
+| Six-cell end-to-end smoke, all `(method, arm)` | telemetry populated on 6/6, sidecar written 6/6, pre-existing fields and R² unchanged |
+| Descriptor cost | `describe_dag` **6.8 µs**, `accumulator.observe` **8.9 µs**, against `fast_canonical_string` (native) **11.1 µs** and `agraph_to_labeled_dag` **23.8 µs** |
+
+Isomorphism invariance is the test that matters most: the adapters number nodes
+in host order, so a descriptor that moved under relabelling would make every
+cross-arm comparison meaningless. Asserted as an identical tuple over **all** k!
+permutations of five hand-built DAGs plus 25 random DAGs × 20 relabellings.
+
+### 6.2 Picasso probe
+
+Array `1814948`, 24 tasks (2 problems × 2 seeds × 3 arms × 2 methods),
+`max_time = 900 s`, seeds 0 and 101, `--constraint=sr`, output under
+`~/execs/isalsr/t19_probe/`. Gates and results in §6.4.
+
+### 6.3 Concurrency note — another agent is working in this tree
+
+Discovered while running the suite: `experiments/scripts/c2_slot_plan.py`,
+`experiments/scripts/c2_task_spec.py` and `slurm/c2_smoke/{launcher,worker}.sh`
+carry a second agent's **uncommitted** work implementing SCBI-requested task
+chunking. Consequences, all handled:
+
+- The 7 failures in `test_c2_slot_plan.py` and `test_orchestrator_flags.py` are
+  theirs, not T19's — confirmed by re-running against a stashed tree.
+- Nothing of theirs is staged in any T19 commit.
+- `slurm/t19_probe/worker.sh` decodes from a flat `tasks.txt` instead of
+  `c2_task_spec.py`, so the probe does not depend on code that is mid-edit.
+- The Picasso deployment was refreshed **excluding those four paths**, so their
+  deployed copy survives.
+- Because the T19 sources were rsynced on top of a checkout whose `HEAD` does
+  not contain them, `git rev-parse HEAD` is **not** valid provenance for this
+  probe. The worker therefore also records the SHA-256 of the two T19 modules
+  and the dirty-path count. A probe may do this; **C2 may not** — it must deploy
+  from a clean checkout at a tag (EXECUTION-PLAN §4).
 
 ---
 

@@ -139,6 +139,7 @@ src/isalsr/core/dag_to_string.py     DAGToString converter (D2S)
 src/isalsr/core/canonical.py         Canonical string (fast_canonical preferred; greedy-invariant from x_0)
 src/isalsr/core/dag_evaluator.py     Evaluate DAG numerically (topological sort)
 src/isalsr/core/commutative.py       SUB/DIV <-> ADD+NEG/MUL+INV conversion
+src/isalsr/core/complexity.py        Structural descriptors of a DAG + streaming accumulator (T19)
 src/isalsr/core/permutations.py      Permute internal node IDs (isomorphic copies)
 src/isalsr/core/algorithms/          D2S algorithm variants
 src/isalsr/viz/                      DAG + instruction-string + CDLL drawing (canonical)
@@ -157,6 +158,7 @@ experiments/models/
     base_translator.py               ResultTranslator ABC (RawRunResult → RunLog)
     schemas.py                       Unified schemas (RunLog, TrajectoryRow, PairedStats)
     io_utils.py                      I/O helpers (JSON/CSV, folder structure)
+    complexity_telemetry.py          Sampled structural telemetry over explored DAGs (T19)
     hardware_info.py                 CPU/RAM/Python version capture
     orchestrator.py                  CLI entry point: iterates (method, problem, seed, variant)
     analyzer/
@@ -204,6 +206,41 @@ python -m pip install -e . --no-build-isolation           # SILENTLY FAILS
   half of the same change works. **Run any core-semantics check against BOTH
   backends**; disagreement is the tell. This is how the 2026-07-29 removal of
   CONST normalisation was caught mid-verification.
+
+**Explored-DAG structural telemetry (T19, 2026-08-07)**
+
+Every C2 run records the distribution of structural descriptors — size, depth,
+subexpression sharing, transcendental content, operator-mix entropy — over the
+DAGs it actually explores, per `(method, arm, problem, seed)`. It tests
+Ezequiel's hypothesis that the `isalsr` arm, and less strongly the `hash` arm,
+explores structurally harder DAGs. **No post-hoc pass can recover this**: the
+population being described exists only while a search runs.
+
+- **Sampled, at a rule identical across the three arms of a method**, so the
+  residual instrumentation cost is common to all three and cancels in every
+  arm-versus-arm contrast. Bingo describes the whole population every 25
+  generations (its baseline has **no** per-candidate hook — `__call__` is
+  per-generation); UDFS every 31st candidate. Measured overhead ≈0.2 % of wall
+  clock. `complexity_sampling_mode` records which.
+- **Never measure on the host's native representation.** `command_array` and
+  `CompGraph` carry the host's alphabet, in which `Sub`/`Div` are primitive, so
+  `k` would differ between arms by construction rather than by search behaviour.
+  All three arms are measured on the post-T16 decomposed `LabeledDAG`.
+- **Do not "optimise" this into `canonical.py`.** The WL sweep already computes
+  out-degrees and could carry descriptors free, but that helps only the arm that
+  needs help least and changes the C++ build hash, invalidating the engine
+  equivalence gate and D3.
+- **Enabled by default** (`ISALSR_COMPLEXITY=0` is the kill switch). The T06
+  ledger defaulted off, was set in no config, and cost a 1,260-run wave that
+  recorded five rates of zero — which reads as "no fallbacks" and means "nothing
+  was counted" (SP-6).
+- Flat scalars land on `SearchSpaceResults`; exact histograms and `NodeType`
+  counts go to `complexity.json` beside the run log. Nine descriptors are in
+  `METRIC_EXTRACTORS`, five in the CPDT (two-sided on every contrast).
+- The `complexity_unique_*` block is `None` on `baseline`, which holds no cache.
+  **No headline claim may rest on it.**
+
+Write-up: `.claude/notes/review/tasks/T19-dag-complexity-telemetry.md`.
 
 **Operational requirements**:
 - Bingo runners **must** pass `max_time=cfg.max_time` to `evolve_until_convergence()`.

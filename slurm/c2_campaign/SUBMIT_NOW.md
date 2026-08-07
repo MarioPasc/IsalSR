@@ -2,6 +2,37 @@
 
 **Prepared 2026-08-06. Nothing here has been executed.**
 
+> ## 🔴 STALE AS OF 2026-08-07 — the certified commit has moved
+>
+> **T19 landed after this file was written**, adding explored-DAG structural
+> telemetry (`P7` in EXECUTION-PLAN §3.2). It had to land before launch, for the
+> same reason as the T06 ledger: it is measured *during* a run, so no post-hoc
+> pass can recover it, and missing it would mean re-running 12,600 jobs.
+>
+> **Consequence: `2ff0050` is no longer the commit to submit.** The table below
+> still names it, and step 1 still re-cuts the tag onto it. Both are now wrong.
+> Before submission:
+>
+> 1. Re-cut `campaign/c2` onto the new branch tip, not `2ff0050`.
+> 2. **Re-run Stage C** on that commit — moving the tag invalidates the prior
+>    certification (§4, `slurm/c2_tag_procedure.md`), which is exactly why v5e
+>    was re-run last time.
+> 3. Re-run Stage E and the Stage F gate on the same commit.
+>
+> **What is NOT invalidated**, by construction: T19 is pure Python and touches
+> neither `canonical.py` nor `src/isalsr/core/native/`, so the native
+> `build_hash 298fc1188bf1b051`, the engine equivalence gate and D3 hash
+> soundness all stand. The re-certification is the cheap half.
+>
+> Evidence that the telemetry works on Picasso: probe array `1814948`,
+> 24 cells, `slurm/t19_probe/verify.py`. Write-up:
+> `.claude/notes/review/tasks/T19-dag-complexity-telemetry.md`.
+>
+> ⚠ There is also a second, **uncommitted** workstream in this tree at the time
+> of writing (SCBI task chunking, touching `c2_task_spec.py`, `c2_slot_plan.py`
+> and `slurm/c2_smoke/*`). Reconcile it before re-cutting the tag; do not
+> certify a tree that is half-way through someone else's change.
+
 Everything below is verified ready except the tag move, which is step 1.
 
 | | state |
