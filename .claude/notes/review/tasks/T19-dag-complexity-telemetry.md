@@ -349,6 +349,104 @@ chunking. Consequences, all handled:
 
 ---
 
+### 6.4 The statistics the paper section needs — verified end to end
+
+A three-arm, two-problem, three-seed UDFS tree was built locally and run through
+`--postprocess only`. All nine descriptors appear in `aggregate.csv` with
+mean/std/median/quartiles/n, and all three arm-pair contrast files
+(`paired_stats.json`, `paired_stats_isalsr_vs_hash.json`,
+`paired_stats_hash_vs_baseline.json`) carry the full per-metric record:
+Shapiro-Wilk, test selection, statistic, raw and Holm-corrected p, Cohen's d
+with CI, and the mean-difference CI.
+
+The CPDT — the project's primary significance metric — was then exercised on
+`complexity_mean_k` over a synthetic 70-problem set with a true effect of +0.4:
+
+| quantity | value |
+|---|---|
+| N problems | 70 |
+| mean Δ (isalsr − baseline) | **+0.509** |
+| 95 % CI | [+0.370, +0.648] |
+| p (two-sided) | **3.49 × 10⁻¹⁰** |
+| Cohen's d | **0.875** [0.622, 1.192] |
+| W/T/L | 54 / 0 / 16 |
+| test selected | `t_one_sample` (Shapiro-Wilk p = 0.18) |
+| alternative | `two-sided` — the T19 policy, applied correctly |
+
+That is exactly the "mean ± 95 % CI, p-value and effect size against the other
+arms of the same method" the request asked for, and it needed no new statistics
+code.
+
+### 6.4a 🔴 Finding — zero across-seed variance makes the *per-problem* t-test degenerate
+
+Surfaced by the same run, and it needs a decision before the supplementary
+tables are built.
+
+UDFS's enumeration is close to deterministic, so on Nguyen-1 the complexity
+descriptors came out **bit-identical across seeds 0, 101 and 102**. The paired
+t-test then divides by `std_diff = 0`:
+
+| metric | `std_diff` | statistic | `p_raw` |
+|---|---|---|---|
+| `r2_test` | 0.0019 | 9.04 | 0.012 |
+| `empirical_reduction_factor` | 0.0053 | 196.2 | 2.6 × 10⁻⁵ |
+| `complexity_mean_k` | **0.0000** | **−inf** | **0.0** |
+| `complexity_mean_depth` | **0.0000** | **+inf** | **0.0** |
+| `complexity_mean_op_entropy` | **0.0000** | **−inf** | **0.0** |
+
+`p = 0.0` with `t = ±inf` is not a significant result, it is an undefined one,
+and it would be indefensible in a supplementary table — the same family of
+defect as T08's NaN-typeset-as-winner.
+
+**This is pre-existing analyzer behaviour on zero-variance input, not something
+T19 introduced** — but T19 makes it *likely* rather than hypothetical, because
+the complexity descriptors are the metrics most prone to zero seed variance.
+
+Mitigating facts, and why this is not a blocker:
+
+- **The CPDT is unaffected.** It treats each problem as one observation, so its
+  variance comes from the 70 problems, not from seeds. §6.4 confirms it behaves
+  correctly. House policy already makes CPDT the primary test.
+- The degenerate values appear only in the per-problem supplementary detail.
+
+**Recommendation (not implemented here — it touches shared analyzer code that a
+second workstream is currently in):** in `compute_paired_stats`, when
+`std_diff == 0`, record `test_used = "degenerate_zero_variance"` and emit
+`p_value_raw = None` rather than `0.0`, exactly as the ledger fields distinguish
+"not measured" from "measured zero". Then either report the contrast
+descriptively or fall back to a sign test.
+
+## 6.5 Stated limitations — read before writing the paper section
+
+Four, none of them fatal, all of which a reviewer could raise.
+
+1. **Bingo's population sample includes penalised duplicates.** In the `isalsr`
+   arm, `_enforce_dedup` rejects an in-population duplicate by marking it `+inf`
+   and `genetic_age = 10^7` rather than removing it, so it is still a population
+   member when the sample is taken. The bias is expected to be small — a
+   penalised individual is by construction a *duplicate of something already in
+   the population*, hence drawn from the same structural distribution — but it
+   is not zero, and it applies to one arm only. **The control already exists**:
+   `penalised_in_population_mean` and `_max` are recorded per run, so the
+   analysis can condition on them. Do this before claiming the effect.
+2. **The two estimands are not the same across methods.** Bingo measures the
+   *population at generation g*; UDFS measures the *proposed candidate stream*.
+   Both are legitimate, `complexity_sampling_mode` records which, and every
+   contrast the analysis computes is within a method — but the two methods'
+   numbers must never be pooled or directly compared.
+3. **A candidate whose conversion or canonicalisation fails is dropped from the
+   sample**, because there is no DAG to describe. Rates are ~0 and are measured
+   independently by the T06 ledger, but `complexity_n_sampled` is the honest
+   denominator and should be quoted rather than the candidate count.
+4. **Route 1 and route 2 of §1.1 are not separated by the run-level mean alone.**
+   A higher mean can mean "the arm reached later, bloatier generations" rather
+   than "the arm's population is structurally different at matched generation".
+   Bingo's per-generation sampling makes the distinction testable — compare arms
+   at matched `g`, not only at run level — but the run-level scalar on its own
+   does **not** establish the mechanism, and the paper must not claim it does.
+
+---
+
 ## 7. Consequence for the C2 launch
 
 **This change moves the certified commit.** `slurm/c2_campaign/SUBMIT_NOW.md`
