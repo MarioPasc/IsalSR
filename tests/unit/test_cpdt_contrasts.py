@@ -39,12 +39,23 @@ from experiments.models.schemas import CrossProblemDominanceResult, PairedStats,
 
 DESCRIPTIVE_MARKER = "descriptive_definitional_baseline"
 
+# Deliberately spelled out rather than imported: this list is the declaration
+# of intent, and the assertions below exist so that a metric added to the CPDT
+# by accident fails the suite instead of quietly joining the Holm family.
 _CPDT_METRICS = (
     "r2_test",
     "r2_train",
     "nrmse_test",
     "empirical_reduction_factor",
     "redundancy_rate",
+    # T19 explored-DAG structural complexity. Two-sided on every contrast --
+    # see CPDT_COMPLEXITY_METRICS in analyzer/aggregation.py for why the
+    # pre-registered direction is not spent on a one-sided test.
+    "complexity_mean_k",
+    "complexity_mean_depth",
+    "complexity_mean_nonlinear",
+    "complexity_mean_op_entropy",
+    "complexity_mean_shared",
 )
 
 

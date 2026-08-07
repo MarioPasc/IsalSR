@@ -103,6 +103,23 @@ METRIC_EXTRACTORS: dict[str, Callable[[RunLog], float]] = {
     "empirical_reduction_factor": lambda rl: rl.search_space.empirical_reduction_factor,
     "redundancy_rate": lambda rl: rl.search_space.redundancy_rate,
     "solution_recovered": lambda rl: _nan_if_none(rl.regression.solution_recovered),
+    # --- T19 explored-DAG structural complexity ------------------------- #
+    # The primary block only.  These are sampled under a rule that is identical
+    # across the three arms of a method, so an arm-versus-arm contrast on them
+    # is a contrast on the search and not on the instrument.  The ``unique``
+    # block is deliberately absent: it is None on the baseline arm by
+    # construction, so a three-arm test on it would silently drop to two arms.
+    "complexity_mean_k": lambda rl: _nan_if_none(rl.search_space.complexity_mean_k),
+    "complexity_median_k": lambda rl: _nan_if_none(rl.search_space.complexity_median_k),
+    "complexity_p90_k": lambda rl: _nan_if_none(rl.search_space.complexity_p90_k),
+    "complexity_mean_depth": lambda rl: _nan_if_none(rl.search_space.complexity_mean_depth),
+    "complexity_mean_edges": lambda rl: _nan_if_none(rl.search_space.complexity_mean_edges),
+    "complexity_mean_n_op": lambda rl: _nan_if_none(rl.search_space.complexity_mean_n_op),
+    "complexity_mean_shared": lambda rl: _nan_if_none(rl.search_space.complexity_mean_shared),
+    "complexity_mean_nonlinear": lambda rl: _nan_if_none(rl.search_space.complexity_mean_nonlinear),
+    "complexity_mean_op_entropy": lambda rl: _nan_if_none(
+        rl.search_space.complexity_mean_op_entropy
+    ),
 }
 
 
@@ -429,7 +446,42 @@ CPDT_METRIC_ALTERNATIVES: dict[str, str] = {
     "nrmse_test": "less",
     "empirical_reduction_factor": "greater",
     "redundancy_rate": "greater",
+    # T19 explored-DAG complexity: two-sided on every contrast. See
+    # CPDT_COMPLEXITY_METRICS below for why the pre-registered direction is
+    # deliberately not spent here.
+    "complexity_mean_k": "two-sided",
+    "complexity_mean_depth": "two-sided",
+    "complexity_mean_nonlinear": "two-sided",
+    "complexity_mean_op_entropy": "two-sided",
+    "complexity_mean_shared": "two-sided",
 }
+
+# The T19 complexity metrics that enter the CPDT. Deliberately five, not the
+# full descriptor set: each additional metric is another family in the
+# Holm correction, and these five are the ones the hypothesis is stated
+# against -- size, nesting, transcendental content, operator heterogeneity and
+# subexpression reuse.
+#
+# **On the choice of a two-sided alternative.** The hypothesis is directional
+# and was pre-registered before the campaign ran (Ezequiel Lopez-Rubio,
+# 2026-08-07: the isalsr arm, and to a lesser extent the hash arm, explores
+# structurally harder DAGs), so a one-sided test would be admissible and more
+# powerful. It is not used, for two reasons. First, unlike R2 -- where
+# one-sidedness rests on a structural argument, that removing duplicates cannot
+# make the regression worse -- there is no mechanism forbidding the opposite
+# outcome here. Second, a reversal would itself be a finding: it would mean
+# deduplication steers the search towards SIMPLER structures, which contradicts
+# the stated rationale for the representation and must be detectable rather
+# than collapsed into p ~ 1. The sign of delta is reported regardless, so the
+# pre-registered ordering baseline <= hash <= isalsr remains checkable without
+# spending the one-sided licence on it.
+CPDT_COMPLEXITY_METRICS: tuple[str, ...] = (
+    "complexity_mean_k",
+    "complexity_mean_depth",
+    "complexity_mean_nonlinear",
+    "complexity_mean_op_entropy",
+    "complexity_mean_shared",
+)
 
 # Contrast policy, decided 2026-08-04 (Mario Pascual Gonzalez).
 #
@@ -453,6 +505,13 @@ CPDT_METRIC_ALTERNATIVES: dict[str, str] = {
 # construction. Testing "isalsr merges more than a representation that cannot
 # merge" is tautological, and a p-value there would misrepresent a definitional
 # identity as an inferential finding.
+#: Two-sided on all three contrasts, for the reasons on
+#: :data:`CPDT_COMPLEXITY_METRICS`. Unlike the redundancy metrics, complexity
+#: against ``baseline`` is **not** definitional: the baseline arm explores real
+#: DAGs and its complexity distribution is a genuine measurement, not a
+#: constant fixed at 1 by construction. So it carries a p-value.
+_COMPLEXITY_POLICY: dict[str, str | None] = dict.fromkeys(CPDT_COMPLEXITY_METRICS, "two-sided")
+
 CPDT_CONTRAST_POLICY: dict[tuple[str, str], dict[str, str | None]] = {
     ("baseline", "isalsr"): {
         "r2_test": "greater",
@@ -460,6 +519,7 @@ CPDT_CONTRAST_POLICY: dict[tuple[str, str], dict[str, str | None]] = {
         "nrmse_test": "less",
         "empirical_reduction_factor": None,
         "redundancy_rate": None,
+        **_COMPLEXITY_POLICY,
     },
     ("hash", "isalsr"): {
         "r2_test": "two-sided",
@@ -467,6 +527,7 @@ CPDT_CONTRAST_POLICY: dict[tuple[str, str], dict[str, str | None]] = {
         "nrmse_test": "two-sided",
         "empirical_reduction_factor": "greater",
         "redundancy_rate": "greater",
+        **_COMPLEXITY_POLICY,
     },
     ("baseline", "hash"): {
         "r2_test": "two-sided",
@@ -474,6 +535,7 @@ CPDT_CONTRAST_POLICY: dict[tuple[str, str], dict[str, str | None]] = {
         "nrmse_test": "two-sided",
         "empirical_reduction_factor": None,
         "redundancy_rate": None,
+        **_COMPLEXITY_POLICY,
     },
 }
 
