@@ -139,7 +139,7 @@ def load_cells(root: Path) -> list[dict[str, Any]]:
     return cells
 
 
-def _finite(value: Any) -> bool:
+def _finite(value: Any) -> bool:  # noqa: ANN401 -- reads arbitrary decoded JSON
     """Return whether *value* is a finite real number."""
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value
 

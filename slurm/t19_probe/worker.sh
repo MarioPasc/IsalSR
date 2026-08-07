@@ -106,6 +106,18 @@ echo "Config:      ${CONFIG}"
 echo "Results:     ${RESULTS_DIR}"
 echo "SP-1 commit: $(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || echo n/a)"
 echo "SP-1 tag:    $(git -C "${REPO_DIR}" describe --tags --always 2>/dev/null || echo n/a)"
+# 🔴 The commit above is NOT sufficient provenance for this probe.  The T19
+# sources are rsynced on top of the deployed checkout without a commit of their
+# own, and a second agent's uncommitted work is present in the same tree, so
+# `rev-parse HEAD` names a commit that does NOT contain the code being tested.
+# Content hashes of the files under test are therefore the load-bearing
+# provenance record; compare them against the local tree before believing any
+# result. (A probe is allowed this; the campaign is not -- C2 must deploy from
+# a clean checkout at a tag, per EXECUTION-PLAN §4.)
+echo "SP-1 dirty:  $(git -C "${REPO_DIR}" status --porcelain 2>/dev/null | wc -l) modified path(s)"
+for f in src/isalsr/core/complexity.py experiments/models/complexity_telemetry.py; do
+    echo "SP-1 sha256: $(sha256sum "${REPO_DIR}/${f}" 2>/dev/null | cut -c1-16)  ${f}"
+done
 "${PYTHON}" - <<'PROV'
 import datetime, os, sys
 try:

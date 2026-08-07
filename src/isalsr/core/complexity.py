@@ -432,7 +432,9 @@ class ComplexityAccumulator:
         i = DESCRIPTOR_FIELDS.index(field)
         mean = self._sum[i] / self.n
         var = self._sumsq[i] / self.n - mean * mean
-        return (var if var > 0.0 else 0.0) ** 0.5
+        # Catastrophic cancellation can drive an exactly-constant stream a few
+        # ulp below zero; clamp rather than propagate a nan out of the sqrt.
+        return float((var if var > 0.0 else 0.0) ** 0.5)
 
     def extremum(self, field: str, *, largest: bool) -> float:
         """Return the largest or smallest observed value of *field*.
@@ -453,10 +455,15 @@ class ComplexityAccumulator:
         """Return the *q*-quantile of a histogrammed descriptor.
 
         Uses the lower-value convention: the smallest bin whose cumulative count
-        reaches ``q * n``. Exact whenever the overflow bin for *field* is empty;
-        when it is not, a value that fell in the overflow bin is reported as the
-        cap, which understates it. :meth:`to_dict` reports the overflow count, so
-        this is visible rather than silent.
+        reaches ``q * n``. Exact whenever the overflow bin for *field* is empty.
+
+        When the quantile falls in the overflow bin the return value is
+        ``cap + 1``, the overflow bin's own index, which is a **sentinel one
+        above the cap and not a descriptor value** -- the true value is only
+        known to be greater than ``cap``. Reporting the cap itself would be a
+        plausible-looking underestimate; a value the caps make impossible is
+        not. :meth:`to_dict` reports the overflow count alongside, so a reader
+        can tell the two cases apart without inspecting the number.
 
         Args:
             field: One of :data:`HEADLINE_FIELDS`.
