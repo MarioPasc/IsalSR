@@ -27,7 +27,9 @@ from bingo.symbolic_regression.agraph.mutation import AGraphMutation
 from bingo.symbolic_regression.explicit_regression import ExplicitRegression, ExplicitTrainingData
 
 from experiments.models.base_runner import ModelRunner, RawRunResult
+from experiments.models.bingo.adapter import agraph_to_labeled_dag
 from experiments.models.bingo.config import BingoConfig
+from experiments.models.complexity_telemetry import MODE_POPULATION, ComplexityTelemetry
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +113,34 @@ class BingoRawResult(RawRunResult):
     canon_fallback_time_s: float = 0.0
 
 
+def _sample_population_complexity(
+    telemetry: ComplexityTelemetry | None,
+    generation: int,
+    population: Any,
+) -> None:
+    """Describe the whole population, if *generation* is a sampling point.
+
+    Called from the identical position in :class:`_TrajectoryEvaluation` (the
+    ``baseline`` arm) and ``IsalSREvaluation`` (the ``hash`` and ``isalsr`` arms),
+    so all three sample the same object at the same cadence and the residual
+    instrumentation cost is common to all three.
+
+    The conversion is deliberately re-done even on the arms that already built a
+    ``LabeledDAG`` during ``_serial_eval``: the population at generation *g* is
+    not the same set as the candidates evaluated during generation *g*, and
+    paying 24 us per individual once every ``gen_freq`` generations is worth far
+    less than the symmetry it buys.
+
+    Args:
+        telemetry: The run's telemetry, or ``None`` when disabled.
+        generation: Generation index as counted by the caller.
+        population: The host population of ``AGraph`` individuals.
+    """
+    if telemetry is None or not telemetry.should_sample_generation(generation):
+        return
+    telemetry.observe_population(population, agraph_to_labeled_dag)
+
+
 class _TrajectoryEvaluation(Evaluation):
     """Evaluation subclass that captures periodic trajectory snapshots.
 
@@ -125,6 +155,7 @@ class _TrajectoryEvaluation(Evaluation):
         fitness_function: Any,
         snapshot_freq: int = 10,
         t0: float = 0.0,
+        complexity: ComplexityTelemetry | None = None,
         **kwargs: Any,
     ):
         super().__init__(fitness_function, **kwargs)
@@ -137,6 +168,12 @@ class _TrajectoryEvaluation(Evaluation):
         self.convergence_data: list[tuple[int, float, int, np.ndarray]] = []
         # Set after build_bingo_pipeline returns
         self._fitness_counter: Any = None
+        # T19: sampled structural telemetry.  The baseline arm has no
+        # per-candidate hook at all -- this class is the only place Bingo's
+        # control arm ever sees its individuals -- so the population is the
+        # estimand, and the identical call is made from IsalSREvaluation so all
+        # three arms sample the same object at the same cadence.
+        self.complexity = complexity
 
     def _capture_population_fitness(
         self,
@@ -170,11 +207,13 @@ class _TrajectoryEvaluation(Evaluation):
         # Capture gen 0 after initial evaluation
         if self._call_count == 1:
             self._capture_population_fitness(0, population)
+            _sample_population_complexity(self.complexity, 0, population)
 
         if self._call_count % 2 == 0:
             gen = self._call_count // 2
             # Dense per-generation capture: all individuals' fitness
             self._capture_population_fitness(gen, population)
+            _sample_population_complexity(self.complexity, gen, population)
             if gen % self._snapshot_freq == 0:
                 n_evals = (
                     self._fitness_counter.eval_count if self._fitness_counter is not None else 0
@@ -348,6 +387,10 @@ class BingoBaselineRunner(ModelRunner):
 
     def __init__(self, config: BingoConfig | None = None):
         self._config = config or BingoConfig()
+        #: T19 telemetry for the most recent ``fit``.  Read by the orchestrator
+        #: through ``getattr(runner, "last_complexity", None)``, the same channel
+        #: ``last_shadow`` and ``last_ledger`` already use.
+        self.last_complexity: ComplexityTelemetry | None = None
 
     @property
     def name(self) -> str:
@@ -372,6 +415,10 @@ class BingoBaselineRunner(ModelRunner):
 
         t0 = time.perf_counter()
 
+        # The control arm holds no dedup cache, so there is no unique stream to
+        # track -- ``complexity_unique_*`` is None here by construction.
+        self.last_complexity = ComplexityTelemetry(MODE_POPULATION, track_unique=False)
+
         island, fitness_fn, evaluation = build_bingo_pipeline(
             x_train,
             y_train,
@@ -380,6 +427,7 @@ class BingoBaselineRunner(ModelRunner):
             evaluation_kwargs={
                 "snapshot_freq": cfg.snapshot_frequency,
                 "t0": t0,
+                "complexity": self.last_complexity,
             },
         )
         # fitness_fn (ExplicitRegression) has eval_count; set after build

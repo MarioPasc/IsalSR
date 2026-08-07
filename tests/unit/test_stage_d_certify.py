@@ -107,6 +107,36 @@ def _run_log(spec: StageDCell) -> dict[str, Any]:
         # Structural-scope exclusion (D3, 2026-08-06).
         "n_nonstructural": 7 if dedup else None,
     }
+    # T19 structural telemetry.  Present on all three arms; the `unique` block
+    # is None on baseline, which holds no cache.
+    mean_k = {"baseline": 8.0, "hash": 9.0, "isalsr": 10.0}[spec.arm]
+    complexity: dict[str, Any] = {
+        "complexity_sampling_mode": "population" if spec.method == "bingo" else "stream",
+        "complexity_sample_rate": 25 if spec.method == "bingo" else 31,
+        "complexity_n_sampled": 120_000,
+        "complexity_time_s": 3.9,
+        "complexity_n_failures": 0,
+        "complexity_mean_k": mean_k,
+        "complexity_std_k": 2.4,
+        "complexity_median_k": mean_k,
+        "complexity_p90_k": mean_k + 3.0,
+        "complexity_max_k": mean_k + 9.0,
+        "complexity_mean_depth": 6.0,
+        "complexity_median_depth": 6.0,
+        "complexity_mean_edges": 11.0,
+        "complexity_mean_n_op": mean_k - 2.0,
+        "complexity_mean_n_const": 2.0,
+        "complexity_mean_shared": 1.4,
+        "complexity_mean_sharing_surplus": 1.7,
+        "complexity_mean_nonlinear": 3.0,
+        "complexity_mean_op_entropy": 1.9,
+        "complexity_mean_max_in_degree": 2.0,
+        "complexity_unique_n_sampled": 70_000 if dedup else None,
+        "complexity_unique_mean_k": mean_k + 0.7 if dedup else None,
+        "complexity_unique_mean_depth": 6.4 if dedup else None,
+        "complexity_unique_mean_nonlinear": 3.2 if dedup else None,
+        "complexity_unique_mean_op_entropy": 2.0 if dedup else None,
+    }
     return {
         "metadata": {
             "method": spec.method,
@@ -162,6 +192,7 @@ def _run_log(spec: StageDCell) -> dict[str, Any]:
                 "penalised_in_population_mean": 3.0 if dedup else 0.0,
                 "penalised_in_population_max": 9.0 if dedup else 0.0,
                 **ledger,
+                **complexity,
             },
         },
         "best_expression": {

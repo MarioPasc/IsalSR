@@ -42,9 +42,11 @@ from experiments.models.bingo.config import BingoConfig
 from experiments.models.bingo.runner import (
     BingoRawResult,
     BingoTrajectorySnapshot,
+    _sample_population_complexity,
     build_bingo_pipeline,
     extract_sympy,
 )
+from experiments.models.complexity_telemetry import MODE_POPULATION, ComplexityTelemetry
 from experiments.models.fallback_ledger import FallbackLedger
 from experiments.models.stage_d_trace import StageDTracer
 from experiments.models.structural_scope import (
@@ -200,6 +202,7 @@ class _CanonicalDeduplicator:
         key_mode: str = "canonical",
         shadow_hash: bool = False,
         dedup_enabled: bool = True,
+        complexity: ComplexityTelemetry | None = None,
     ):
         if key_mode not in KEY_MODES:
             raise ValueError(f"Unknown key_mode: {key_mode!r} (expected one of {KEY_MODES})")
@@ -269,6 +272,10 @@ class _CanonicalDeduplicator:
         self.atlas_misses: int = 0
         self.atlas_lookup_time: float = 0.0
         self.canon_fallback_time: float = 0.0
+        # T19 structural telemetry.  Reached from _serial_eval for the secondary
+        # unique-stream measurement only; the primary population sample is taken
+        # by IsalSREvaluation.__call__, which holds the same object.
+        self.complexity: ComplexityTelemetry | None = complexity
 
     def representation_string(self, dag: Any, host: Any = None) -> str:
         """Return the string whose hash is this arm's deduplication key.
@@ -470,11 +477,19 @@ class IsalSREvaluation(Evaluation):
         # Capture gen 0 after initial evaluation
         if self._call_count == 1:
             self._capture_convergence(0, population)
+            _sample_population_complexity(self.dedup.complexity, 0, population)
 
         if self._call_count % 2 == 0:
             gen = self._call_count // 2
             # Dense per-generation capture: all individuals' fitness
             self._capture_convergence(gen, population)
+
+            # T19 primary measurement.  Deliberately the same helper, at the
+            # same position, as _TrajectoryEvaluation.__call__ in the baseline
+            # arm: all three arms must sample the same object at the same
+            # cadence or the cross-arm contrast measures the instrument.
+            # Taken BEFORE _release_heap so the population is still warm.
+            _sample_population_complexity(self.dedup.complexity, gen, population)
 
             # Generation-boundary heap release: the most effective point
             # because both parent and offspring evaluation are done and
@@ -670,6 +685,21 @@ class IsalSREvaluation(Evaluation):
                 canon_hash = hash(canonical)
                 trace_fallback = STRUCTURAL_SCOPE_REASON
 
+            # T19 secondary measurement: the *distinct* structures visited.
+            # Placed here, after the key is final and before every branch, so no
+            # `continue` below can bypass it and the miss verdict is read from
+            # the same set the counters use.  The primary (cross-arm comparable)
+            # measurement is the population sample taken in __call__; this one
+            # exists only on the two arms that hold a cache, so it can never
+            # carry a three-arm claim.
+            complexity = self.dedup.complexity
+            if (
+                complexity is not None
+                and canon_hash not in self.dedup.canonical_seen
+                and complexity.should_sample_unique()
+            ):
+                complexity.observe_unique(dag)
+
             if self._enforce_dedup:
                 # --- Population-level dedup with fitness caching ---
 
@@ -817,6 +847,8 @@ class IsalSRBingoRunner(ModelRunner):
         self._atlas = atlas if self.KEY_MODE == "canonical" else None
         self._dedup_enabled = dedup_enabled
         self.last_shadow: dict[str, float] = {}
+        #: T19 telemetry for the most recent ``fit``; read by the orchestrator.
+        self.last_complexity: ComplexityTelemetry | None = None
 
     @property
     def name(self) -> str:
@@ -846,6 +878,10 @@ class IsalSRBingoRunner(ModelRunner):
         # a fixed order.  ``shadow_hash: false`` in the YAML disables them.
         shadow_hash = bool(config.get("shadow_hash", self.KEY_MODE == "canonical"))
 
+        # These two arms hold a dedup cache, so the secondary unique-stream
+        # accumulator is available here and is not on the baseline arm.
+        self.last_complexity = ComplexityTelemetry(MODE_POPULATION, track_unique=True)
+
         dedup = _CanonicalDeduplicator(
             use_fast_canonical=cfg.use_fast_canonical,
             timeout=cfg.canonicalization_timeout,
@@ -854,6 +890,7 @@ class IsalSRBingoRunner(ModelRunner):
             key_mode=self.KEY_MODE,
             shadow_hash=shadow_hash,
             dedup_enabled=self._dedup_enabled,
+            complexity=self.last_complexity,
         )
 
         t0 = time.perf_counter()

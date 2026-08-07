@@ -31,6 +31,7 @@ from DAG_search.dag_search import DAGRegressor  # noqa: E402
 
 from experiments.models.alphabet_guard import validate_udfs_operators
 from experiments.models.base_runner import ModelRunner
+from experiments.models.complexity_telemetry import MODE_STREAM, ComplexityTelemetry
 from experiments.models.fallback_ledger import FallbackLedger
 from experiments.models.stage_d_trace import StageDTracer
 from experiments.models.structural_scope import is_structural, nonstructural_key
@@ -149,6 +150,7 @@ class _CanonicalDeduplicator:
         key_mode: str = "canonical",
         shadow_hash: bool = False,
         dedup_enabled: bool = True,
+        complexity: ComplexityTelemetry | None = None,
     ):
         if key_mode not in KEY_MODES:
             raise ValueError(f"Unknown key_mode: {key_mode!r} (expected one of {KEY_MODES})")
@@ -216,6 +218,10 @@ class _CanonicalDeduplicator:
         self.atlas_misses: int = 0
         self.atlas_lookup_time: float = 0.0
         self.canon_fallback_time: float = 0.0
+        # T19 structural telemetry.  Same 1-in-N stream rule as the baseline
+        # arm's tracker, but no conversion is charged: these arms already hold
+        # the LabeledDAG the descriptor pass reads.
+        self.complexity: ComplexityTelemetry | None = complexity
 
     def _maybe_snapshot(self) -> None:
         """Append a trajectory snapshot if it's time."""
@@ -423,6 +429,16 @@ class _CanonicalDeduplicator:
         def wrapped(cgraph, X, loss_fkt, opt_mode="grid_zoom", loss_thresh=None):  # noqa: N803
             self.n_total += 1
 
+            # T19: decide sampling HERE, at the same position as the baseline
+            # arm's tracker, so the 1-in-N grid runs over the same candidate
+            # index in all three arms.  Deciding it after the conversion would
+            # shift the phase by however many conversions failed.  The DAG
+            # itself is described further down, once the duplicate verdict is
+            # known -- a candidate whose conversion or canonicalisation fails
+            # has no DAG to describe and is dropped from the sample.
+            telemetry = self.complexity
+            sample_complexity = telemetry is not None and telemetry.should_sample()
+
             # Stage-D trace: open a candidate.  Returns False (and does nothing
             # else) unless the tracer is enabled AND this candidate is on the
             # deterministic 1-in-N sampling grid.
@@ -504,6 +520,14 @@ class _CanonicalDeduplicator:
                 canon_hash = hash(nonstructural_key(labeled_dag))
 
             is_duplicate = canon_hash in self.canonical_seen
+
+            # T19.  Before the early return below, so a suppressed duplicate is
+            # still described: the arms are compared on the stream the host
+            # PROPOSES, which is identical in shape across all three, not on the
+            # subset that survived deduplication.
+            if sample_complexity and telemetry is not None:
+                telemetry.observe(labeled_dag, unique=not is_duplicate)
+
             if is_duplicate and self.dedup_enabled:
                 self.n_skipped += 1
                 n_consts = cgraph.n_consts
@@ -591,6 +615,8 @@ class IsalSRUDFSRunner(ModelRunner):
         self._atlas = atlas if self.KEY_MODE == "canonical" else None
         self._dedup_enabled = dedup_enabled
         self.last_shadow: dict[str, float] = {}
+        #: T19 telemetry for the most recent ``fit``; read by the orchestrator.
+        self.last_complexity: ComplexityTelemetry | None = None
 
     @property
     def name(self) -> str:
@@ -623,6 +649,10 @@ class IsalSRUDFSRunner(ModelRunner):
         # a fixed order.  ``shadow_hash: false`` in the YAML disables them.
         shadow_hash = bool(config.get("shadow_hash", self.KEY_MODE == "canonical"))
 
+        # These two arms hold a dedup cache, so the secondary unique-stream
+        # accumulator is available here and is not on the baseline arm.
+        self.last_complexity = ComplexityTelemetry(MODE_STREAM, track_unique=True)
+
         dedup = _CanonicalDeduplicator(
             use_fast_canonical=cfg.use_fast_canonical,
             timeout=cfg.canonicalization_timeout,
@@ -633,6 +663,7 @@ class IsalSRUDFSRunner(ModelRunner):
             key_mode=self.KEY_MODE,
             shadow_hash=shadow_hash,
             dedup_enabled=self._dedup_enabled,
+            complexity=self.last_complexity,
         )
 
         with _patched_evaluate(dedup), warnings.catch_warnings():

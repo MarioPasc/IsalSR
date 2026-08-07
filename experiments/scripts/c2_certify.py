@@ -164,6 +164,42 @@ RUN_LOG_FIELD_SPEC: tuple[tuple[tuple[str, ...], tuple[type, ...], bool], ...] =
     # --- results.search_space (effective-population disclosure) ---------- #
     (("results", "search_space", "penalised_in_population_mean"), _NUM, False),
     (("results", "search_space", "penalised_in_population_max"), _NUM, False),
+    # --- results.search_space (T19 explored-DAG structural telemetry) ----- #
+    # Sampled at an identical rate in all three arms of a method, so the
+    # residual instrumentation cost is common to all three and cancels in every
+    # arm-versus-arm contrast.  Nullable because a run with the kill switch set
+    # (ISALSR_COMPLEXITY=0) must report "not measured" rather than a zero that
+    # reads as a measurement -- the same distinction the ledger block above
+    # draws.  ``complexity_time_s`` and ``complexity_n_failures`` are NOT
+    # nullable: they are written unconditionally, including when nothing was
+    # sampled, so a 0.0 there is a genuine "cost nothing" reading.
+    (("results", "search_space", "complexity_sampling_mode"), (str,), True),
+    (("results", "search_space", "complexity_sample_rate"), (int,), True),
+    (("results", "search_space", "complexity_n_sampled"), (int,), True),
+    (("results", "search_space", "complexity_time_s"), _NUM, False),
+    (("results", "search_space", "complexity_n_failures"), (int,), False),
+    (("results", "search_space", "complexity_mean_k"), _NUM, True),
+    (("results", "search_space", "complexity_std_k"), _NUM, True),
+    (("results", "search_space", "complexity_median_k"), _NUM, True),
+    (("results", "search_space", "complexity_p90_k"), _NUM, True),
+    (("results", "search_space", "complexity_max_k"), _NUM, True),
+    (("results", "search_space", "complexity_mean_depth"), _NUM, True),
+    (("results", "search_space", "complexity_median_depth"), _NUM, True),
+    (("results", "search_space", "complexity_mean_edges"), _NUM, True),
+    (("results", "search_space", "complexity_mean_n_op"), _NUM, True),
+    (("results", "search_space", "complexity_mean_n_const"), _NUM, True),
+    (("results", "search_space", "complexity_mean_shared"), _NUM, True),
+    (("results", "search_space", "complexity_mean_sharing_surplus"), _NUM, True),
+    (("results", "search_space", "complexity_mean_nonlinear"), _NUM, True),
+    (("results", "search_space", "complexity_mean_op_entropy"), _NUM, True),
+    (("results", "search_space", "complexity_mean_max_in_degree"), _NUM, True),
+    # Secondary: restricted to deduplication misses, so None on the baseline
+    # arm by construction.  No headline claim may rest on these.
+    (("results", "search_space", "complexity_unique_n_sampled"), (int,), True),
+    (("results", "search_space", "complexity_unique_mean_k"), _NUM, True),
+    (("results", "search_space", "complexity_unique_mean_depth"), _NUM, True),
+    (("results", "search_space", "complexity_unique_mean_nonlinear"), _NUM, True),
+    (("results", "search_space", "complexity_unique_mean_op_entropy"), _NUM, True),
     # --- best_expression ------------------------------------------------- #
     (("best_expression", "symbolic_form"), (str,), False),
     (("best_expression", "isalsr_string"), (str,), False),

@@ -54,6 +54,38 @@ def _run_log(method: str, arm: str, seed: int) -> dict[str, Any]:
         "n_nonstructural": 3 if dedup else None,
     }
     rho = {"baseline": 1.0, "hash": 1.4, "isalsr": 1.9}[arm]
+    # T19 structural telemetry.  Present on all three arms -- that is the point
+    # of it -- but the `unique` block is None on baseline, which holds no cache.
+    # Values rise with the arm so a fixture that silently lost the block cannot
+    # still look like a plausible three-arm comparison.
+    mean_k = {"baseline": 5.5, "hash": 6.1, "isalsr": 6.8}[arm]
+    complexity: dict[str, Any] = {
+        "complexity_sampling_mode": "population" if method == "bingo" else "stream",
+        "complexity_sample_rate": 25 if method == "bingo" else 31,
+        "complexity_n_sampled": 500,
+        "complexity_time_s": 0.02,
+        "complexity_n_failures": 0,
+        "complexity_mean_k": mean_k,
+        "complexity_std_k": 1.2,
+        "complexity_median_k": mean_k,
+        "complexity_p90_k": mean_k + 2.0,
+        "complexity_max_k": mean_k + 5.0,
+        "complexity_mean_depth": 4.0,
+        "complexity_median_depth": 4.0,
+        "complexity_mean_edges": 6.0,
+        "complexity_mean_n_op": mean_k - 1.0,
+        "complexity_mean_n_const": 1.0,
+        "complexity_mean_shared": 1.1,
+        "complexity_mean_sharing_surplus": 1.3,
+        "complexity_mean_nonlinear": 2.0,
+        "complexity_mean_op_entropy": 1.5,
+        "complexity_mean_max_in_degree": 2.0,
+        "complexity_unique_n_sampled": 300 if dedup else None,
+        "complexity_unique_mean_k": mean_k + 0.5 if dedup else None,
+        "complexity_unique_mean_depth": 4.5 if dedup else None,
+        "complexity_unique_mean_nonlinear": 2.2 if dedup else None,
+        "complexity_unique_mean_op_entropy": 1.6 if dedup else None,
+    }
     return {
         "metadata": {
             "method": method,
@@ -109,6 +141,7 @@ def _run_log(method: str, arm: str, seed: int) -> dict[str, Any]:
                 "penalised_in_population_mean": 2.0 if dedup else 0.0,
                 "penalised_in_population_max": 5.0 if dedup else 0.0,
                 **ledger,
+                **complexity,
             },
         },
         "best_expression": {

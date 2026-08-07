@@ -812,6 +812,24 @@ def run_experiment(config_path: str, args: argparse.Namespace) -> int:
                             )
                             save_metadata(ledger.to_dict(), sd / "fallback_ledger.json")
 
+                        # T19 explored-DAG structural telemetry.  Attached here
+                        # for the same reason as the two blocks above, and for
+                        # the same reason persisted: the DAG population being
+                        # described exists only while the search runs.  The flat
+                        # scalars go into the run log so the analyzer's scalar
+                        # METRIC_EXTRACTORS can reach them; the exact histograms
+                        # go to a sidecar so the schema does not carry an array.
+                        complexity = getattr(runner, "last_complexity", None)
+                        if complexity is not None:
+                            run_log = dataclasses.replace(
+                                run_log,
+                                search_space=dataclasses.replace(
+                                    run_log.search_space,
+                                    **complexity.scalars(),
+                                ),
+                            )
+                            save_metadata(complexity.sidecar(), sd / "complexity.json")
+
                         save_run_log(run_log, sd / "run_log.json")
                         save_trajectory(trajectory, sd / "trajectory.csv")
 

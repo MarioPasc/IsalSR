@@ -243,6 +243,70 @@ class SearchSpaceResults:
     penalised_in_population_mean: float = 0.0
     penalised_in_population_max: float = 0.0
 
+    # ------------------------------------------------------------------ #
+    # Explored-DAG structural telemetry (T19)
+    # ------------------------------------------------------------------ #
+    # Distribution of the structural descriptors of ``isalsr.core.complexity``
+    # over the DAGs this run explored, sampled at an identical rate in all three
+    # arms of a method.  Tests the hypothesis that the ``isalsr`` arm explores
+    # structurally harder DAGs than ``baseline`` -- which, like the reachability
+    # ledger above, no post-hoc pass can recover, because the population being
+    # described exists only while a search runs.
+    #
+    # ``None`` means not measured; a number, however small, is a measurement.
+    # The full distributions -- exact histograms and NodeType counts -- go to
+    # ``complexity.json`` beside this file; only what the analyzer's scalar
+    # ``METRIC_EXTRACTORS`` can consume is repeated here.
+    #
+    #: ``"population"`` (Bingo: the whole population every ``sample_rate``
+    #: generations) or ``"stream"`` (UDFS: every ``sample_rate``-th candidate).
+    #: Constant within a method, so it never varies across a contrast that is
+    #: actually computed.
+    complexity_sampling_mode: str | None = None
+    complexity_sample_rate: int | None = None
+    #: Denominator for every distributional field below.
+    complexity_n_sampled: int | None = None
+    #: Wall time charged to telemetry, so a reported overhead can be corrected
+    #: exactly rather than estimated.
+    complexity_time_s: float = 0.0
+    #: DAGs that could not be converted or described.  Swallowed at runtime --
+    #: telemetry must never be able to kill a 12-hour run -- but counted here.
+    complexity_n_failures: int = 0
+
+    #: k = |V| - n_var, the paper's node count.  The headline descriptor.
+    complexity_mean_k: float | None = None
+    complexity_std_k: float | None = None
+    complexity_median_k: float | None = None
+    complexity_p90_k: float | None = None
+    complexity_max_k: float | None = None
+    #: Longest directed path in edges: compositional nesting.
+    complexity_mean_depth: float | None = None
+    complexity_median_depth: float | None = None
+    complexity_mean_edges: float | None = None
+    #: Operator nodes, i.e. k excluding CONST.
+    complexity_mean_n_op: float | None = None
+    #: CONST nodes, i.e. the free parameters constant optimisation must fit.
+    complexity_mean_n_const: float | None = None
+    #: Nodes with out-degree >= 2: genuinely shared subexpressions, the quantity
+    #: that separates a DAG representation from a tree.
+    complexity_mean_shared: float | None = None
+    complexity_mean_sharing_surplus: float | None = None
+    #: Transcendental and protected operators (Vladislavleva 2009 order of
+    #: nonlinearity; Kommenda 2015 recursive complexity).
+    complexity_mean_nonlinear: float | None = None
+    #: Shannon entropy in bits of the operator-label mix.
+    complexity_mean_op_entropy: float | None = None
+    complexity_mean_max_in_degree: float | None = None
+
+    #: Secondary: the same descriptors restricted to deduplication misses, i.e.
+    #: the *distinct* structures visited.  ``None`` on the baseline arm, which
+    #: holds no cache -- so no headline claim may rest on these.
+    complexity_unique_n_sampled: int | None = None
+    complexity_unique_mean_k: float | None = None
+    complexity_unique_mean_depth: float | None = None
+    complexity_unique_mean_nonlinear: float | None = None
+    complexity_unique_mean_op_entropy: float | None = None
+
 
 @dataclass(frozen=True)
 class BestExpression:
