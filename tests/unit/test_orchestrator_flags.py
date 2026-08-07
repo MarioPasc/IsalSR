@@ -471,7 +471,7 @@ def test_task_spec_rejects_a_multi_suite_config(tmp_path: Path) -> None:
                 "--index",
                 "1",
             ],
-            "Strogatz-bacres1 0",
+            "Strogatz-bacres1 0 strogatz_bacres1",
         ),
         (
             [
@@ -482,7 +482,7 @@ def test_task_spec_rejects_a_multi_suite_config(tmp_path: Path) -> None:
                 "--index",
                 "4",
             ],
-            "Nguyen-2 0",
+            "Nguyen-2 0 nguyen_2",
         ),
     ],
 )
@@ -491,6 +491,13 @@ def test_task_spec_cli_prints_one_line(
     expected: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """At the default ``--bundle 1`` the CLI still prints exactly one line.
+
+    Since 2026-08-07 that line carries a third field, the problem SLUG: the
+    worker uses it to move a single cell between local scratch and FSCRATCH, and
+    deriving it in bash instead would be a silent-divergence trap. The line count
+    is what the shell contract depends on, and it is unchanged.
+    """
     assert c2_task_spec.main(argv) == 0
     out = capsys.readouterr().out
     assert out.splitlines() == [expected]

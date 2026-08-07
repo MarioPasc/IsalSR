@@ -40,6 +40,8 @@ CONSTRAINT="${C2_CONSTRAINT:-sr}"
 SEEDS="${C2_SEEDS_SPEC:-1-30}"
 MAX_TIME="${C2_MAX_TIME:-43200}"
 SLOT_BUDGET="${C2_SLOT_BUDGET:-2016}"
+# SCBI request 2026-08-07: stage output on the compute node, copy back results.
+USE_LOCALSCRATCH="${C2_USE_LOCALSCRATCH:-1}"
 AGG_WALL="${C2_AGG_WALL:-0-01:59:00}"
 SLEEP_BETWEEN="${C2_SLEEP:-20}"
 
@@ -70,6 +72,12 @@ PLAN="$(cd "${REPO}" && PYTHONPATH="${REPO}/src:${REPO}" "${PY}" \
     || { echo "FATAL: slot plan failed; nothing submitted" >&2; exit 1; }
 [[ "$(wc -l <<<"${PLAN}")" -eq 42 ]] \
     || { echo "FATAL: plan has $(wc -l <<<"${PLAN}") rows, expected 42" >&2; exit 1; }
+# Ten columns since chunking (2026-08-07).  A seven-column plan from an older
+# checkout would leave BUNDLE and the deadline EMPTY in `while read`, and the
+# worker would then run one cell per task with no TIMEOUT guard -- i.e. silently
+# submit the 12,600-task shape SCBI asked us to stop submitting.
+[[ "$(awk -F'\t' 'NR==1{print NF}' <<<"${PLAN}")" -eq 10 ]] \
+    || { echo "FATAL: plan has $(awk -F'\t' 'NR==1{print NF}' <<<"${PLAN}") columns, expected 10" >&2; exit 1; }
 
 EXISTING="$(sacct -S today -n -P -X -o JobID,JobName 2>/dev/null \
     | awk -F'|' -v m="${MIN_JOBID}" \
@@ -87,17 +95,21 @@ echo ""
 declare -a IDS=()
 N_NEW=0
 
-while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM WALL; do
+N_CELLS_TOTAL=0
+while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM WALL \
+                        BUNDLE CUTOFF_S N_CELLS; do
     [[ -n "${METHOD}" ]] || continue
     JOB_NAME="c2s_${METHOD:0:1}${ARM:0:1}_${SUITE}"
+    N_CELLS_TOTAL=$((N_CELLS_TOTAL + N_CELLS))
 
     if grep -qx "${JOB_NAME}" <<<"${EXISTING}"; then
         printf '  %-34s SKIP (already submitted)\n' "${JOB_NAME}"
         continue
     fi
     if ${DRY}; then
-        printf '  %-34s %4d tasks  %%%-3d  %3dG  %s\n' \
-               "${JOB_NAME}" "${N_TASKS}" "${THROTTLE}" "${MEM}" "${WALL}"
+        printf '  %-34s %4d cells /%3d = %4d tasks  %%%-3d  %3dG  %s\n' \
+               "${JOB_NAME}" "${N_CELLS}" "${BUNDLE}" "${N_TASKS}" \
+               "${THROTTLE}" "${MEM}" "${WALL}"
         continue
     fi
 
@@ -110,7 +122,7 @@ while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM WALL; do
         --constraint="${CONSTRAINT}" \
         --account="${ACCOUNT}" \
         --output="${LOGS_DIR}/${JOB_NAME}_%A_%a.out" \
-        --export="ALL,ISALSR_REPO_DIR=${REPO},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=${SUITE},C2_CONFIG=${REPO}/experiments/configs/${METHOD}_${SUITE}.yaml,C2_SEEDS=${SEEDS},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT}" \
+        --export="ALL,ISALSR_REPO_DIR=${REPO},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=${SUITE},C2_CONFIG=${REPO}/experiments/configs/${METHOD}_${SUITE}.yaml,C2_SEEDS=${SEEDS},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT},C2_BUNDLE=${BUNDLE},C2_START_CUTOFF_S=${CUTOFF_S},C2_USE_LOCALSCRATCH=${USE_LOCALSCRATCH}" \
         "${REPO}/slurm/c2_smoke/worker.sh" 2>&1)
     ID=$(_clean_job_id "${RAW}")
 
@@ -126,8 +138,8 @@ while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM WALL; do
 
     IDS+=("${ID}")
     N_NEW=$((N_NEW + 1))
-    printf '  %-34s %4d tasks  %%%-3d  %3dG  job %s\n' \
-           "${JOB_NAME}" "${N_TASKS}" "${THROTTLE}" "${MEM}" "${ID}"
+    printf '  %-34s %4d tasks (B=%d)  %%%-3d  %3dG  job %s\n' \
+           "${JOB_NAME}" "${N_TASKS}" "${BUNDLE}" "${THROTTLE}" "${MEM}" "${ID}"
     sleep "${SLEEP_BETWEEN}"
 done <<< "${PLAN}"
 
@@ -176,7 +188,7 @@ LED_RAW=$(sbatch --parsable \
     --dependency="afterany:${AGG_ID}" \
     --output="${LOGS_DIR}/c2s_ledger_%j.out" \
     --error="${LOGS_DIR}/c2s_ledger_%j.err" \
-    --export="ALL,ISALSR_REPO_DIR=${REPO},C2_RESULTS_DIR=${RESULTS_ROOT},C2_LEDGER_ONLY=1,C2_EXPECTED_TASKS=12600,C2_MAX_TIME=${MAX_TIME}" \
+    --export="ALL,ISALSR_REPO_DIR=${REPO},C2_RESULTS_DIR=${RESULTS_ROOT},C2_LEDGER_ONLY=1,C2_EXPECTED_TASKS=${N_CELLS_TOTAL},C2_MAX_TIME=${MAX_TIME}" \
     "${REPO}/slurm/c2_smoke/aggregate_worker.sh" 2>&1)
 LED_ID=$(_clean_job_id "${LED_RAW}")
 [[ "${LED_ID}" =~ ^[0-9]+$ ]] || { echo "FATAL: ledger not submitted: ${LED_RAW}" >&2; exit 1; }

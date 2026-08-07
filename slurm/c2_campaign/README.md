@@ -1,6 +1,28 @@
 # `slurm/c2_campaign/` — submitting Campaign C2
 
-The final review experiments: **42 arrays, 12,600 runs, ≈108,000 core-hours.**
+The final review experiments: **42 arrays, 12,600 runs, ≈80,000 core-hours**, submitted
+as **3,474 SLURM tasks**.
+
+> ### 🔴 One task is a CHUNK of cells, not a cell (2026-08-07)
+>
+> SCBI asked us to group short jobs so every submitted task runs for at least two
+> hours — the scheduler spends longer placing a short job than the job spends
+> running, and 12,600 placements saturate the queue for everyone. They were right:
+> 51.5 % of the 23,058 job records this account produced since 2026-07-01 ran under
+> two minutes, and ~43 % of the planned campaign tasks would have.
+>
+> Each array task now runs a contiguous block of cells **in sequence**, on
+> `$LOCALSCRATCH`, under a deadline. Cells, memory, constraint, seeds and the
+> paired design are **unchanged**; only the packaging is different.
+>
+> | | before | after |
+> |---|---|---|
+> | SLURM tasks | 12,600 | **3,474** |
+> | shortest expected task | 0.1 h | **20.0 h** |
+> | wall per task | 16 h | 25–47 h |
+> | makespan | 48.0 h | **49.2 h** (+2.5 %) |
+>
+> Full rationale, measurements and the reply to SCBI: **`CAMPAIGN_BRIEF.md`**.
 
 This directory is the campaign's front door. It deliberately contains **no
 worker, no `#SBATCH` header and no topology of its own.**
@@ -38,17 +60,32 @@ discoverable from the application code.
 
 ## 2. The sequence
 
+**The full runbook, with the reasoning behind each step, is `CAMPAIGN_BRIEF.md` §7.**
+The short form:
+
 ```bash
 # 0. From the workstation, repo root, on the commit to be tagged.
 #    If the tree carries another agent's uncommitted work, deploy from a clean
 #    clone of the branch tip -- deploy.sh refuses a dirty tree and it is right
 #    (defect 14).  Never commit someone else's files.
+python -m pytest tests/unit -q
+bash slurm/c2_smoke/mock_chunk_test.sh          # 26/26, real payload, ~10 min
+
+# 1. Deploy.  The only path: Picasso has no outbound SSH (defect 13).
 bash slurm/c2_smoke/deploy.sh          # rsync incl. .git, verify SP-1, rebuild, verify SP-2
 
-# 1. The gate. Submits nothing; exits non-zero on any failure.
+# 2. 🔴 Prove the copy-back ON THE DEPLOYED TREE.  20 minutes.  Do not skip it:
+#    it is the only step that can catch localscratch dropping results, and a
+#    per-cell check cannot -- see CAMPAIGN_BRIEF.md §5.
+ssh picasso 'cd $REPO && bash slurm/c2_smoke/chunk_smoke.sh'
+ssh picasso 'cd $REPO && python slurm/c2_smoke/chunk_smoke_verify.py \
+             $FSCRATCH/results/isalsr/c2_chunk_smoke'
+#    expect: SMOKE OK -- localscratch loses nothing
+
+# 3. The gate. Submits nothing; exits non-zero on any failure.
 bash slurm/c2_campaign/stage_f_preflight.sh
 
-# 2. Preview, then submit.  PACED -- see the box below.
+# 4. Preview, then submit.  PACED -- see the box below.
 bash slurm/c2_campaign/launch.sh --dry-run
 ssh picasso 'cd $REPO && bash slurm/c2_campaign/submit_paced.sh --dry-run'
 ssh picasso 'cd $REPO && bash slurm/c2_campaign/submit_paced.sh'
@@ -86,13 +123,22 @@ worker's own arithmetic, but the strongest check is cheap and takes four
 minutes:
 
 ```bash
-# 42 real campaign-profile tasks, short payload, throwaway root
-C2_PROFILE=campaign C2_MAX_TIME=240 \
+# 42 real campaign-profile tasks, short payload, throwaway root.
+# C2_MAX_BUNDLE=1 is REQUIRED since chunking: --one-task submits array 1-1 per
+# array, but a task now runs its whole BUNDLE, and bingo:*:nguyen's bundle is
+# 164 cells -- at 240 s each that is an 11-hour "four-minute" probe.
+C2_PROFILE=campaign C2_MAX_TIME=240 C2_MAX_BUNDLE=1 \
 C2_RESULTS_DIR=$FSCRATCH/results/isalsr/c2_probe \
 C2_LOGS_DIR=$FSCRATCH/execs/isalsr/c2_probe/logs \
   bash slurm/c2_smoke/launcher.sh --one-task
 # expect: 42/42 COMPLETED, 42 run_log.json, three arms x 14
 ```
+
+This probe exercises the decode and the payload. It does **not** exercise the
+multi-cell chunk loop or the deadline, because `C2_MAX_BUNDLE=1` reduces every
+task to one cell. (Localscratch staging still runs — it is governed by
+`C2_USE_LOCALSCRATCH`, not by the bundle.) `chunk_smoke.sh` in step 2 is what
+covers the chunk loop, the deadline and the copy-back together.
 
 ---
 
@@ -105,17 +151,22 @@ Derived by `experiments/scripts/c2_slot_plan.py`, unit-tested in
 | | value | why |
 |---|---|---|
 | Arrays | 42 = 7 suites × 3 arms × 2 methods | one config declares one suite |
-| Tasks | 12,600 = 70 problems × 30 seeds × 6 | §0.4a as superseded 2026-08-05 |
-| Throttle | apportioned, 2,016 slots | work-proportional; **1.9× makespan gain** over uniform `%K`, free |
-| `--mem` | 32 G Bingo, 16 G UDFS | 4× D1.2's recommendation, 27× observed peak, 3.4× the `max_evals`-bounded 9.4 GB ceiling |
-| `--time` | 16 h **per task** | UDFS saturates 12.00 h + SymPy tail; Bingo ≤ 11.76 h observed |
+| Cells | 12,600 = 70 problems × 30 seeds × 6 | §0.4a as superseded 2026-08-05 |
+| **SLURM tasks** | **3,474** | SCBI's 2 h floor; chunk sized per array from the C1-measured per-suite cell duration |
+| Bundle | 2–164 cells per task | `bingo:*:nguyen` is 0.15 h per cell and needs 164 to clear 2 h; `udfs:*:hard` is 12 h and needs 2 |
+| Throttle | apportioned, 2,016 slots | work-proportional; **1.9× makespan gain** over uniform `%K`, free. Capped at the *post-chunking* task count, which is what keeps chunking makespan-neutral |
+| `--mem` | 32 G Bingo, 16 G UDFS | unchanged: cells run as separate processes, so peak RSS is still per-cell. 27× observed peak, 3.4× the `max_evals`-bounded 9.4 GB ceiling |
+| `--time` | 25–47 h **per task** | `B × (12 h payload + teardown)` where that fits; otherwise `1.4 × expected chunk + one cell in reserve`. Longest is 47 h, a day inside `medium_uma`'s 72 h |
+| Deadline | `wall − 12.5 h` | a cell only STARTS if its full budget still fits, so a `TIMEOUT` is impossible by construction. The **first** cell is exempt — without that the array livelocks |
 | `--constraint` | `sr` | C4 needs one CPU family (data is not bit-reproducible across families, ~1 ULP); wall clock is a *reported* quantity |
-| Logs | FSCRATCH, **merged** | 12,600 files not 25,200 — load-bearing for the inode budget |
-| Makespan | ≈63 h planned, ≈54 h after a Day-1 rebalance | see §4 |
+| Output | `$LOCALSCRATCH`, copied back per cell | SCBI request + manual §4.9. `sr` nodes carry 800 GB; the campaign is megabytes |
+| Logs | FSCRATCH, **merged** | 3,474 files not 25,200 |
+| Makespan | ≈49 h | +2.5 % against the unchunked plan's 48.0 h |
 
-**16 h is per task, not per campaign.** SLURM has no campaign-duration
-parameter, and raising `--time` to the makespan would let a hung task burn 54 h
-of an allocation instead of 16 before the ledger caught it.
+**The wall is per task, not per campaign.** SLURM has no campaign-duration
+parameter, and raising `--time` to the makespan would let a hung task burn 49 h
+of an allocation before the ledger caught it. The deadline is what bounds a
+chunked task from the inside.
 
 ---
 

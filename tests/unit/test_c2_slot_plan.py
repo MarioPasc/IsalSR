@@ -15,10 +15,13 @@ import pytest
 
 from experiments.scripts.c2_slot_plan import (
     ARMS,
+    CELL_HOURS,
+    CELL_RESERVE_H,
     DEFAULT_SLOT_BUDGET,
-    MEASURED_RUNTIME_HOURS,
+    MAX_WALL_H,
     MEM_GB,
     METHODS,
+    MIN_TASK_HOURS,
     RUNTIME_HOURS,
     SUITES,
     WALL,
@@ -26,7 +29,9 @@ from experiments.scripts.c2_slot_plan import (
     SlotPlanError,
     allocate_throttles,
     build_plan,
+    bundle_size,
     format_plan_tsv,
+    wall_hours,
 )
 
 CONFIG_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "experiments", "configs")
@@ -172,8 +177,12 @@ def test_plan_has_42_arrays_in_submission_order() -> None:
     assert {p.method for p in plan[21:]} == {"bingo"}
 
 
-def test_plan_task_counts_match_the_launch_ledger() -> None:
-    """EXECUTION-PLAN §11.3: 240/200/200/200/160/120/280 per (method, arm)."""
+def test_plan_cell_counts_match_the_launch_ledger() -> None:
+    """EXECUTION-PLAN §11.3: 240/200/200/200/160/120/280 per (method, arm).
+
+    These are CELLS. Since 2026-08-07 a cell is no longer a SLURM task -- the
+    ledger counts the scientific units, which chunking must leave untouched.
+    """
     plan = build_plan(CONFIG_DIR, list(range(1, 21)))
     expected = {
         "nguyen": 240,
@@ -185,13 +194,147 @@ def test_plan_task_counts_match_the_launch_ledger() -> None:
         "strogatz": 280,
     }
     for p in plan:
-        assert p.n_tasks == expected[p.suite], p.key
-    assert sum(p.n_tasks for p in plan) == 8400
+        assert p.n_cells == expected[p.suite], p.key
+    assert sum(p.n_cells for p in plan) == 8400
 
 
 def test_plan_totals_at_30_seeds() -> None:
     plan = build_plan(CONFIG_DIR, list(range(1, 31)))
-    assert sum(p.n_tasks for p in plan) == 12600
+    assert sum(p.n_cells for p in plan) == 12600
+
+
+def test_chunking_preserves_every_cell() -> None:
+    """Chunking is a repackaging, not a reduction: no cell may be dropped."""
+    chunked = build_plan(CONFIG_DIR, list(range(1, 31)))
+    flat = build_plan(CONFIG_DIR, list(range(1, 31)), chunk=False)
+    assert sum(p.n_cells for p in chunked) == sum(p.n_cells for p in flat) == 12600
+    for c, f in zip(chunked, flat, strict=True):
+        assert c.key == f.key
+        assert c.n_cells == f.n_cells
+        assert c.n_tasks * c.bundle >= c.n_cells, c.key
+        assert f.bundle == 1 and f.n_tasks == f.n_cells
+
+
+def test_chunking_cuts_the_submitted_task_count_hard() -> None:
+    """The whole point of the SCBI request: far fewer scheduling decisions."""
+    plan = build_plan(CONFIG_DIR, list(range(1, 31)))
+    n_tasks = sum(p.n_tasks for p in plan)
+    assert n_tasks < 12600 / 3, f"{n_tasks} tasks is not a meaningful reduction"
+
+
+def test_every_array_clears_the_scbi_two_hour_floor() -> None:
+    """The administrators' actual request, asserted per array."""
+    plan = build_plan(CONFIG_DIR, list(range(1, 31)))
+    for p in plan:
+        assert p.task_h >= MIN_TASK_HOURS, f"{p.key}: {p.task_h:.2f} h per task"
+
+
+def test_the_unchunked_plan_would_violate_that_floor() -> None:
+    """Guards the guard: if this passes, the floor test above proves nothing."""
+    flat = build_plan(CONFIG_DIR, list(range(1, 31)), chunk=False)
+    assert any(p.task_h < MIN_TASK_HOURS for p in flat)
+
+
+def test_no_task_can_outrun_its_wall() -> None:
+    """A cell only starts if the FULL payload budget still fits.
+
+    ``start_cutoff_h + payload + teardown == wall`` by construction, so the
+    bound below is what makes a SLURM ``TIMEOUT`` impossible rather than
+    unlikely. A wall that left no room for even one cell would deadlock the
+    array instead.
+    """
+    plan = build_plan(CONFIG_DIR, list(range(1, 31)))
+    for p in plan:
+        assert p.start_cutoff_h > 0, p.key
+        assert p.start_cutoff_h + CELL_RESERVE_H <= p.wall_h + 1e-9, p.key
+        assert p.wall_h <= 71, f"{p.key}: {p.wall} exceeds medium_uma MaxWall"
+
+
+def test_worst_case_chunk_fits_the_wall_when_the_no_spill_wall_was_affordable() -> None:
+    """Where ``B * (cap + teardown)`` fit under MAX_WALL_H, spill is impossible.
+
+    That covers every array whose cells provably saturate the budget -- the UDFS
+    suites -- so those need no sweep at all, which is why the sweep is small.
+    """
+    plan = build_plan(CONFIG_DIR, list(range(1, 31)))
+    affordable = [p for p in plan if p.bundle * CELL_RESERVE_H <= MAX_WALL_H]
+    assert affordable, "expected at least the B=2 UDFS arrays to qualify"
+    for p in affordable:
+        assert p.bundle * CELL_RESERVE_H <= p.wall_h + 1e-9, p.key
+
+
+def test_max_bundle_ceiling_is_honoured() -> None:
+    """The Stage C smoke needs it to stay inside the 2 h `short` QOS."""
+    plan = build_plan(CONFIG_DIR, list(range(1, 31)), max_bundle=4)
+    assert max(p.bundle for p in plan) == 4
+    assert sum(p.n_cells for p in plan) == 12600
+
+
+# --------------------------------------------------------------------------
+# bundle_size / wall_hours
+# --------------------------------------------------------------------------
+
+
+def test_bundle_size_is_deadline_bound_for_full_budget_cells() -> None:
+    """A 12 h cell already clears the 2 h floor sixfold, so grouping it is about
+    task count, not compliance -- and the deadline, not the target, decides.
+
+    ``TARGET_TASK_HOURS / 12 h`` would allow 3, but three full-budget cells need
+    36 h against a largest reachable deadline of ``MAX_WALL_H - CELL_RESERVE_H``
+    = 34.5 h, and :data:`DEADLINE_SAFETY` bars the last hour of that. Two is the
+    right answer, and it is the one the UDFS arrays get.
+    """
+    assert bundle_size(12.0, 300) == 2
+    assert wall_hours(2, 12.0) <= MAX_WALL_H
+
+
+def test_bundle_size_lifts_short_cells_over_the_floor() -> None:
+    """The suites SCBI actually saw: minutes per cell."""
+    for cell_h in (0.02, 0.06, 0.15, 0.20, 0.9):
+        b = bundle_size(cell_h, 300)
+        assert b * cell_h >= MIN_TASK_HOURS, (cell_h, b)
+
+
+def test_bundle_size_never_exceeds_the_cells_available() -> None:
+    assert bundle_size(0.01, 7) == 7
+
+
+def test_bundle_size_respects_the_largest_reachable_deadline() -> None:
+    """A chunk the longest wall cannot drain would spill on every single task."""
+    for cell_h in (0.05, 0.2, 1.0, 5.0, 12.0):
+        b = bundle_size(cell_h, 10_000)
+        assert b * cell_h <= MAX_WALL_H - CELL_RESERVE_H, (cell_h, b)
+
+
+@pytest.mark.parametrize("cell_h", [0.0, -1.0])
+def test_bundle_size_rejects_non_positive_cell_hours(cell_h: float) -> None:
+    with pytest.raises(SlotPlanError):
+        bundle_size(cell_h, 100)
+
+
+def test_wall_hours_uses_the_no_spill_wall_when_it_fits() -> None:
+    """Two 12 h cells need 2 x 12.5 h = 25 h, and that is affordable."""
+    assert wall_hours(2, 12.0) == 25
+    assert wall_hours(3, 12.0) == 38
+
+
+def test_wall_hours_falls_back_to_the_expected_chunk_for_short_cells() -> None:
+    """27 short cells would ask for 337 h under the no-spill rule; it does not."""
+    assert wall_hours(27, 0.9) <= MAX_WALL_H
+
+
+def test_wall_hours_is_clamped_to_the_certified_bounds() -> None:
+    assert wall_hours(1, 12.0) == 16
+    assert wall_hours(1, 0.01) == 16
+    assert wall_hours(500, 12.0) == MAX_WALL_H
+
+
+def test_cell_hours_table_covers_every_array_the_plan_builds() -> None:
+    """A missing key silently falls back to the coarse per-method figure, which
+    is wrong by up to 13x at the suite level and would mis-size the chunk."""
+    for method in METHODS:
+        for suite in SUITES:
+            assert (method, suite) in CELL_HOURS, f"{method}:{suite}"
 
 
 def test_every_array_gets_a_workable_throttle() -> None:
@@ -301,26 +444,39 @@ def test_trace_config_differs_from_its_parent_by_one_key() -> None:
 
 def test_campaign_plan_at_the_declared_seed_count() -> None:
     plan = build_plan(CONFIG_DIR, list(range(1, CAMPAIGN_SEEDS + 1)))
-    assert sum(p.n_tasks for p in plan) == 70 * CAMPAIGN_SEEDS * 6 // 6 * 6
-    assert sum(p.n_tasks for p in plan) == 12600
+    assert sum(p.n_cells for p in plan) == 70 * CAMPAIGN_SEEDS * 6 // 6 * 6
+    assert sum(p.n_cells for p in plan) == 12600
     assert sum(p.throttle for p in plan) == DEFAULT_SLOT_BUDGET
 
 
-def test_expected_makespan_at_measured_runtimes_is_reported_separately() -> None:
-    """The allocation is weighted pessimistically; the forecast must not be.
+def test_chunking_does_not_cost_makespan() -> None:
+    """The claim made to SCBI, asserted rather than asserted-in-prose.
 
-    Scoring the plan at ``MEASURED_RUNTIME_HOURS`` must give a strictly shorter
-    makespan than scoring it at the planning weights, or the two dictionaries
-    have drifted into agreement and the distinction has quietly been lost.
+    Chunking is algebraically makespan-neutral -- ``(N/B) * (B*T) / K == N*T/K``
+    -- but only while each array keeps at least ``K`` tasks, and only up to the
+    quantisation of indivisible tasks into whole rounds. That residue is what
+    this bounds: 10 % is the budget, and the plan as it stands spends 2.5 %.
     """
+    chunked = build_plan(CONFIG_DIR, list(range(1, CAMPAIGN_SEEDS + 1)))
+    flat = build_plan(CONFIG_DIR, list(range(1, CAMPAIGN_SEEDS + 1)), chunk=False)
+
+    assert max(p.finish_h for p in chunked) == pytest.approx(max(p.finish_h for p in flat)), (
+        "continuous makespan must be identical -- the work did not change"
+    )
+
+    chunked_q = max(p.quantised_finish_h for p in chunked)
+    flat_q = max(p.quantised_finish_h for p in flat)
+    assert chunked_q <= 1.10 * flat_q, (
+        f"chunking cost {100 * (chunked_q / flat_q - 1):.1f} % of makespan "
+        f"({flat_q:.1f} h -> {chunked_q:.1f} h)"
+    )
+
+
+def test_no_array_is_starved_of_its_slots_by_chunking() -> None:
+    """Fewer tasks than slots would idle the difference for the whole campaign."""
     plan = build_plan(CONFIG_DIR, list(range(1, CAMPAIGN_SEEDS + 1)))
-    planned = max(p.finish_h for p in plan)
-    expected = max(p.n_tasks * MEASURED_RUNTIME_HOURS[p.method] / p.throttle for p in plan)
-    assert MEASURED_RUNTIME_HOURS["bingo"] < RUNTIME_HOURS["bingo"]
-    assert MEASURED_RUNTIME_HOURS["udfs"] == RUNTIME_HOURS["udfs"]
-    assert expected < planned
-    # Sanity: the 30-seed campaign should land near 54 h, not near a week.
-    assert 40.0 < expected < 70.0
+    for p in plan:
+        assert p.throttle <= p.n_tasks, f"{p.key}: {p.throttle} slots for {p.n_tasks} tasks"
 
 
 def test_bingo_isalsr_memory_covers_the_hard_ceiling() -> None:
@@ -378,10 +534,18 @@ def test_tsv_is_parseable_and_complete() -> None:
     assert len(rows) == 42
     for row, p in zip(rows, plan, strict=True):
         fields = row.split("\t")
-        assert len(fields) == 7
+        # Ten since chunking. The launcher REFUSES a plan with any other count:
+        # a short row leaves BUNDLE and the deadline empty in `while read`, which
+        # silently means "unchunked, no deadline".
+        assert len(fields) == 10
         assert fields[:3] == [p.method, p.arm, p.suite]
         assert int(fields[3]) == p.n_tasks
         assert int(fields[4]) == p.throttle
+        assert int(fields[5]) == p.mem_gb
+        assert fields[6] == p.wall
+        assert int(fields[7]) == p.bundle
+        assert int(fields[8]) == int(p.start_cutoff_h * 3600)
+        assert int(fields[9]) == p.n_cells
 
 
 def test_tsv_contains_no_spaces_in_key_fields() -> None:

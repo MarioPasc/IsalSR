@@ -27,13 +27,18 @@ SMOKE_ROOT="${C2_CERTIFIED_SMOKE_ROOT:-${FSCRATCH}/results/isalsr/c2_smoke}"
 LOCAL_BASE="${C2_LOCAL_BASE:-/media/mpascual/Sandisk2TB/research/isalsr/results/model_validation/real_benchmarks}"
 TAG="${C2_TAG:-campaign/c2}"
 EXPECTED_ARRAYS=42
-EXPECTED_TASKS=12600
+# CELLS, not SLURM tasks.  Since the SCBI job-grouping request (2026-08-07) one
+# task carries several cells, so the two counts differ (12,600 cells in ~3,474
+# tasks).  The scientific invariant is the cell count; the task count is a
+# packaging decision and is allowed to move when CELL_HOURS is re-measured.
+EXPECTED_CELLS=12600
 
 SKIP_TAG=false
 [[ "${1:-}" == "--skip-tag" ]] && SKIP_TAG=true
 
 PY="$(conda run -n isalsr which python 2>/dev/null || echo ~/.conda/envs/isalsr/bin/python)"
 REPO_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export REPO_LOCAL     # G9b's heredoc reads it from the environment
 
 N_PASS=0
 N_FAIL=0
@@ -237,16 +242,51 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# G9 -- the plan resolves to exactly 42 arrays / 12,600 tasks
+# G9 -- the plan resolves to exactly 42 arrays covering 12,600 CELLS
 # ---------------------------------------------------------------------------
+# 🔴 Since chunking (2026-08-07) the invariant is the CELL count, not the task
+# count: cells are the scientific units the paired design is built from, and
+# grouping must leave them untouched while it changes how many SLURM records
+# carry them.  Checking column 4 (tasks) against 12,600 would now fail on a
+# correct plan -- and, worse, would pass on an accidentally UNCHUNKED one.
 PLAN="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" "${PY}" -m experiments.scripts.c2_slot_plan \
         --config-dir "${REPO_LOCAL}/experiments/configs" --seeds 1-30 --budget 2016 --tsv 2>/dev/null)"
 N_ROWS="$(wc -l <<<"${PLAN}")"
-N_TASKS="$(awk -F'\t' '{s+=$4} END {print s+0}' <<<"${PLAN}")"
-if [[ "${N_ROWS}" == "${EXPECTED_ARRAYS}" && "${N_TASKS}" == "${EXPECTED_TASKS}" ]]; then
-    ok "G9" "plan: ${N_ROWS} arrays, ${N_TASKS} tasks"
+N_COLS="$(awk -F'\t' 'NR==1{print NF}' <<<"${PLAN}")"
+N_TASKS="$(awk -F'\t' '{s+=$4}  END {print s+0}' <<<"${PLAN}")"
+N_CELLS="$(awk -F'\t' '{s+=$10} END {print s+0}' <<<"${PLAN}")"
+if [[ "${N_COLS}" != "10" ]]; then
+    bad "G9" "plan has ${N_COLS} columns, expected 10 -- a short row silently disables chunking AND the deadline"
+elif [[ "${N_ROWS}" == "${EXPECTED_ARRAYS}" && "${N_CELLS}" == "${EXPECTED_CELLS}" ]]; then
+    ok "G9" "plan: ${N_ROWS} arrays, ${N_CELLS} cells in ${N_TASKS} tasks"
 else
-    bad "G9" "plan: ${N_ROWS} arrays / ${N_TASKS} tasks, expected ${EXPECTED_ARRAYS} / ${EXPECTED_TASKS}"
+    bad "G9" "plan: ${N_ROWS} arrays / ${N_CELLS} cells, expected ${EXPECTED_ARRAYS} / ${EXPECTED_CELLS}"
+fi
+
+# ---------------------------------------------------------------------------
+# G9b -- SCBI's floor: no array plans a task shorter than two hours
+# ---------------------------------------------------------------------------
+# The commitment made to soporte@scbi.uma.es on 2026-08-07, checked against the
+# plan that is about to be submitted rather than against the mail.  Also asserts
+# the deadline is positive everywhere: a non-positive cutoff means the wall
+# cannot fit even one cell and the array would deadlock.
+SHORT="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" "${PY}" - <<'PYEOF' 2>/dev/null
+import os
+from experiments.models.orchestrator import parse_seeds
+from experiments.scripts.c2_slot_plan import MIN_TASK_HOURS, build_plan
+
+root = os.environ["REPO_LOCAL"]
+plan = build_plan(os.path.join(root, "experiments", "configs"), parse_seeds("1-30"), 2016)
+bad = [f"{p.key}={p.task_h:.2f}h" for p in plan if p.task_h < MIN_TASK_HOURS]
+bad += [f"{p.key}:cutoff={p.start_cutoff_h:.1f}h" for p in plan if p.start_cutoff_h <= 0]
+print(" ".join(bad) if bad else f"OK min={min(p.task_h for p in plan):.1f}h "
+      f"max_wall={max(p.wall_h for p in plan)}h")
+PYEOF
+)"
+if [[ "${SHORT}" == OK* ]]; then
+    ok "G9b" "SCBI 2 h floor: ${SHORT#OK }"
+else
+    bad "G9b" "SCBI 2 h floor violated by: ${SHORT:-<plan failed to build>}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -328,18 +368,40 @@ if [[ -z "${CAMPAIGN_SEEDS}" || -z "${AWK_PROG}" ]]; then
 else
     N_DECODED="$(awk -F, "${AWK_PROG}" <<<"${CAMPAIGN_SEEDS}" 2>/dev/null)"
     N_EXPECTED=30
-    FIRST="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" "${PY}" -m experiments.scripts.c2_task_spec \
-             --config "${REPO_LOCAL}/experiments/configs/bingo_nguyen.yaml" \
-             --seeds "${CAMPAIGN_SEEDS}" --index 1 2>/dev/null)"
-    LAST="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" "${PY}" -m experiments.scripts.c2_task_spec \
-            --config "${REPO_LOCAL}/experiments/configs/bingo_nguyen.yaml" \
-            --seeds "${CAMPAIGN_SEEDS}" --index 360 2>/dev/null)"
+
+    # 🔴 Decode through the CAMPAIGN's own bundle, not through bundle 1.  G12
+    # exists because a gate that exercises a path the campaign will not run
+    # proves nothing -- and since 2026-08-07 the campaign runs chunks.  Walk
+    # every task of one real array and assert the union of their cells is
+    # exactly the array's cell set, with nothing dropped and nothing repeated.
+    COVER="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" "${PY}" - <<PYEOF 2>/dev/null
+import os
+from experiments.models.orchestrator import parse_seeds
+from experiments.scripts.c2_slot_plan import build_plan
+from experiments.scripts.c2_task_spec import decode_chunk, load_problem_names
+
+root = "${REPO_LOCAL}"
+seeds = parse_seeds("${CAMPAIGN_SEEDS}")
+plan = {p.key: p for p in build_plan(os.path.join(root, "experiments", "configs"), seeds, 2016)}
+p = plan["bingo:baseline:nguyen"]
+problems = load_problem_names(os.path.join(root, "experiments", "configs", "bingo_nguyen.yaml"))
+seen = []
+for i in range(1, p.n_tasks + 1):
+    seen += decode_chunk(problems, seeds, p.bundle, i)
+want = {(q, s) for q in problems for s in seeds}
+if len(seen) == len(want) == len(set(seen)) and set(seen) == want:
+    print(f"OK B={p.bundle} {p.n_tasks} tasks cover {len(want)} cells exactly")
+else:
+    print(f"BROKEN B={p.bundle}: {len(seen)} decoded, {len(set(seen))} unique, {len(want)} expected")
+PYEOF
+)"
+
     if [[ "${N_DECODED}" != "${N_EXPECTED}" ]]; then
         bad "G12" "payload: worker guard decodes '${CAMPAIGN_SEEDS}' to ${N_DECODED}, expected ${N_EXPECTED} -- every task would abort"
-    elif [[ -z "${FIRST}" || -z "${LAST}" ]]; then
-        bad "G12" "payload: c2_task_spec could not decode index 1 or 360 at '${CAMPAIGN_SEEDS}'"
+    elif [[ "${COVER}" != OK* ]]; then
+        bad "G12" "payload: chunked decode does not partition the array -- ${COVER:-<decode failed>}"
     else
-        ok "G12" "payload: '${CAMPAIGN_SEEDS}' -> ${N_DECODED} seeds; idx 1='${FIRST}', idx 360='${LAST}'"
+        ok "G12" "payload: '${CAMPAIGN_SEEDS}' -> ${N_DECODED} seeds; ${COVER#OK }"
     fi
 fi
 

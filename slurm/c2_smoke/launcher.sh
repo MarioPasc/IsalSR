@@ -48,6 +48,13 @@ case "${C2_PROFILE}" in
     DEF_ROOT_NAME="c2_smoke"
     DEF_SLOT_BUDGET=1008       # same total as the certified %24 wave, apportioned
     DEF_AGG_WALL="0-01:59:00"
+    # The smoke's wall is B x (payload + teardown), which is exact because a
+    # smoke cell cannot exceed its 900 s budget.  At the campaign's bundles (up
+    # to 164) that wall would be 68 h; capped at 4 it is 1 h 50 m, i.e. still
+    # inside `short` (MaxWall 2 h, priority 118,933 against medium_uma's 28,873).
+    # The smoke still exercises the chunk loop, the deadline and the staging --
+    # it just does not need a 164-cell chunk to do so.
+    DEF_MAX_BUNDLE=4
     ;;
   campaign)
     # 30 seeds, not 20 (Mario, 2026-08-05).  §0.4a fixed the campaign at 20 on a
@@ -68,6 +75,7 @@ case "${C2_PROFILE}" in
     DEF_ROOT_NAME="c2_3arm"    # §1: the one and only campaign root
     DEF_SLOT_BUDGET=2016
     DEF_AGG_WALL="0-01:59:00"
+    DEF_MAX_BUNDLE=0           # no ceiling: c2_slot_plan's own bounds govern
     ;;
   *)
     echo "FATAL: C2_PROFILE must be 'smoke' or 'campaign', got '${C2_PROFILE}'" >&2
@@ -121,6 +129,10 @@ SEEDS="${C2_SEEDS_SPEC:-${DEF_SEEDS}}"
 SEEDS_EXPORT="${SEEDS//,/:}"
 MAX_TIME="${C2_MAX_TIME:-${DEF_MAX_TIME}}"
 WALL_OVERRIDE="${C2_WALL:-${DEF_WALL}}"
+# Per-cell teardown allowance used by the smoke's no-spill wall.  Generous on
+# purpose: §11.1 (2026-08-03) records a cell that finished its search correctly
+# and then spent 7+ further minutes in SymPy.
+SMOKE_TEARDOWN_S="${C2_TEARDOWN_S:-600}"
 
 # ---- Slot budget -----------------------------------------------------------
 # The throttle is now apportioned per array in proportion to that array's WORK
@@ -213,6 +225,16 @@ AGG_WALL="${C2_AGG_WALL:-${DEF_AGG_WALL}}"
 # That is the intended trade -- comparability over turnaround.
 CONSTRAINT="${C2_CONSTRAINT:-sr}"
 
+# ---- Local scratch ---------------------------------------------------------
+# On by default (SCBI mail, 2026-08-07; manual §4.9).  The worker writes the
+# payload's whole output tree to the compute node's own disk and copies back
+# only the finished artefacts of each cell.  `sr` nodes carry 800 GB of
+# localscratch against a campaign footprint measured in megabytes.
+#
+# C2_USE_LOCALSCRATCH=0 writes straight to FSCRATCH.  It exists so the staging
+# path stays falsifiable, not because it is ever the better choice.
+USE_LOCALSCRATCH="${C2_USE_LOCALSCRATCH:-1}"
+
 # Topology, task counts, per-array throttle, memory and wall now come from
 # experiments/scripts/c2_slot_plan.py -- ONE python call for all 42 arrays,
 # instead of 42 separate `c2_task_spec --count` invocations, and one place where
@@ -268,6 +290,8 @@ REPO_LOCAL="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # The plan is computed from the LOCAL checkout, which deploy.sh has already
 # proven identical to the deployed one.  One call, 42 rows.
 PLAN_ARGS=(--config-dir "${REPO_LOCAL}/experiments/configs" --seeds "${SEEDS}" --tsv)
+MAX_BUNDLE="${C2_MAX_BUNDLE:-${DEF_MAX_BUNDLE}}"
+[[ "${MAX_BUNDLE}" -gt 0 ]] && PLAN_ARGS+=(--max-bundle "${MAX_BUNDLE}")
 if [[ -n "${UNIFORM_THROTTLE}" ]]; then
     PLAN_ARGS+=(--uniform "${UNIFORM_THROTTLE}")
 else
@@ -278,6 +302,12 @@ PLAN="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" \
     || { echo "FATAL: c2_slot_plan failed; nothing submitted" >&2; exit 1; }
 [[ "$(wc -l <<<"${PLAN}")" -eq 42 ]] \
     || { echo "FATAL: plan has $(wc -l <<<"${PLAN}") rows, expected 42" >&2; exit 1; }
+# Ten columns since chunking (2026-08-07).  A plan emitted by an older checkout
+# has seven, and `read` would silently leave BUNDLE and CUTOFF_S empty -- which
+# means bundle 1 and NO deadline, i.e. the campaign runs unchunked and the
+# TIMEOUT guard is off.  Refuse instead.
+[[ "$(awk -F'\t' 'NR==1{print NF}' <<<"${PLAN}")" -eq 10 ]] \
+    || { echo "FATAL: plan has $(awk -F'\t' 'NR==1{print NF}' <<<"${PLAN}") columns, expected 10" >&2; exit 1; }
 
 # ---- A13 preflight: inodes, before anything is submitted --------------------
 # P6's failure mode, in its own words: "C2 hits the hard file quota mid-campaign
@@ -297,8 +327,12 @@ PLAN="$(PYTHONPATH="${REPO_LOCAL}/src:${REPO_LOCAL}" \
 # space and file halves with a literal U+2551 box character, so positional $6/$7
 # straddle the divider.  Split on the divider, then sanity-check the result and
 # REFUSE if it is not plausible.
+# 🔴 Two different counts since chunking: RESULT inodes scale with CELLS (5.63
+# per run, unchanged by grouping), LOG inodes scale with TASKS.  Passing the task
+# count for both would under-count results by 3.6x and wave through a submission
+# that overruns the quota.
 check_inode_budget() {
-    local n_tasks="$1" half used soft avail need_results need_logs need
+    local n_cells="$1" n_tasks="$2" half used soft avail need_results need_logs need
     half="$(quota 2>/dev/null | awk -F'║' '/fscratc/ {print $2}')"
 
     _to_int() {  # "166.4k" | "250.0k" | "400000" -> integer
@@ -318,7 +352,7 @@ check_inode_budget() {
     fi
 
     avail=$(( soft - used ))
-    need_results=$(( n_tasks * 563 / 100 + 843 ))
+    need_results=$(( n_cells * 563 / 100 + 843 ))
     need_logs=$(( MERGE_LOGS == 1 ? n_tasks : n_tasks * 2 ))
     need=$(( need_results + need_logs ))
 
@@ -358,13 +392,15 @@ EOF
 # (defect 15: there is no sbatch on the workstation), so it is exactly where the
 # quota is readable and where you want to see the projection before committing.
 if [[ ( "${MODE}" == "submit" || "${MODE}" == "test" ) && "${C2_SKIP_INODE_CHECK:-0}" != "1" ]]; then
-    check_inode_budget "$(awk -F'\t' '{s+=$4} END {print s}' <<<"${PLAN}")" \
+    check_inode_budget "$(awk -F'\t' '{s+=$10} END {print s}' <<<"${PLAN}")" \
+                       "$(awk -F'\t' '{s+=$4}  END {print s}' <<<"${PLAN}")" \
         || { [[ "${MODE}" == "test" ]] && echo "  (--test-only: continuing anyway)" || exit 1; }
 fi
 
 JOB_IDS=()
 CONFIG_LIST=""
 N_TASKS_TOTAL=0
+N_CELLS_TOTAL=0
 N_ARRAYS=0
 SLOTS_TOTAL=0
 
@@ -382,7 +418,8 @@ fi
 echo "  mode:       ${MODE}${ONLY:+   filter: ${ONLY}}"
 echo ""
 
-while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM PLAN_WALL; do
+while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM PLAN_WALL \
+                        BUNDLE CUTOFF_S N_CELLS; do
       [[ -n "${METHOD}" ]] || continue
       KEY="${METHOD}:${ARM}:${SUITE}"
       [[ -n "${ONLY}" && "${KEY}" != "${ONLY}" ]] && continue
@@ -391,9 +428,33 @@ while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM PLAN_WALL; do
       LOCAL_CONFIG="${REPO_LOCAL}/experiments/configs/${METHOD}_${SUITE}.yaml"
       [[ -f "${LOCAL_CONFIG}" ]] || { echo "FATAL: missing config ${LOCAL_CONFIG}" >&2; exit 1; }
 
-      # The smoke profile overrides the plan's per-method wall with its own short
-      # one; the campaign takes the plan's.  Both paths are explicit.
-      WALL="${WALL_OVERRIDE:-${PLAN_WALL}}"
+      # 🔴 The wall and the worker's deadline must move TOGETHER.  A wall shorter
+      # than the deadline assumes lets the worker start a cell it cannot finish,
+      # and SLURM then kills it -- reintroducing exactly the TIMEOUT the deadline
+      # exists to make impossible.  So the two are always derived from the same
+      # arithmetic, never set independently.
+      #
+      # The campaign takes the plan's wall, which is sized against the C1-measured
+      # per-suite cell duration.  The SMOKE cannot: its cells are capped at
+      # MAX_TIME = 900 s, not at the campaign's 43,200 s, so the plan's wall would
+      # be ~50x too long while the plan's BUNDLE is sized for 12 h cells.  It
+      # derives its own NO-SPILL wall instead -- B x (payload + teardown) -- which
+      # is exact, because a smoke cell provably cannot exceed its payload budget.
+      #
+      # This is what keeps §10.2's promise real: the smoke exercises the same
+      # bundles, the same deadline arithmetic and the same worker loop as the
+      # campaign, on a payload 48x shorter.
+      if [[ -n "${WALL_OVERRIDE}" ]]; then
+          WALL_S=$(( BUNDLE * (MAX_TIME + SMOKE_TEARDOWN_S) + SMOKE_TEARDOWN_S ))
+          MIN_WALL_S=$(awk -F'[-:]' '{print (($1*24)+$2)*3600 + $3*60 + $4}' <<<"${WALL_OVERRIDE}")
+          (( WALL_S < MIN_WALL_S )) && WALL_S=${MIN_WALL_S}
+          WALL=$(printf '%d-%02d:%02d:00' $((WALL_S / 86400)) \
+                 $((WALL_S % 86400 / 3600)) $((WALL_S % 3600 / 60)))
+          CUTOFF_S=$(( WALL_S - MAX_TIME - SMOKE_TEARDOWN_S ))
+          (( CUTOFF_S < 1 )) && CUTOFF_S=1
+      else
+          WALL="${PLAN_WALL}"
+      fi
       JOB_NAME="c2s_${METHOD:0:1}${ARM:0:1}_${SUITE}"
 
       case "${MODE}" in
@@ -415,19 +476,21 @@ while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM PLAN_WALL; do
       [[ "${MERGE_LOGS}" == "1" ]] \
           || SB_ARGS+=(--error="${LOGS_DIR}/${JOB_NAME}_%A_%a.err")
       SB_ARGS+=(
-          --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=${SUITE},C2_CONFIG=${CONFIG},C2_SEEDS=${SEEDS_EXPORT},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT}"
+          --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=${SUITE},C2_CONFIG=${CONFIG},C2_SEEDS=${SEEDS_EXPORT},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT},C2_BUNDLE=${BUNDLE},C2_START_CUTOFF_S=${CUTOFF_S},C2_USE_LOCALSCRATCH=${USE_LOCALSCRATCH}"
           "${SCRIPT_DIR}/worker.sh"
       )
 
       N_ARRAYS=$((N_ARRAYS + 1))
       N_TASKS_TOTAL=$((N_TASKS_TOTAL + N_TASKS))
+      N_CELLS_TOTAL=$((N_CELLS_TOTAL + N_CELLS))
       SLOTS_TOTAL=$((SLOTS_TOTAL + THROTTLE))
       CONFIG_LIST="${CONFIG_LIST} ${CONFIG}"
 
       case "${MODE}" in
         dry)
-            printf '  %-32s %4d tasks  %%%-3d  %3dG  %-11s %s\n' \
-                   "${KEY}" "${N_TASKS}" "${THROTTLE}" "${MEM}" "${WALL}" "${ARRAY_SPEC}"
+            printf '  %-32s %4d cells /%3d = %4d tasks  %%%-3d  %3dG  %-11s cut %6ds\n' \
+                   "${KEY}" "${N_CELLS}" "${BUNDLE}" "${N_TASKS}" "${THROTTLE}" \
+                   "${MEM}" "${WALL}" "${CUTOFF_S}"
             ;;
         test)
             if OUT=$(sbatch --test-only "${SB_ARGS[@]}" 2>&1); then
@@ -439,15 +502,15 @@ while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM PLAN_WALL; do
         one|submit)
             ID=$(submit "${SB_ARGS[@]}") || exit 1
             JOB_IDS+=("${ID}")
-            printf '  %-32s %4s tasks  %%%-3d  %3dG  job %s\n' "${KEY}" \
+            printf '  %-32s %4s tasks (B=%d)  %%%-3d  %3dG  job %s\n' "${KEY}" \
                    "$([[ ${MODE} == one ]] && echo 1 || echo "${N_TASKS}")" \
-                   "${THROTTLE}" "${MEM}" "${ID}"
+                   "${BUNDLE}" "${THROTTLE}" "${MEM}" "${ID}"
             ;;
       esac
 done <<< "${PLAN}"
 
 echo ""
-echo "Arrays: ${N_ARRAYS}   tasks: ${N_TASKS_TOTAL}   slots: ${SLOTS_TOTAL}"
+echo "Arrays: ${N_ARRAYS}   tasks: ${N_TASKS_TOTAL}   cells: ${N_CELLS_TOTAL}   slots: ${SLOTS_TOTAL}"
 
 # ---- Aggregation: a 14-task array, then one ledger job ---------------------
 # afterany, not afterok: if some arrays fail, a status ledger that NAMES the
@@ -474,6 +537,58 @@ echo "Arrays: ${N_ARRAYS}   tasks: ${N_TASKS_TOTAL}   slots: ${SLOTS_TOTAL}"
 if [[ "${MODE}" == "submit" && ${#JOB_IDS[@]} -gt 0 ]]; then
     DEP=$(IFS=:; echo "${JOB_IDS[*]}")
     N_CONFIGS=$(wc -w <<<"${CONFIG_LIST}")
+
+    # ---- Sweep pass: the deadline's counterpart --------------------------
+    # A chunked task refuses to START a cell whose full payload budget no longer
+    # fits in the wall, so a chunk that drew an unlucky run of full-budget cells
+    # leaves the tail unrun.  That is a deliberate trade -- it buys a campaign in
+    # which a SLURM TIMEOUT is impossible -- but the tail still has to run.
+    #
+    # The sweep is the SAME 42 arrays, resubmitted with the SAME partition, held
+    # behind `afterany`.  It costs nothing when nothing spilled: the
+    # orchestrator's resume logic reads each cell's run_log.json and skips it, so
+    # a task whose cells all completed exits in seconds.  Simulated against the
+    # measured per-suite distributions, the sweep carries 5-20 real cells out of
+    # 12,600.
+    #
+    # Submitted at launch, not by hand, for the reason §11.3 gives about the
+    # aggregation: a recovery step that depends on someone remembering is a
+    # recovery step that does not happen.
+    if [[ "${C2_SWEEP:-1}" == "1" ]]; then
+        SWEEP_IDS=()
+        while IFS=$'\t' read -r METHOD ARM SUITE N_TASKS THROTTLE MEM PLAN_WALL \
+                                BUNDLE CUTOFF_S N_CELLS; do
+            [[ -n "${METHOD}" ]] || continue
+            [[ "${BUNDLE}" -gt 1 ]] || continue     # B=1 cannot spill: nothing to sweep
+            CONFIG="${ISALSR_REPO_DIR}/experiments/configs/${METHOD}_${SUITE}.yaml"
+            WALL="${WALL_OVERRIDE:-${PLAN_WALL}}"
+            SWEEP_NAME="c2w_${METHOD:0:1}${ARM:0:1}_${SUITE}"
+            SID=$(submit \
+                --array="1-${N_TASKS}%${THROTTLE}" \
+                --job-name="${SWEEP_NAME}" \
+                --time="${WALL}" \
+                --ntasks=1 --cpus-per-task=1 \
+                --mem="${MEM}G" \
+                --constraint="${CONSTRAINT}" \
+                --account="${ACCOUNT}" \
+                --dependency="afterany:${DEP}" \
+                --output="${LOGS_DIR}/${SWEEP_NAME}_%A_%a.out" \
+                --export="ALL,ISALSR_REPO_DIR=${ISALSR_REPO_DIR},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=${SUITE},C2_CONFIG=${CONFIG},C2_SEEDS=${SEEDS_EXPORT},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT},C2_BUNDLE=${BUNDLE},C2_START_CUTOFF_S=${CUTOFF_S},C2_USE_LOCALSCRATCH=${USE_LOCALSCRATCH}" \
+                "${SCRIPT_DIR}/worker.sh") || exit 1
+            if scontrol show job "${SID}" | grep -q 'Dependency=(null)'; then
+                echo "FATAL: sweep dependency dropped -- cancelling ${SID}" >&2
+                scancel "${SID}"; exit 1
+            fi
+            SWEEP_IDS+=("${SID}")
+        done <<< "${PLAN}"
+        if [[ ${#SWEEP_IDS[@]} -gt 0 ]]; then
+            echo "Sweep arrays: ${#SWEEP_IDS[@]} (afterany on the ${#JOB_IDS[@]} main arrays)"
+            # The aggregation must wait for the SWEEP, not just the main pass, or
+            # it aggregates a tree that is still missing its deferred cells.
+            DEP="${DEP}:$(IFS=:; echo "${SWEEP_IDS[*]}")"
+            printf '%s\n' "${SWEEP_IDS[@]}" > "${LOGS_DIR}/sweep_job_ids.txt"
+        fi
+    fi
 
     AGG_ID=$(submit \
         --job-name=c2s_aggregate \

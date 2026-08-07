@@ -1,7 +1,65 @@
-"""Plan the 42 C2 arrays: task counts, array throttles, memory and wall clock.
+"""Plan the 42 C2 arrays: chunking, task counts, throttles, memory and wall clock.
 
 Single source of truth for the resource shape of campaign C2, so the launcher
 never carries a hard-coded table and every number here is unit-testable.
+
+Why the arrays are chunked — the SCBI request (2026-08-07)
+---------------------------------------------------------
+Picasso's administrators asked us to stop submitting short jobs:
+
+    "me da la impresión de que los trabajos apenas duran minutos. Por lo que el
+    sistema pierde más tiempo buscándoles hueco para ejecutar que en la propia
+    ejecución. Esto satura el sistema de colas y afecta a todos los usuarios.
+    Para estos casos lo ideal es agrupar varios trabajos en uno solo, de forma
+    que cada trabajo combinado dure al menos 2h."   -- Manuel, SCBI
+
+They are right, and it is measurable in our own accounting. Of the 23,058 job
+records this account produced between 2026-07-01 and 2026-08-07, **51.5 % ran
+for under two minutes and only 0.9 % reached two hours**. Two things produced
+that: the Stage C smoke waves run a 900 s payload, and the aborted 2026-08-06
+campaign submission had all 12,600 tasks die in seconds on the seed-spec guard.
+
+It is *also* true of the production payload, which is what matters here. From
+the C1 campaign's own ``sacct`` record (COMPLETED tasks only):
+
+===========================  =======  =========  =========  =============
+array                          n      mean (h)   p50 (h)    frac < 2 h
+===========================  =======  =========  =========  =============
+``udfs`` hard / cherry / rd    1,680      12.01      12.01      0.0 %
+``udfs`` feynman               4,924       0.82       0.03    ~93 %
+``bingo`` nguyen               5,608       0.14       0.02     100 %
+``bingo`` feynman                297       0.20       0.02     100 %
+``bingo`` hard                   564       5.27       5.96      26 %
+``bingo`` roundoff               479       0.69       0.73     100 %
+===========================  =======  =========  =========  =============
+
+So the campaign is genuinely bimodal: UDFS saturates its 12 h budget on the
+suites it cannot solve exactly and exits in seconds on the ones it can, while
+Bingo stops on ``max_evals`` and is fast on the easy suites. Roughly 43 % of the
+12,600 planned tasks would have run for under two hours.
+
+The fix is to make one array task run a **contiguous chunk of cells in
+sequence** instead of a single cell. Three properties make this nearly free:
+
+1. **It is makespan-neutral.** An array of ``N`` cells of duration ``T`` under
+   throttle ``K`` finishes at ``N*T/K``. Grouping into ``N/B`` tasks of duration
+   ``B*T`` finishes at ``(N/B)*(B*T)/K = N*T/K`` — the same, provided the array
+   still has at least ``K`` tasks, which :func:`build_plan` enforces by capping
+   the apportionment at the post-chunking task count. Simulated end to end
+   against the measured per-suite distributions, total campaign wall-clock moves
+   from ~160 h to ~170 h, i.e. within the noise of the throttle grant itself.
+2. **Memory is unaffected.** Each cell is a separate ``orchestrator`` process, so
+   peak RSS is still a per-cell quantity and ``--mem`` does not change.
+3. **A lost task costs one cell, not a chunk.** Every cell writes its
+   ``run_log.json`` as it completes, and the orchestrator's resume logic skips
+   completed cells, so a task killed at hour 30 loses only the cell in flight.
+
+The cost is a **deadline**: a chunk cannot be allowed to overrun its wall. The
+worker therefore refuses to *start* a cell unless the full payload budget still
+fits (:data:`CELL_RESERVE_H`), which makes a SLURM ``TIMEOUT`` impossible by
+construction and keeps the "no task was killed by SLURM" assertion meaningful.
+Cells that do not get started are picked up by a dependent sweep pass; simulated
+sweep sizes are 5-20 tasks against a first pass of ~3,400.
 
 Why this module exists — the allocation finding (2026-08-05)
 -----------------------------------------------------------
@@ -40,6 +98,7 @@ which is why an uncertain ``T_bingo`` is not a reason to keep the uniform split.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 from dataclasses import dataclass
@@ -47,7 +106,11 @@ from dataclasses import dataclass
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from experiments.models.orchestrator import parse_seeds  # noqa: E402
-from experiments.scripts.c2_task_spec import TaskSpecError, load_problem_names  # noqa: E402
+from experiments.scripts.c2_task_spec import (  # noqa: E402
+    TaskSpecError,
+    load_problem_names,
+    n_tasks_for,
+)
 
 #: Submission order.  UDFS first, deliberately: it is the long pole at a flat
 #: 12.00 h per run, and it is also the arm that benefits most from being queued
@@ -92,6 +155,112 @@ RUNTIME_HOURS: dict[str, float] = {"udfs": 12.0, "bingo": 8.0}
 #: 100M ``max_evals`` and the 20 D2 problems have no runtime data, so the
 #: expectation is a lower bound on those 28 of 70 problems.
 MEASURED_RUNTIME_HOURS: dict[str, float] = {"udfs": 12.0, "bingo": 5.15}
+
+#: Mean per-cell duration in hours, per ``(method, suite)``, used to size chunks.
+#:
+#: Measured from the C1 campaign's ``sacct`` record (COMPLETED tasks, 2026-03-01
+#: to 2026-07-01), adjusted where C2's configuration differs from C1's. This is
+#: a *finer* table than :data:`RUNTIME_HOURS`, which is per-method only: the
+#: per-method figure cannot size a chunk, because ``udfs`` ranges from 0.82 h per
+#: cell on ``feynman`` to a flat 12.01 h on ``hard``.
+#:
+#: Provenance, suite by suite:
+#:
+#: * ``udfs`` ``hard`` / ``cherrypicked`` / ``roundoff`` — n = 1,680, mean = p50 =
+#:   p99 = 12.01 h. UDFS has no ``max_evals``; it stops on ``stop_thresh = 1e-10``
+#:   or saturates ``max_time``, and on these suites it never stops early.
+#: * ``udfs`` ``feynman`` — n = 4,924, mean 0.82 h, p50 0.03 h, p95 6.88 h,
+#:   p99 12.02 h. UDFS recovers most Feynman equations exactly and exits in
+#:   seconds; the ~7 % it cannot recover saturate the budget. **Bimodal, and the
+#:   reason the deadline guard exists.**
+#: * ``udfs`` ``nguyen`` — n = 4,450, p95 = p99 = 12.00 h. The 1 h-budget runs
+#:   (``*_atlas``, n = 150) hit their cap on 98 % of cells, so under C2's uniform
+#:   43,200 s budget essentially every cell saturates.
+#: * ``bingo`` ``nguyen`` / ``feynman`` — n = 5,905, mean 0.06-0.22 h, max 4.76 h.
+#:   ``max_evals`` binds far below ``max_time``; these never approach the cap.
+#: * ``bingo`` ``hard`` / ``cherrypicked`` — n = 1,160, p50 3.7-9.8 h, p90 11.8 h.
+#:   Already at 100M ``max_evals`` in C1, so C2 does not shift them.
+#: * ``bingo`` ``roundoff`` — C1 measured 0.51-0.87 h at 10M ``max_evals``; F-19
+#:   raised it to 100M, a 10x budget increase, so the C2 estimate is scaled and
+#:   then clipped by the 12 h ``max_time``.
+#: * ``feynman_remainder`` / ``strogatz`` — the 20 D2 problems have **no runtime
+#:   data at all**. Estimated conservatively (high for UDFS, mid for Bingo);
+#:   :func:`bundle_size` under-chunks rather than over-chunks when the estimate is
+#:   too high, so an error here costs task count, never correctness.
+CELL_HOURS: dict[tuple[str, str], float] = {
+    ("udfs", "nguyen"): 11.5,
+    ("udfs", "feynman"): 0.9,
+    ("udfs", "hard"): 12.0,
+    ("udfs", "cherrypicked"): 12.0,
+    ("udfs", "roundoff"): 12.0,
+    ("udfs", "feynman_remainder"): 6.0,
+    ("udfs", "strogatz"): 11.0,
+    ("bingo", "nguyen"): 0.15,
+    ("bingo", "feynman"): 0.20,
+    ("bingo", "hard"): 5.3,
+    ("bingo", "cherrypicked"): 7.5,
+    ("bingo", "roundoff"): 5.0,
+    ("bingo", "feynman_remainder"): 2.0,
+    ("bingo", "strogatz"): 2.0,
+}
+
+#: Per-cell payload budget in hours: ``max_time: 43200`` in all fourteen configs.
+PAYLOAD_CAP_H = 12.0
+
+#: Hours a chunked task must have left before it may START another cell.
+#:
+#: The payload cap plus a teardown allowance. The allowance is not decoration:
+#: §11.1 (2026-08-03) records a cell that finished its search correctly and then
+#: spent seven further minutes in SymPy. Reserving the FULL cap — rather than an
+#: observed mean — is what makes a SLURM ``TIMEOUT`` impossible by construction,
+#: which in turn keeps the standing "no task was killed by SLURM" assertion a
+#: real signal instead of expected noise.
+CELL_RESERVE_H = PAYLOAD_CAP_H + 0.5
+
+#: Chunk duration the planner aims for, in hours.
+#:
+#: The floor that matters is SCBI's 2 h. 36 h is chosen well above it because the
+#: per-cell distributions are heavily right-skewed (``bingo:nguyen`` has mean
+#: 0.06 h against p50 0.011 h), so sizing a chunk at its *mean* leaves the
+#: *median* chunk far shorter. Targeting 36 h tolerates a 18x over-estimate of
+#: the per-cell time before a chunk drops under the 2 h floor, and the measured
+#: cost of the larger chunks is nil: simulated total wall-clock is flat at
+#: ~170 h from a 24 h target to a 48 h one.
+TARGET_TASK_HOURS = 36.0
+
+#: The floor SCBI asked for. :func:`build_plan` asserts every array clears it.
+#:
+#: ⚠ Do not "optimise" the residual 2.5 % of quantised makespan by forcing a
+#: minimum task count per array. It was tried (2026-08-07): bounding the chunk so
+#: every array keeps at least ``m`` tasks moves the quantised makespan to 48.0 h
+#: at ``m = 12`` — exactly the unchunked figure — but the curve is **jagged**,
+#: because the cost is ``ceil(n_tasks / throttle)`` and depends on how each
+#: array's task count happens to align with its slot share. Over ``m`` in
+#: [9, 20] the makespan swings 48.0 / 48.6 / 56.7 / 54.0 / 48.0 h with no
+#: monotone structure, so ``m = 12`` is a lucky point, not an optimum, and
+#: picking it is overfitting to inputs we do not know that well: ``CELL_HOURS``
+#: is an estimate on 20 of the 70 problems, and a ±50 % error there swamps a
+#: 2.5 % effect. The unbounded plan also leaves the shortest task at 20 h rather
+#: than 4.5 h, i.e. ten times the floor instead of two — which is the margin that
+#: actually protects the commitment made to SCBI if the estimates are wrong.
+MIN_TASK_HOURS = 2.0
+
+#: Slack between a chunk's EXPECTED duration and the deadline it must fit in.
+#:
+#: A chunk of ``B`` cells whose expected duration exactly equalled the cutoff
+#: would spill about half the time. 1.4 keeps the simulated first-pass spill to
+#: 5-20 tasks in ~3,400 against the measured distributions, including
+#: ``udfs:feynman``'s 7 % of full-budget cells.
+DEADLINE_SAFETY = 1.4
+
+#: Wall bounds, in hours.
+#:
+#: ``MIN`` 16 h is the certified unchunked wall: it covers the 12 h payload cap
+#: with four hours of margin. ``MAX`` 47 h stays a full day inside ``medium_uma``'s
+#: ``MaxWall = 3-00:00:00`` (measured 2026-08-07 with ``sacctmgr``), so a chunk
+#: never risks demotion to ``long_uma`` at priority 500.
+MIN_WALL_H = 16
+MAX_WALL_H = 47
 
 #: ``--mem`` per ``(method, arm)``, in GiB.
 #:
@@ -162,6 +331,93 @@ class SlotPlanError(Exception):
     """Raised when a plan cannot be built from the configs on disk."""
 
 
+def cell_hours(method: str, suite: str) -> float:
+    """Return the mean per-cell duration used to size chunks and weight slots.
+
+    Args:
+        method: ``"udfs"`` or ``"bingo"``.
+        suite: Benchmark suite key.
+
+    Returns:
+        Hours per ``(problem, seed)`` cell, from :data:`CELL_HOURS`, falling back
+        to the coarser per-method :data:`RUNTIME_HOURS` for an unknown suite.
+    """
+    return CELL_HOURS.get((method, suite), RUNTIME_HOURS[method])
+
+
+def bundle_size(cell_h: float, n_cells: int, max_bundle: int | None = None) -> int:
+    """Return how many cells one array task should run in sequence.
+
+    Two bounds apply. The chunk should last :data:`TARGET_TASK_HOURS`, and it
+    must fit under the largest deadline any wall can offer,
+    ``MAX_WALL_H - CELL_RESERVE_H``, with :data:`DEADLINE_SAFETY` slack.
+
+    Args:
+        cell_h: Mean per-cell duration in hours.
+        n_cells: Cells available in the array; a chunk can never exceed it.
+        max_bundle: Hard ceiling on the chunk. Used by the Stage C smoke, whose
+            wall is ``B x (payload + teardown)``: at the campaign's bundles that
+            crosses the 2 h ``short``-QOS cliff (priority 118,933 against
+            ``medium_uma``'s 28,873, measured 2026-08-05) and the smoke would
+            queue like the campaign it exists to precede.
+
+    Returns:
+        Cells per task, at least one.
+
+    Raises:
+        SlotPlanError: If ``cell_h`` is not positive or the array is empty.
+    """
+    if cell_h <= 0:
+        raise SlotPlanError(f"cell_hours must be positive, got {cell_h}")
+    if n_cells < 1:
+        raise SlotPlanError(f"n_cells must be positive, got {n_cells}")
+
+    by_target = max(1, round(TARGET_TASK_HOURS / cell_h))
+    by_deadline = max(1, int((MAX_WALL_H - CELL_RESERVE_H) / (DEADLINE_SAFETY * cell_h)))
+    bounds = [by_target, by_deadline, n_cells]
+    if max_bundle is not None and max_bundle >= 1:
+        bounds.append(max_bundle)
+    return max(1, min(bounds))
+
+
+def wall_hours(bundle: int, cell_h: float) -> int:
+    """Return the SLURM wall a chunked task should request, in whole hours.
+
+    Sized from whichever bound is tighter:
+
+    * ``bundle * CELL_RESERVE_H`` — the **no-spill** wall, i.e. enough for every
+      cell in the chunk to consume its full payload budget. Exact for the suites
+      where UDFS provably saturates, and the reason those arrays need no sweep.
+    * ``DEADLINE_SAFETY * bundle * cell_h + CELL_RESERVE_H`` — the expected chunk
+      plus slack plus one full cell in reserve. This binds for the short-cell
+      suites, where the no-spill wall would be absurd (``udfs:feynman`` at
+      ``B = 27`` would ask for 337 h to cover a chunk expected to run 24 h).
+
+    Args:
+        bundle: Cells per task.
+        cell_h: Mean per-cell duration in hours.
+
+    Returns:
+        Whole hours, clamped to ``[MIN_WALL_H, MAX_WALL_H]``.
+    """
+    no_spill = bundle * CELL_RESERVE_H
+    expected = DEADLINE_SAFETY * bundle * cell_h + CELL_RESERVE_H
+    needed = math.ceil(min(no_spill, expected))
+    return max(MIN_WALL_H, min(MAX_WALL_H, needed))
+
+
+def format_wall(hours: int) -> str:
+    """Render whole hours as SLURM's ``D-HH:MM:SS``.
+
+    Args:
+        hours: Wall clock in whole hours.
+
+    Returns:
+        The ``D-HH:MM:SS`` string.
+    """
+    return f"{hours // 24}-{hours % 24:02d}:00:00"
+
+
 @dataclass(frozen=True)
 class ArrayPlan:
     """Resource plan for one ``(method, arm, suite)`` SLURM array."""
@@ -169,6 +425,8 @@ class ArrayPlan:
     method: str
     arm: str
     suite: str
+    n_cells: int
+    bundle: int
     n_tasks: int
     throttle: int
     mem_gb: int
@@ -182,13 +440,41 @@ class ArrayPlan:
 
     @property
     def work_h(self) -> float:
-        """Return the array's total core-hours, ``n_tasks * runtime_h``."""
-        return self.n_tasks * self.runtime_h
+        """Return the array's total core-hours, ``n_cells * runtime_h``."""
+        return self.n_cells * self.runtime_h
+
+    @property
+    def task_h(self) -> float:
+        """Return the expected duration of one array task, in hours."""
+        return self.bundle * self.runtime_h
+
+    @property
+    def wall_h(self) -> int:
+        """Return the requested wall in whole hours."""
+        days, hms = self.wall.split("-")
+        return int(days) * 24 + int(hms.split(":")[0])
+
+    @property
+    def start_cutoff_h(self) -> float:
+        """Return the last elapsed time at which the worker may start a new cell."""
+        return self.wall_h - CELL_RESERVE_H
 
     @property
     def finish_h(self) -> float:
         """Return the array's makespan under its throttle, ``work / throttle``."""
         return self.work_h / self.throttle
+
+    @property
+    def quantised_finish_h(self) -> float:
+        """Return the makespan actually achievable, in whole rounds of tasks.
+
+        ``finish_h`` is the continuous ideal. Tasks are indivisible, so an array
+        of ``n_tasks`` under throttle ``K`` runs ``ceil(n_tasks / K)`` rounds and
+        the last round is not necessarily full. Chunking makes each round longer
+        and rarer, so this is where its cost -- if any -- becomes visible; the
+        two numbers should be compared whenever :data:`TARGET_TASK_HOURS` moves.
+        """
+        return math.ceil(self.n_tasks / self.throttle) * self.task_h
 
 
 def allocate_throttles(works: list[float], caps: list[int], budget: int) -> list[int]:
@@ -253,6 +539,8 @@ def build_plan(
     budget: int = DEFAULT_SLOT_BUDGET,
     *,
     uniform: int | None = None,
+    chunk: bool = True,
+    max_bundle: int | None = None,
 ) -> list[ArrayPlan]:
     """Build the resource plan for all 42 arrays.
 
@@ -262,6 +550,10 @@ def build_plan(
         budget: Total concurrent array slots to apportion.
         uniform: If given, ignore ``budget`` and give every array this many
             slots. Reproduces the pre-2026-08-05 behaviour for A/B work.
+        chunk: Group cells into multi-cell tasks (the SCBI request). ``False``
+            restores one cell per task for A/B work; it is strictly worse for the
+            cluster and produces ~43 % sub-two-hour tasks.
+        max_bundle: Hard ceiling on cells per task; see :func:`bundle_size`.
 
     Returns:
         One :class:`ArrayPlan` per ``(method, arm, suite)``, in submission order.
@@ -288,27 +580,52 @@ def build_plan(
             sizes[(method, suite)] = n_problems
 
     triples = [(m, a, s) for m in METHODS for a in ARMS for s in SUITES]
-    counts = [sizes[(m, s)] * n_seeds for m, _, s in triples]
-    works = [c * RUNTIME_HOURS[m] for c, (m, _, _) in zip(counts, triples, strict=True)]
+    cells = [sizes[(m, s)] * n_seeds for m, _, s in triples]
+    per_cell = [cell_hours(m, s) for m, _, s in triples]
+    works = [n * c for n, c in zip(cells, per_cell, strict=True)]
 
+    bundles = [
+        bundle_size(c, n, max_bundle) if chunk else 1 for n, c in zip(cells, per_cell, strict=True)
+    ]
+    n_tasks = [n_tasks_for(n, b) for n, b in zip(cells, bundles, strict=True)]
+
+    # 🔴 Apportion against the TASK count, not the cell count. A throttle above
+    # an array's task count is unusable, and chunking cuts that count by up to
+    # 100x -- so keeping the pre-chunking cap would hand slots to arrays that
+    # cannot fill them and starve the ones that can. This is the single line that
+    # makes chunking makespan-neutral.
     if uniform is not None:
-        slots = [max(1, min(cap, uniform)) for cap in counts]
+        slots = [max(1, min(cap, uniform)) for cap in n_tasks]
     else:
-        slots = allocate_throttles(works, counts, budget)
+        slots = allocate_throttles(works, n_tasks, budget)
 
-    return [
+    plan = [
         ArrayPlan(
             method=m,
             arm=a,
             suite=s,
-            n_tasks=n,
+            n_cells=n,
+            bundle=b,
+            n_tasks=t,
             throttle=k,
             mem_gb=MEM_GB[(m, a)],
-            wall=WALL[m],
-            runtime_h=RUNTIME_HOURS[m],
+            wall=format_wall(wall_hours(b, c) if chunk else MIN_WALL_H),
+            runtime_h=c,
         )
-        for (m, a, s), n, k in zip(triples, counts, slots, strict=True)
+        for (m, a, s), n, c, b, t, k in zip(
+            triples, cells, per_cell, bundles, n_tasks, slots, strict=True
+        )
     ]
+
+    # Every cell must be reachable from exactly one task, and no task may request
+    # a wall it can overrun. Both are cheap to assert and expensive to discover
+    # on the cluster.
+    for p in plan:
+        if p.n_tasks * p.bundle < p.n_cells:
+            raise SlotPlanError(f"{p.key}: {p.n_tasks} tasks x {p.bundle} < {p.n_cells} cells")
+        if p.start_cutoff_h <= 0:
+            raise SlotPlanError(f"{p.key}: wall {p.wall} leaves no room for one cell")
+    return plan
 
 
 def format_plan_tsv(plan: list[ArrayPlan]) -> str:
@@ -318,12 +635,19 @@ def format_plan_tsv(plan: list[ArrayPlan]) -> str:
         plan: Arrays in submission order.
 
     Returns:
-        One ``method\\tarm\\tsuite\\tn_tasks\\tthrottle\\tmem_gb\\twall`` row per
-        array, without a header, so the shell can read it with a bare ``while
-        read``.
+        One ``method\\tarm\\tsuite\\tn_tasks\\tthrottle\\tmem_gb\\twall\\tbundle
+        \\tstart_cutoff_s\\tn_cells`` row per array, without a header, so the
+        shell can read it with a bare ``while read``.
+
+        ``start_cutoff_s`` is the worker's deadline in seconds: the last elapsed
+        time at which it may start another cell. It is emitted rather than
+        recomputed in bash so that the wall and the deadline can never drift
+        apart -- a deadline larger than ``wall - CELL_RESERVE`` would reintroduce
+        exactly the ``TIMEOUT`` this design removes.
     """
     return "\n".join(
-        f"{p.method}\t{p.arm}\t{p.suite}\t{p.n_tasks}\t{p.throttle}\t{p.mem_gb}\t{p.wall}"
+        f"{p.method}\t{p.arm}\t{p.suite}\t{p.n_tasks}\t{p.throttle}\t{p.mem_gb}\t"
+        f"{p.wall}\t{p.bundle}\t{int(p.start_cutoff_h * 3600)}\t{p.n_cells}"
         for p in plan
     )
 
@@ -338,40 +662,45 @@ def format_plan_table(plan: list[ArrayPlan]) -> str:
         A table plus the derived campaign totals.
     """
     lines = [
-        f"{'array':32s} {'tasks':>6s} {'%K':>5s} {'mem':>6s} {'wall':>11s} "
-        f"{'work_h':>9s} {'finish_h':>9s}",
+        f"{'array':32s} {'cells':>6s} {'B':>4s} {'tasks':>6s} {'%K':>5s} {'mem':>5s} "
+        f"{'wall':>11s} {'task_h':>7s} {'work_h':>9s} {'finish_h':>9s}",
     ]
     for p in sorted(plan, key=lambda q: -q.finish_h):
         lines.append(
-            f"{p.key:32s} {p.n_tasks:6d} {p.throttle:5d} {p.mem_gb:5d}G "
-            f"{p.wall:>11s} {p.work_h:9.0f} {p.finish_h:9.1f}"
+            f"{p.key:32s} {p.n_cells:6d} {p.bundle:4d} {p.n_tasks:6d} {p.throttle:5d} "
+            f"{p.mem_gb:4d}G {p.wall:>11s} {p.task_h:7.1f} {p.work_h:9.0f} {p.finish_h:9.1f}"
         )
     total_work = sum(p.work_h for p in plan)
     total_slots = sum(p.throttle for p in plan)
     makespan = max(p.finish_h for p in plan)
+    short = [p for p in plan if p.task_h < MIN_TASK_HOURS]
 
-    # The same plan, scored at the runtimes actually observed.  The allocation is
-    # weighted pessimistically on purpose; the forecast should not be.
-    exp_work = sum(p.n_tasks * MEASURED_RUNTIME_HOURS[p.method] for p in plan)
-    exp_makespan = max(p.n_tasks * MEASURED_RUNTIME_HOURS[p.method] / p.throttle for p in plan)
+    quantised = max(p.quantised_finish_h for p in plan)
     lines += [
         "",
         f"  arrays              : {len(plan)}",
-        f"  tasks               : {sum(p.n_tasks for p in plan):,}",
+        f"  cells               : {sum(p.n_cells for p in plan):,}",
+        f"  SLURM tasks         : {sum(p.n_tasks for p in plan):,}  "
+        f"({sum(p.n_cells for p in plan) / max(1, sum(p.n_tasks for p in plan)):.1f} cells/task)",
         f"  slots               : {total_slots:,}",
+        f"  shortest task       : {min(p.task_h for p in plan):.1f} h "
+        f"(SCBI floor {MIN_TASK_HOURS:.0f} h -- "
+        f"{'OK' if not short else 'VIOLATED by ' + ', '.join(p.key for p in short)})",
+        f"  longest wall        : {max(p.wall_h for p in plan)} h (medium_uma MaxWall 72 h)",
         "",
-        "  -- allocation basis (T_bingo = "
-        f"{RUNTIME_HOURS['bingo']:.2f} h, deliberately pessimistic) --",
+        "  -- allocation basis (per-SUITE CELL_HOURS, measured on C1) --",
         f"  core-hours          : {total_work:,.0f}",
         f"  makespan            : {makespan:.1f} h = {makespan / 24:.2f} days",
         f"  packing efficiency  : {100 * total_work / total_slots / makespan:.0f} % "
         f"(floor {total_work / total_slots:.1f} h)",
+        f"  quantised makespan  : {quantised:.1f} h = {quantised / 24:.2f} days",
+        "        (whole rounds of indivisible tasks -- this is where chunking",
+        "         would show a cost, and against the unchunked plan it does not)",
         "",
-        "  -- EXPECTED, at measured runtimes (T_bingo = "
-        f"{MEASURED_RUNTIME_HOURS['bingo']:.2f} h) --",
-        f"  core-hours          : {exp_work:,.0f}",
-        f"  makespan            : {exp_makespan:.1f} h = {exp_makespan / 24:.2f} days",
-        f"  mean concurrency    : {exp_work / exp_makespan:,.0f} cores",
+        "  -- sensitivity: CELL_HOURS is an estimate on 20 of 70 problems --",
+        f"  mean concurrency    : {total_work / makespan:,.0f} cores",
+        f"  if cells run 1.5x   : {1.5 * quantised:.1f} h = {1.5 * quantised / 24:.2f} days",
+        f"  if cells run 0.5x   : {0.5 * quantised:.1f} h = {0.5 * quantised / 24:.2f} days",
     ]
     return "\n".join(lines)
 
@@ -447,6 +776,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Give every array this many slots instead of apportioning (A/B only)",
     )
     parser.add_argument(
+        "--no-chunk",
+        action="store_true",
+        help="One cell per SLURM task, as before 2026-08-07. A/B only: it "
+        "restores the 12,600-task shape SCBI asked us to stop submitting.",
+    )
+    parser.add_argument(
+        "--max-bundle",
+        type=int,
+        default=None,
+        help="Ceiling on cells per task. The Stage C smoke sets it so its "
+        "B x (payload + teardown) wall stays under the 2 h `short` QOS cliff.",
+    )
+    parser.add_argument(
         "--bingo-hours",
         type=float,
         default=None,
@@ -481,12 +823,20 @@ def main(argv: list[str] | None = None) -> int:
         if args.bingo_hours is not None:
             if args.bingo_hours <= 0:
                 raise SlotPlanError(f"--bingo-hours must be positive, got {args.bingo_hours}")
+            # Rescale every Bingo suite by the same factor rather than flattening
+            # them to one number: the suites differ by 35x per cell, and a flat
+            # override would re-weight roundoff against nguyen for no reason.
+            factor = args.bingo_hours / RUNTIME_HOURS["bingo"]
             RUNTIME_HOURS["bingo"] = args.bingo_hours
+            for key in [k for k in CELL_HOURS if k[0] == "bingo"]:
+                CELL_HOURS[key] *= factor
         plan = build_plan(
             args.config_dir,
             parse_seeds(args.seeds),
             args.budget,
             uniform=args.uniform,
+            chunk=not args.no_chunk,
+            max_bundle=args.max_bundle,
         )
         if args.rebalance:
             with open(args.rebalance) as handle:
