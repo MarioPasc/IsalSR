@@ -326,6 +326,65 @@ WALL: dict[str, str] = {"udfs": "0-16:00:00", "bingo": "0-16:00:00"}
 #: is not the "deploy is a config edit" defect.
 DEFAULT_SLOT_BUDGET = 2016
 
+#: Realised **p90** per-cell wall clock in hours, measured on C2 itself.
+#:
+#: Source: ``experiments/scripts/measure_cell_hours.py`` over
+#: ``$FSCRATCH/results/isalsr/c2_3arm``, 2026-08-09, n = 10,533 cells with a
+#: recorded ``results.time.wall_clock_total_s``. These are *not* the C1-derived
+#: estimates in :data:`CELL_HOURS`; they are what this campaign actually did.
+#:
+#: 🔴 Why a second table rather than a correction to :data:`CELL_HOURS`. The two
+#: answer different questions. ``CELL_HOURS`` is a *central* estimate and sizes
+#: the bundle for throughput; ``P90_CELL_HOURS`` is a *tail* estimate and sizes
+#: it for the deadline. The 2026-08-09 audit showed that ``udfs:feynman`` needs
+#: both at once: median 0.18 h against p90 12.00 h, a 67x spread inside one
+#: suite. A bundle sized on the median is right for throughput and catastrophic
+#: for the deadline, which is precisely how ~1,100 cells came to be deferred.
+#:
+#: Measured 2026-08-09 (p50 / p90 / max, hours):
+#:
+#: =========================  =====  ======  ======  ======
+#: method:suite                   n     p50     p90     max
+#: =========================  =====  ======  ======  ======
+#: ``udfs`` (every suite)      4,783   12.00   12.00   12.00
+#: ``udfs:feynman``              462    0.18   12.00   12.00
+#: ``bingo:feynman``             740    0.00    0.05    6.69
+#: ``bingo:nguyen``              919    0.03    0.43    3.04
+#: ``bingo:strogatz``          1,260    0.09    1.01    3.30
+#: ``bingo:feynman_remainder``   435    0.08    4.21    8.64
+#: ``bingo:roundoff``            686    2.05    5.55    8.51
+#: ``bingo:cherrypicked``        880    3.69    6.47   10.18
+#: ``bingo:hard``                830    3.29    7.18   11.76
+#: =========================  =====  ======  ======  ======
+P90_CELL_HOURS: dict[tuple[str, str], float] = {
+    ("udfs", "nguyen"): 12.0,
+    ("udfs", "feynman"): 12.0,
+    ("udfs", "hard"): 12.0,
+    ("udfs", "cherrypicked"): 12.0,
+    ("udfs", "roundoff"): 12.0,
+    ("udfs", "feynman_remainder"): 12.0,
+    ("udfs", "strogatz"): 12.0,
+    ("bingo", "nguyen"): 0.43,
+    ("bingo", "feynman"): 0.05,
+    ("bingo", "hard"): 7.18,
+    ("bingo", "cherrypicked"): 6.47,
+    ("bingo", "roundoff"): 5.55,
+    ("bingo", "feynman_remainder"): 4.21,
+    ("bingo", "strogatz"): 1.01,
+}
+
+#: Teardown allowance added to a p90 cell when sizing a RECOVERY chunk.
+#:
+#: The same 0.5 h that :data:`CELL_RESERVE_H` adds to the payload cap, for the
+#: same reason: §11.1 (2026-08-03) records a cell that finished its search
+#: correctly and then spent seven further minutes in SymPy, and the worker's
+#: elapsed clock also carries ``stage_in``/``stage_out`` and orchestrator
+#: start-up, none of which appear in ``wall_clock_total_s``.
+RECOVERY_TEARDOWN_H = 0.5
+
+#: Recovery sizing modes. See :func:`recovery_allowance_h`.
+RECOVERY_MODES: tuple[str, ...] = ("safe", "p90")
+
 
 class SlotPlanError(Exception):
     """Raised when a plan cannot be built from the configs on disk."""
@@ -628,6 +687,330 @@ def build_plan(
     return plan
 
 
+def recovery_allowance_h(method: str, suite: str, mode: str = "safe") -> float:
+    """Return the wall a recovery chunk must reserve for ONE of its cells.
+
+    This is the single number the whole recovery design turns on. A chunked task
+    starts cell *i* only if ``elapsed < wall - CELL_RESERVE_H``; so if every cell
+    is charged an allowance ``a`` and the wall is sized as
+    ``(B - 1) * a + CELL_RESERVE_H``, no cell of the chunk can be deferred as
+    long as no cell overruns ``a``.
+
+    Two modes, because they buy different guarantees:
+
+    * ``"safe"`` — ``a = CELL_RESERVE_H``. Every cell is charged the **full
+      payload cap plus teardown**, which is a hard upper bound on any cell in
+      this campaign (``max_time: 43200`` in all fourteen configs). Deferral then
+      becomes impossible *by construction*, with **no distributional assumption
+      at all**. This is the default, and it is the only mode whose guarantee
+      survives the 2026-08-09 finding that a single suite spans 67x.
+    * ``"p90"`` — ``a = min(CELL_RESERVE_H, p90 + RECOVERY_TEARDOWN_H)``. Charges
+      the measured tail rather than the cap, which buys far larger bundles on the
+      suites where Bingo finishes in seconds (``bingo:feynman`` goes from B=3 to
+      B=63) and therefore far fewer SLURM placements. The guarantee is only
+      probabilistic: a chunk defers if more than a handful of its cells land
+      above p90.
+
+    Args:
+        method: ``"udfs"`` or ``"bingo"``.
+        suite: Benchmark suite key.
+        mode: One of :data:`RECOVERY_MODES`.
+
+    Returns:
+        Hours to reserve per cell.
+
+    Raises:
+        SlotPlanError: If ``mode`` is not a known mode.
+    """
+    if mode not in RECOVERY_MODES:
+        raise SlotPlanError(f"unknown recovery mode {mode!r}; expected one of {RECOVERY_MODES}")
+    if mode == "safe":
+        return CELL_RESERVE_H
+    p90 = P90_CELL_HOURS.get((method, suite), PAYLOAD_CAP_H)
+    return min(CELL_RESERVE_H, p90 + RECOVERY_TEARDOWN_H)
+
+
+def recovery_wall_hours(bundle: int, allowance_h: float) -> int:
+    """Return the wall a recovery chunk needs so its LAST cell still starts.
+
+    ``floor(x) + 1`` rather than ``ceil(x)``: the deferral test in
+    ``worker.sh:450`` is ``elapsed >= cutoff``, so a wall that makes the cutoff
+    exactly equal to the worst-case elapsed time would defer. The extra hour is
+    what makes the inequality strict.
+
+    Args:
+        bundle: Cells per task.
+        allowance_h: Hours reserved per cell, from :func:`recovery_allowance_h`.
+
+    Returns:
+        Whole hours, clamped to ``[MIN_WALL_H, MAX_WALL_H]``.
+
+    Raises:
+        SlotPlanError: If either argument is not positive.
+    """
+    if bundle < 1:
+        raise SlotPlanError(f"bundle must be positive, got {bundle}")
+    if allowance_h <= 0:
+        raise SlotPlanError(f"allowance must be positive, got {allowance_h}")
+    span = (bundle - 1) * allowance_h + CELL_RESERVE_H
+    return max(MIN_WALL_H, min(MAX_WALL_H, math.floor(span) + 1))
+
+
+def defers_nothing(bundle: int, allowance_h: float, wall_h: int) -> bool:
+    """Return whether a chunk of ``bundle`` cells can reach its last cell.
+
+    Args:
+        bundle: Cells per task.
+        allowance_h: Hours reserved per cell.
+        wall_h: The requested SLURM wall, in whole hours.
+
+    Returns:
+        ``True`` when the worker's start-deadline strictly exceeds the worst-case
+        elapsed time at which the last cell of the chunk begins.
+    """
+    cutoff_h = wall_h - CELL_RESERVE_H
+    return cutoff_h > (bundle - 1) * allowance_h
+
+
+def recovery_bundle(allowance_h: float, n_cells: int, forced: int | None = None) -> int:
+    """Return the largest chunk whose last cell is still guaranteed to start.
+
+    Largest, not smallest: every cell of a recovery chunk that is already
+    complete costs a resume check and nothing else, so the binding cost is the
+    number of SLURM placements — which is exactly what SCBI asked us to reduce.
+    The bundle is therefore pushed up until the no-deferral inequality or the
+    47 h wall ceiling stops it.
+
+    Args:
+        allowance_h: Hours reserved per cell, from :func:`recovery_allowance_h`.
+        n_cells: Cells in the array; a chunk can never exceed it.
+        forced: Operator override. Still validated against the inequality; a
+            forced bundle that cannot clear it is a caller error, not a warning.
+
+    Returns:
+        Cells per task, at least one.
+
+    Raises:
+        SlotPlanError: If the inputs are not positive, or ``forced`` is a bundle
+            whose last cell could be deferred.
+    """
+    if allowance_h <= 0:
+        raise SlotPlanError(f"allowance must be positive, got {allowance_h}")
+    if n_cells < 1:
+        raise SlotPlanError(f"n_cells must be positive, got {n_cells}")
+
+    if forced is not None:
+        if forced < 1:
+            raise SlotPlanError(f"forced bundle must be positive, got {forced}")
+        bundle = min(forced, n_cells)
+        if not defers_nothing(bundle, allowance_h, recovery_wall_hours(bundle, allowance_h)):
+            raise SlotPlanError(
+                f"forced bundle {bundle} at {allowance_h:.2f} h/cell needs a wall of "
+                f"{(bundle - 1) * allowance_h + CELL_RESERVE_H:.1f} h, above the "
+                f"{MAX_WALL_H} h ceiling -- it would defer exactly what this pass exists to fix"
+            )
+        return bundle
+
+    bundle = min(n_cells, int((MAX_WALL_H - CELL_RESERVE_H) // allowance_h) + 1)
+    while bundle > 1 and not defers_nothing(
+        bundle, allowance_h, recovery_wall_hours(bundle, allowance_h)
+    ):
+        bundle -= 1
+    return bundle
+
+
+def match_selector(key: str, patterns: list[str]) -> bool:
+    """Return whether ``method:arm:suite`` matches any ``*``-globbed pattern.
+
+    Args:
+        key: An :attr:`ArrayPlan.key`, i.e. ``method:arm:suite``.
+        patterns: Selectors such as ``udfs:*:feynman``. A field of ``*`` matches
+            anything; a pattern with fewer than three fields is rejected by
+            :func:`build_recovery_plan` before it reaches here.
+
+    Returns:
+        ``True`` if any pattern matches every field.
+    """
+    fields = key.split(":")
+    for pattern in patterns:
+        parts = pattern.split(":")
+        if len(parts) == len(fields) and all(
+            p == "*" or p == f for p, f in zip(parts, fields, strict=True)
+        ):
+            return True
+    return False
+
+
+def build_recovery_plan(
+    config_dir: str,
+    seeds: list[int],
+    *,
+    only: list[str],
+    budget: int = DEFAULT_SLOT_BUDGET,
+    mode: str = "safe",
+    bundle: int | None = None,
+) -> list[ArrayPlan]:
+    """Build a plan for a RECOVERY pass over a subset of the 42 arrays.
+
+    Differs from :func:`build_plan` in exactly three ways, and in nothing else —
+    same configs, same seeds, same partition arithmetic, same memory:
+
+    1. Only the selected ``(method, arm, suite)`` triples appear.
+    2. The bundle comes from :func:`recovery_bundle`, i.e. from the **tail** of
+       the per-cell distribution rather than its centre.
+    3. The wall comes from :func:`recovery_wall_hours`, which is sized so the
+       worker's own start-deadline cannot bite.
+
+    The partition itself is untouched: ``decode_chunk`` is a pure function of
+    ``(n_cells, n_tasks, index)`` and ``n_tasks = ceil(n_cells / bundle)``, so a
+    pass at a different bundle still covers every cell of the array exactly once.
+    What changes is *which* task owns a cell, and that is immaterial because
+    completion is recorded per cell, not per task.
+
+    Args:
+        config_dir: Directory holding ``{method}_{suite}.yaml``.
+        seeds: Campaign seeds; only the count is used for sizing.
+        only: Selectors, e.g. ``["udfs:*:feynman", "bingo:baseline:nguyen"]``.
+        budget: Total concurrent array slots to apportion over the SELECTED
+            arrays.
+        mode: See :func:`recovery_allowance_h`.
+        bundle: Operator override for the chunk size, applied to every selected
+            array.
+
+    Returns:
+        One :class:`ArrayPlan` per selected triple, in submission order.
+
+    Raises:
+        SlotPlanError: If a selector is malformed, matches nothing, a config is
+            missing, or a resulting array could still defer.
+    """
+    if not only:
+        raise SlotPlanError("a recovery pass must name the arrays it covers; --only is required")
+    for pattern in only:
+        if len(pattern.split(":")) != 3:
+            raise SlotPlanError(
+                f"selector {pattern!r} is not method:arm:suite (use '*' to wildcard a field)"
+            )
+
+    n_seeds = len(seeds)
+    if n_seeds < 1:
+        raise SlotPlanError("need at least one seed")
+
+    triples = [
+        (m, a, s)
+        for m in METHODS
+        for a in ARMS
+        for s in SUITES
+        if match_selector(f"{m}:{a}:{s}", only)
+    ]
+    if not triples:
+        raise SlotPlanError(
+            f"selectors {only} match none of the {len(METHODS) * len(ARMS) * len(SUITES)} arrays"
+        )
+
+    sizes: dict[tuple[str, str], int] = {}
+    for method, _, suite in triples:
+        if (method, suite) in sizes:
+            continue
+        path = os.path.join(config_dir, f"{method}_{suite}.yaml")
+        if not os.path.isfile(path):
+            raise SlotPlanError(f"missing config: {path}")
+        try:
+            n_problems = len(load_problem_names(path))
+        except TaskSpecError as exc:
+            raise SlotPlanError(str(exc)) from exc
+        if n_problems < 1:
+            raise SlotPlanError(f"{path}: no problems in suite {suite}")
+        sizes[(method, suite)] = n_problems
+
+    cells = [sizes[(m, s)] * n_seeds for m, _, s in triples]
+    allowances = [recovery_allowance_h(m, s, mode) for m, _, s in triples]
+    bundles = [recovery_bundle(a, n, bundle) for a, n in zip(allowances, cells, strict=True)]
+    walls = [recovery_wall_hours(b, a) for b, a in zip(bundles, allowances, strict=True)]
+    n_tasks = [n_tasks_for(n, b) for n, b in zip(cells, bundles, strict=True)]
+
+    # Weight the slot split by the CENTRAL estimate, as the main pass does: the
+    # tail sizes the chunk, but the expected finishing time is what a throttle
+    # should chase.
+    per_cell = [cell_hours(m, s) for m, _, s in triples]
+    works = [n * c for n, c in zip(cells, per_cell, strict=True)]
+    slots = allocate_throttles(works, n_tasks, min(budget, sum(n_tasks)))
+
+    plan = [
+        ArrayPlan(
+            method=m,
+            arm=a,
+            suite=s,
+            n_cells=n,
+            bundle=b,
+            n_tasks=t,
+            throttle=k,
+            mem_gb=MEM_GB[(m, a)],
+            wall=format_wall(w),
+            runtime_h=c,
+        )
+        for (m, a, s), n, c, b, t, k, w in zip(
+            triples, cells, per_cell, bundles, n_tasks, slots, walls, strict=True
+        )
+    ]
+
+    for p, allowance in zip(plan, allowances, strict=True):
+        if p.n_tasks * p.bundle < p.n_cells:
+            raise SlotPlanError(f"{p.key}: {p.n_tasks} tasks x {p.bundle} < {p.n_cells} cells")
+        if not defers_nothing(p.bundle, allowance, p.wall_h):
+            raise SlotPlanError(
+                f"{p.key}: B={p.bundle} at {allowance:.2f} h/cell against a {p.wall_h} h wall "
+                f"leaves a {p.start_cutoff_h:.1f} h deadline -- the last cell could defer"
+            )
+    return plan
+
+
+def format_recovery_notes(plan: list[ArrayPlan], mode: str) -> str:
+    """Render the trade-offs a recovery plan makes, so they are not silent.
+
+    Two of them matter and both are reported per array rather than in aggregate:
+    the SCBI two-hour floor (a recovery chunk is short precisely because most of
+    its cells are already complete), and the no-deferral margin.
+
+    Args:
+        plan: The recovery plan.
+        mode: The sizing mode used.
+
+    Returns:
+        A human-readable block.
+    """
+    lines = [
+        f"  recovery mode       : {mode}",
+        f"  arrays              : {len(plan)}",
+        f"  cells (re-walked)   : {sum(p.n_cells for p in plan):,}",
+        f"  SLURM tasks         : {sum(p.n_tasks for p in plan):,}",
+        "",
+        f"{'array':32s} {'B':>4s} {'tasks':>6s} {'wall':>11s} {'cutoff_h':>9s} {'E[task_h]':>10s}",
+    ]
+    short = []
+    for p in plan:
+        lines.append(
+            f"{p.key:32s} {p.bundle:4d} {p.n_tasks:6d} {p.wall:>11s} "
+            f"{p.start_cutoff_h:9.1f} {p.task_h:10.2f}"
+        )
+        if p.task_h < MIN_TASK_HOURS:
+            short.append(p)
+    lines += [
+        "",
+        f"  SCBI floor ({MIN_TASK_HOURS:.0f} h) : "
+        + (
+            "cleared by every array"
+            if not short
+            else f"{len(short)} array(s) below it at the CENTRAL estimate: "
+            + ", ".join(f"{p.key} ({p.task_h:.2f} h)" for p in short)
+        ),
+        "  ⚠ A recovery task is short BECAUSE most of its cells are already",
+        "    complete and cost only a resume check. Sizing it up to clear the",
+        "    floor would re-introduce the deadline that deferred them.",
+    ]
+    return "\n".join(lines)
+
+
 def format_plan_tsv(plan: list[ArrayPlan]) -> str:
     """Render the plan as tab-separated rows for the launcher to read.
 
@@ -796,6 +1179,35 @@ def build_parser() -> argparse.ArgumentParser:
         "allocation. Use with --rebalance once the campaign's first day has "
         "shown what Bingo actually costs under the F-19 budget.",
     )
+    parser.add_argument(
+        "--recovery",
+        action="store_true",
+        help="Size the plan from the measured p90 TAIL rather than the central "
+        "estimate, so the worker's start-deadline cannot defer a cell. Requires "
+        "--only. Used by slurm/c2_campaign/submit_recovery.sh.",
+    )
+    parser.add_argument(
+        "--recovery-mode",
+        choices=RECOVERY_MODES,
+        default="safe",
+        help="'safe' charges every cell the full 12.5 h payload reserve, making "
+        "deferral impossible with no distributional assumption (default). 'p90' "
+        "charges the measured p90 instead: bigger chunks, fewer placements, "
+        "probabilistic guarantee.",
+    )
+    parser.add_argument(
+        "--only",
+        default=None,
+        help="Comma-separated method:arm:suite selectors, '*' wildcards a field, "
+        "e.g. 'udfs:*:feynman,bingo:baseline:nguyen'. Required with --recovery.",
+    )
+    parser.add_argument(
+        "--bundle",
+        type=int,
+        default=None,
+        help="Force the recovery chunk size. Validated against the no-deferral "
+        "inequality; a bundle that cannot clear it is refused, not warned about.",
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--tsv", action="store_true", help="Emit tab-separated rows for the shell")
     group.add_argument("--table", action="store_true", help="Emit a human-readable table")
@@ -830,6 +1242,28 @@ def main(argv: list[str] | None = None) -> int:
             RUNTIME_HOURS["bingo"] = args.bingo_hours
             for key in [k for k in CELL_HOURS if k[0] == "bingo"]:
                 CELL_HOURS[key] *= factor
+        if args.recovery:
+            if args.rebalance:
+                raise SlotPlanError("--recovery and --rebalance are different jobs; pick one")
+            if not args.only:
+                raise SlotPlanError("--recovery requires --only method:arm:suite[,...]")
+            plan = build_recovery_plan(
+                args.config_dir,
+                parse_seeds(args.seeds),
+                only=[s.strip() for s in args.only.split(",") if s.strip()],
+                budget=args.budget,
+                mode=args.recovery_mode,
+                bundle=args.bundle,
+            )
+            payload = (
+                format_plan_tsv(plan)
+                if args.tsv
+                else format_recovery_notes(plan, args.recovery_mode)
+            )
+            print(payload)
+            return 0
+        if args.only or args.bundle is not None:
+            raise SlotPlanError("--only and --bundle apply to --recovery only")
         plan = build_plan(
             args.config_dir,
             parse_seeds(args.seeds),

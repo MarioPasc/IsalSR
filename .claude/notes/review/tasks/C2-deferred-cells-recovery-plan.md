@@ -1,7 +1,9 @@
 # C2 — deferred cells: evidence, mechanism, and a recovery plan
 
-**Status: DRAFT for review. Nothing in here has been executed.**
-Written 2026-08-09 13:30 CEST, while campaign C2 is still running (83 % complete).
+**Status: §1–§8 written as a draft 2026-08-09 13:30 CEST at 83 % complete.
+§9–§12 added 2026-08-09 15:30 CEST: the mechanism is now BUILT and TESTED on
+Picasso, and §5.2's prescription is corrected. Nothing has been run against the
+campaign root — the recovery pass itself still waits for §10 step 1.**
 
 | | |
 |---|---|
@@ -225,6 +227,18 @@ deadline cannot bite, sized from the **p90**, not the median:
 | `udfs:*:feynman_remainder` | B=4 | **B=2** | 25 h | 1 |
 | `bingo:*:feynman`, `bingo:*:nguyen` | B=123/164 | **B=16** | ~25 h | 1 |
 
+> 🔴 **This table is wrong in one place and loose in another; both are corrected
+> in §9.** `B=2` at a **25 h** wall gives a start-deadline of `25 − 12.5 = 12.5 h`,
+> and the worst-case elapsed time at which cell 2 begins is *also* 12.5 h. The
+> worker defers on `elapsed >= cutoff` (`worker.sh:450`), so the second cell
+> defers on the boundary — the prescription reintroduces, at the margin, exactly
+> the failure it was written to remove. The implemented rule sizes the wall as
+> `(B−1)·allowance + CELL_RESERVE` and then adds one hour (`floor(x)+1`, not
+> `ceil(x)`) precisely to make the inequality **strict**, which yields **B=3 at a
+> 38 h wall** (deadline 25.5 h against a worst case of 25.0 h). The `B=16` figure
+> for Bingo was a guess rather than a derivation; the derived values are B=3
+> (`safe`) or B=38/63 (`p90`).
+
 Mechanism: the launcher already exposes `C2_MAX_BUNDLE` as a ceiling
 (`slurm/c2_campaign/CAMPAIGN_BRIEF.md` §8, "escape hatches"), and
 `C2_PROBLEMS=<a:b:c>` restricts the problem set (**colon-separated** — `--export`
@@ -339,3 +353,401 @@ explicitly**.
 3. Do you want the `CELL_HOURS` table updated in-repo from this campaign's
    measurements (a good input for any future campaign), or left as the C1-derived
    values with the measurements recorded only here?
+
+> **Answers, 2026-08-09, from the implementation and its tests — see §11.**
+> **Q1: built, but scoped to the recovery pass only.** `c2_slot_plan.py` gained a
+> `--recovery` mode; `build_plan` is byte-for-byte unchanged and the main pass is
+> untouched. Rewriting `bundle_size` itself was rejected *for now* because
+> `submit_sweeps.sh` reads the planner from the **deployed** tree, so a change
+> there alters the shape of any re-run while the campaign is live. The tension
+> you named is real and is now quantified rather than asserted (§11.3).
+> **Q2: kept.** `C2_CONSTRAINT` defaults to `sr`; only the throwaway tests used
+> `cpu`. **Q3: neither — a *second* table.** `CELL_HOURS` (central, sizes for
+> throughput) is untouched; `P90_CELL_HOURS` (tail, sizes for the deadline) is
+> new. Collapsing them would lose the very property that caused this: for
+> `udfs:feynman` the right central estimate and the right tail estimate differ by
+> 67×, and the bundle needs both.
+
+---
+
+## 9. What was built
+
+Three pieces, all **additive**. Nothing in the deployed tree was touched, no tag
+was moved, and `build_plan` still emits the same 42 rows it emitted at launch
+(pinned by `test_main_plan_is_unaffected_by_the_recovery_additions`).
+
+| File | Role |
+|---|---|
+| `experiments/scripts/c2_missing_cells.py` | **NEW.** Enumerates the cells a results root does not contain, by comparing the registry universe against `run_log.json` on disk. `--summary`, `--list`, `--selectors`, `--strict`. Exit 0 = complete, 2 = gaps, 1 = error |
+| `experiments/scripts/c2_slot_plan.py` | **EXTENDED.** `P90_CELL_HOURS`, `recovery_allowance_h`, `recovery_bundle`, `recovery_wall_hours`, `defers_nothing`, `build_recovery_plan`, `match_selector`, and a `--recovery` CLI mode |
+| `slurm/c2_campaign/submit_recovery.sh` | **NEW.** Paced, idempotent, filtered submitter with the `c2r_` job-name prefix |
+| `tests/unit/test_c2_recovery_plan.py` | **NEW.** 65 unit tests |
+
+### 9.1 The sizing rule, and why it is the one that ends the deferral
+
+A chunked task starts cell *i* only if `elapsed < wall − CELL_RESERVE_H`. Charge
+every cell an allowance `a` and size the wall as
+
+```
+wall  =  floor( (B−1)·a  +  CELL_RESERVE_H )  +  1          # hours
+cutoff = wall − CELL_RESERVE_H                              # what the worker gets
+```
+
+then the last cell of the chunk begins at worst at `(B−1)·a`, which is **strictly**
+below `cutoff`. `floor(x)+1` rather than `ceil(x)` is deliberate: the test is
+`elapsed >= cutoff`, so equality defers.
+
+Two modes:
+
+| Mode | Allowance `a` | Guarantee | `udfs:*` | `bingo:nguyen` | `bingo:feynman` |
+|---|---|---|---:|---:|---:|
+| **`safe`** (default) | `CELL_RESERVE_H` = 12.5 h | **Distribution-free.** Every cell is charged the full payload cap, which `max_time: 43200` makes a hard bound | B=3, 38 h | B=3, 38 h | B=3, 38 h |
+| `p90` | `min(12.5, p90 + 0.5)` | Probabilistic: holds unless several cells of one chunk land above p90 | B=3, 38 h | B=38, 47 h | B=63, 47 h |
+
+`safe` is the default because the 2026-08-09 measurement is exactly the argument
+against betting on a distribution: `udfs:feynman` spans 67× *inside one suite*.
+`p90` exists for the case where the placement count matters more than the
+guarantee — it cuts the twelve worst arrays from 1,140 tasks to 525.
+
+### 9.2 Provenance: two trees, and only numbers cross between them
+
+Acceptance criterion 6 requires every `run_log.json` to report
+`git_describe: campaign/c2`, and §5.2's point 2 forbids a redeploy. But the
+`--recovery` mode did not exist when the campaign was deployed. `submit_recovery.sh`
+therefore splits the two roles explicitly:
+
+* `C2_TOOLS_DIR` — a **separate** checkout, which computes the plan;
+* `ISALSR_REPO_DIR` — the **deployed** tree, which supplies `worker.sh`, the
+  configs and the payload, and therefore the tag.
+
+Only `bundle`, `wall`, `cutoff` and `n_tasks` cross that boundary, as `--export`
+values. The script `cmp`s `c2_task_spec.py` and every selected config between the
+two trees and refuses to submit if they differ — `c2_task_spec.py` owns the
+partition, so a divergence there would hand a task cells the plan never sized it
+for. Verified: the deployed tree is `2dd56fd` / `campaign/c2`, and the recovery
+checkout matches it byte-for-byte on all 23 configs and on `c2_task_spec.py`.
+
+> 🔴 **A recovery pass must not use `python -m` (found 2026-08-09).**
+> `experiments` is a **namespace package**, and the conda env's editable install
+> registers a meta-path finder that contributes the **deployed** checkout to
+> `experiments.__path__` *ahead of everything `PYTHONPATH` adds*. Measured:
+> ```
+> experiments.__path__ = ['/mnt2/.../repos/IsalSR/experiments',
+>                         '/mnt2/.../repos/IsalSR_recovery/experiments', ...]
+> ```
+> So `python -m experiments.scripts.c2_slot_plan` from the recovery checkout
+> loads the **deployed** planner and dies with `unrecognized arguments:
+> --recovery`. The submitter therefore invokes the planner **by absolute file
+> path**, and `c2_missing_cells.py` imports **nothing** from `c2_slot_plan`
+> (its three axes and `match_selector` are re-declared locally, with a unit test
+> pinning them to the planner's definitions so they cannot drift). This is the
+> same family as defect 10: two checkouts, one import namespace.
+
+---
+
+## 10. Workflow
+
+Ordered, copy-pasteable. **Steps 1–2 are the gate; do not start at step 3.**
+
+### Step 0 — one-time: put the recovery tools on Picasso
+
+The deployed tree must not change (§5.2, point 2), so the tools live beside it.
+
+```bash
+# from the workstation, in the IsalSR repo
+rsync -az --delete \
+  --exclude '.git' --exclude '.claude' --exclude 'docs' --exclude 'reviews' \
+  --exclude 'article' --exclude 'results' --exclude 'scratchpad' \
+  --exclude '__pycache__' --exclude '*.egg-info' --exclude '.hypothesis' \
+  --exclude 'build' --exclude '.mypy_cache' --exclude '.pytest_cache' \
+  --exclude '.ruff_cache' --exclude '*.so' \
+  ./ picasso:/mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR_recovery/
+```
+
+⚠ **Do NOT run `slurm/c2_smoke/deploy.sh`** — it targets the live tree.
+
+### Step 1 — wait for the campaign AND the sweeps to drain
+
+```bash
+ssh picasso 'bash $FSCRATCH/repos/IsalSR/slurm/c2_campaign/health.sh'
+ssh picasso '/usr/bin/squeue -u $USER -h -o "%j" | grep -cE "^c2[sw]_"'   # must print 0
+```
+
+`submit_recovery.sh` enforces this itself and refuses while anything `c2s_*` or
+`c2w_*` is queued. The reason is §5.0: two passes over one cell race on the
+per-cell copy-back.
+
+### Step 2 — find out what is actually missing
+
+```bash
+ssh picasso
+F=/mnt/home/users/tic_163_uma/mpascual/fscratch
+PY=$F/conda_envs/isalsr/bin/python
+D=$F/repos/IsalSR_recovery
+
+$PY $D/experiments/scripts/c2_missing_cells.py \
+    --results-dir $F/results/isalsr/c2_3arm --seeds 1-30 --strict --summary
+```
+
+Exit status 0 means the tree is complete and **there is nothing to do — stop
+here**. Exit 2 means there are gaps.
+
+### Step 3 — scope the recovery pass to exactly those arrays
+
+```bash
+SEL=$($PY $D/experiments/scripts/c2_missing_cells.py \
+        --results-dir $F/results/isalsr/c2_3arm --seeds 1-30 --strict --selectors)
+echo "$SEL"
+```
+
+### Step 4 — dry run, then submit
+
+```bash
+bash $D/slurm/c2_campaign/submit_recovery.sh --only "$SEL" --dry-run
+bash $D/slurm/c2_campaign/submit_recovery.sh --only "$SEL"
+```
+
+Defaults: `safe` mode, the **campaign** results root, `--constraint=sr`,
+`logs_recovery/`, `c2r_` job names, 20 s pacing. Job ids land in
+`$FSCRATCH/execs/isalsr/c2_3arm/logs_recovery/recovery_job_ids.txt`.
+
+Add `--mode p90` if the placement count matters more than the guarantee, or
+`--with-aggregation` to chain step 6 automatically.
+
+The script is idempotent by job name: if it aborts part-way, **re-run it** and it
+submits only what is missing.
+
+### Step 5 — verify the pass closed the gap
+
+```bash
+L=$F/execs/isalsr/c2_3arm/logs_recovery
+grep -h "^Cells: *[0-9]* ok," $L/*.out \
+  | sed -n 's/.*, \([0-9]*\) deferred.*/\1/p' | awk '{s+=$1} END {print s+0}'   # expect 0
+grep -h "^FAILED:" $L/*.out | sort -u                                          # expect empty
+
+$PY $D/experiments/scripts/c2_missing_cells.py \
+    --results-dir $F/results/isalsr/c2_3arm --seeds 1-30 --strict --summary
+find $F/results/isalsr/c2_3arm -name run_log.json | wc -l                      # expect 12600
+```
+
+If cells are still missing, re-run steps 3–4. The pass is additive (§5.1, §11.1)
+so repetition converges; in `safe` mode a second pass should not be needed.
+
+### Step 6 — re-run aggregation and the status ledger
+
+The launch-time aggregation (`1840324`) and ledger (`1840325`) fire *before* any
+recovery pass exists and describe an incomplete tree. Re-run them:
+
+```bash
+R=$F/repos/IsalSR                       # DEPLOYED tree, for provenance
+LOGS=$F/execs/isalsr/c2_3arm/logs_recovery
+CONFIGS=$(for m in udfs bingo; do for s in nguyen feynman hard cherrypicked \
+          roundoff feynman_remainder strogatz; do \
+          printf '%s/experiments/configs/%s_%s.yaml ' "$R" "$m" "$s"; done; done)
+
+AGG=$(sbatch --parsable --job-name=c2r_aggregate --array=1-42 --time=0-01:59:00 \
+  --ntasks=1 --cpus-per-task=2 --mem=16G --constraint=sr --account=tic_163_uma \
+  --output=$LOGS/c2r_aggregate_%A_%a.out --error=$LOGS/c2r_aggregate_%A_%a.err \
+  --export="ALL,ISALSR_REPO_DIR=$R,C2_RESULTS_DIR=$F/results/isalsr/c2_3arm,C2_CONFIG_LIST=${CONFIGS% }" \
+  $R/slurm/c2_smoke/aggregate_worker.sh | tail -1 | tr -cd '0-9')
+
+sbatch --job-name=c2r_ledger --time=0-02:00:00 \
+  --ntasks=1 --cpus-per-task=1 --mem=16G --constraint=sr --account=tic_163_uma \
+  --dependency="afterany:$AGG" \
+  --output=$LOGS/c2r_ledger_%j.out --error=$LOGS/c2r_ledger_%j.err \
+  --export="ALL,ISALSR_REPO_DIR=$R,C2_RESULTS_DIR=$F/results/isalsr/c2_3arm,C2_LEDGER_ONLY=1,C2_EXPECTED_TASKS=12600,C2_MAX_TIME=43200" \
+  $R/slurm/c2_smoke/aggregate_worker.sh
+```
+
+🔴 `C2_EXPECTED_TASKS=12600` is the **cell** count, not the task count. The
+deployed `launcher.sh:625` passes the task count, which makes the certifier fall
+through to the self-referential "disk" universe (fixed in `cda276a`, but the
+deployed tree still carries the old value). `submit_recovery.sh --with-aggregation`
+does all of step 6 with this value already set.
+
+Then run the §7 acceptance checks.
+
+---
+
+## 11. Validation
+
+Everything below was executed on 2026-08-09 **while the campaign was live**
+(966 tasks running, 44 pending, 10,531 → 10,547 `run_log.json` during the
+session). Nothing was written to `$FSCRATCH/results/isalsr/c2_3arm` or
+`.../execs/isalsr/c2_3arm`; the deployed tree was read only and `git status`
+on it is still clean at `2dd56fd` / `campaign/c2`.
+
+### 11.1 Controlled, on the workstation
+
+| Check | Result |
+|---|---|
+| `pytest tests/unit -q` | **7,688 passed, 1 failed, 5 skipped** — baseline was 7,625/1/5, so +63 new and the same single pre-existing failure (`test_numerical_audit`, a manuscript audit, untouched by this work) |
+| `pytest tests/unit/test_c2_recovery_plan.py -q` | **65 passed** |
+| `ruff check` / `ruff format --check` | clean on all three changed/added Python files |
+| `bash -n` | clean on `submit_recovery.sh`, `submit_sweeps.sh`, `submit_paced.sh` |
+| **Main plan regression** | `c2_slot_plan --seeds 1-30 --tsv` **byte-identical** to the pre-edit output (`git stash` A/B). This is the check that matters most while the campaign runs |
+
+The unit tests assert the property directly rather than the outputs: for every
+`(method, suite, mode)` triple, `defers_nothing(B, a, wall)` holds and `B+1`
+breaks it — i.e. the bundle is the *largest* that still clears the deadline. They
+also assert that `decode_chunk` partitions the array exactly once at B ∈ {1, 2, 3,
+7, 27, 63, 123, 164} and that the cell **set** is identical at B=27 and B=3, which
+is what makes re-running at a different bundle sound.
+
+### 11.2 On Picasso — throwaway root, `--constraint=cpu`, 60 s payload
+
+Results root `$FSCRATCH/results/isalsr/c2_recovery_test`, logs
+`$FSCRATCH/execs/isalsr/c2_recovery_test/logs`, both **deleted afterwards**
+(161 files). Payload `udfs_feynman.yaml`, problem `I.6.20a`, `C2_MAX_TIME=60`.
+13 tasks total. The worker was the **deployed** one throughout.
+
+**The deferral, reproduced and then removed** — same six cells, same payload:
+
+| Job | Shape | Result |
+|---|---|---|
+| `1867715` `c2t_old` | B=6, cutoff **150 s** (under-provisioned, mimics the campaign) | `Cells: 3 ok, 0 failed, **3 deferred** (of 6)`; `DEFERRED: I.6.20a/seed=4 seed=5 seed=6` |
+| `1867723` `c2t_new` | B=3, cutoff **360 s** = `(B−1)·(payload+teardown)`, the §9.1 rule scaled | task 1 `3 ok, 0 failed, **0 deferred**`; task 2 `3 ok, 0 failed, **0 deferred**` |
+
+**Additivity and resume — the key test.** Same root, two passes:
+
+| Job | Pass | Elapsed | Evidence |
+|---|---|---|---|
+| `1867731` `c2t_add1` | seeds 1–3, B=3 | 3 m 33 s | 3 cells written |
+| `1868137_1` `c2t_add2` | seeds 1–3 again | **27 s** | `Skipping I.6.20a seed=1 variant=baseline (already exists)` ×3 |
+| `1868137_2` `c2t_add2` | seeds 4–6 | 3 m 56 s | 3 new cells written |
+
+`run_log.json` mtimes for seeds 1–3 are **bit-identical before and after**
+(`1786277415.457…`, `1786277482.333…`, `1786277547.626…`), so the completed cells
+were not re-executed, not rewritten, and not touched — while the missing ones
+ran. All six present afterwards. **§5.1's additivity claim is now measured, not
+argued.**
+
+**`submit_recovery.sh` end to end** — `1868143` `c2r_ub_feynman`, 7 tasks,
+`udfs:baseline:feynman` at 2 seeds (20 cells, B=3):
+
+* all 7 tasks `COMPLETED` (1 m 56 s – 4 m 00 s);
+* `6 × "3 ok, 0 failed, 0 deferred"` and `1 × "2 ok, 0 failed, 0 deferred"` —
+  **20/20 cells, zero deferred**;
+* `find … -name run_log.json | wc -l` = **20**;
+* the worker logged `SP-1 tag: campaign/c2`, `SP-1 commit: 2dd56fd…` — **the
+  provenance is the campaign's even though the plan came from a different
+  checkout**, which is the whole point of §9.2.
+
+**Fail-closed guards, each exercised:**
+
+| Guard | Behaviour |
+|---|---|
+| Live campaign | `FATAL: 1007 c2s_*/c2w_* job(s) are still queued or running.` — refuses (§5.0) |
+| No `--only` | Refuses, and prints the `c2_missing_cells.py` command that produces it |
+| `--dependency afterany-123` | `FATAL: … is not after{any,ok,notok,corr}:<ids>` — refuses **before** submitting anything |
+| Malformed job id | `_clean_job_id` is `submit_paced.sh`'s (`tail -n 1 | sed`), verified against the Lua wrapper's ANSI banner: it returned `1868143` correctly where a naive `tr -dc 0-9` over the whole output returned `3101867715` |
+| Tools/worker divergence | `cmp` on `c2_task_spec.py` + all 23 configs — identical, so the submission proceeded |
+
+**Job-name collision** — the trap §5.2 point 3 warns about:
+
+```
+c2s_/c2w_ names in sacct today : 1379
+c2r_ names in sacct today      :    0
+queued jobs matching ^c2r_     :    0
+```
+
+`c2r_` is disjoint from both live prefixes, so the idempotence query cannot be
+masked by the campaign and cannot mask it. Recovery logs also go to a separate
+`logs_recovery/`, so `health.sh`'s `deferred=` count over `logs/*.out` keeps
+describing the main pass.
+
+### 11.3 Measured numbers this work produced
+
+`measure_cell_hours.py` re-run over the live root (n = 10,533 cells with a
+recorded `wall_clock_total_s`) confirms §3's table and adds the max:
+
+| method:suite | n | p50 | **p90** | p99 | max |
+|---|---:|---:|---:|---:|---:|
+| `udfs:*` (all seven suites) | 4,783 | 12.00 | 12.00 | 12.00 | 12.00 |
+| `udfs:feynman` | 462 | **0.18** | **12.00** | 12.00 | 12.00 |
+| `bingo:feynman` | 740 | 0.00 | 0.05 | 3.92 | 6.69 |
+| `bingo:nguyen` | 919 | 0.03 | 0.43 | 2.52 | 3.04 |
+| `bingo:strogatz` | 1,260 | 0.09 | 1.01 | 2.47 | 3.30 |
+| `bingo:feynman_remainder` | 435 | 0.08 | 4.21 | 6.62 | 8.64 |
+| `bingo:roundoff` | 686 | 2.05 | 5.55 | 7.21 | 8.51 |
+| `bingo:cherrypicked` | 880 | 3.69 | 6.47 | 8.42 | 10.18 |
+| `bingo:hard` | 830 | 3.29 | 7.18 | 10.83 | 11.76 |
+
+The census gives the gap **directly**, which nothing before this could do. At
+14:00 CEST, with the campaign still running:
+
+```
+TOTAL   expected 12600   present 10540   missing 2060
+```
+
+Of that, `udfs:*:feynman` alone accounts for 438 and `udfs:*:feynman_remainder`
+for 271 — the two array groups §2.2 identified. This number includes cells still
+in flight, so it is an upper bound on the true deferral; the deferred counter
+over the campaign log dir read **531** at the same moment.
+
+**The SCBI trade-off, quantified rather than asserted.** For the twelve arrays
+§2.2 names:
+
+| Mode | SLURM tasks | Shortest expected task | SCBI 2 h floor |
+|---|---:|---:|---|
+| `safe` | 1,140 | 0.45 h (`bingo:*:nguyen`) | violated by the 6 Bingo arrays |
+| `p90` | 525 | 5.70 h | cleared by every array |
+
+`format_recovery_notes` prints exactly this, per array, so the choice is never
+silent. The honest framing for SCBI is that **a recovery task is short because
+most of its cells are already complete** — `1868137_1` above ran three cells in
+27 s — and no bundle size changes that; sizing up to clear the floor only
+reintroduces the deadline.
+
+---
+
+## 12. Final conclusions
+
+**What the fix is.** One recovery pass at a bundle small enough that the worker's
+own start-deadline cannot bite, submitted only over the arrays that still have
+gaps, from a separate tools checkout, against the unchanged deployed worker, under
+a job-name prefix that cannot collide with anything live. In `safe` mode the
+no-deferral property is **distribution-free**: every cell is charged the full 12 h
+payload cap, so a chunk of three cannot fail to start its third cell no matter how
+the per-cell distribution behaves. This replaces the ≈9 sweep passes and ≈12 days
+§4 estimated with **one pass**.
+
+**What it does NOT fix.**
+
+1. **It does not make the main planner tail-aware.** `build_plan` is unchanged, so
+   a future campaign submitted the same way will defer the same way. The fix for
+   that is to move `bundle_size` onto `P90_CELL_HOURS`; it was deliberately not
+   done here because `submit_sweeps.sh` reads the planner from the **deployed**
+   tree, and changing it mid-flight is defect 10 by another route. **Do this
+   before the next campaign, not during this one.**
+2. **It does not recover a cell whose payload genuinely fails.** The single OOM
+   (`bingo/cherrypicked/vlad_7/isalsr/seed_25`) is a §5.3 matter; a recovery pass
+   retries it at the same 32 GB and nothing more.
+3. **It does not shorten `udfs`.** Three cells at 12 h is a 36 h task. The pass is
+   fast in *placements*, not in wall clock.
+4. **It cannot distinguish "deferred" from "still running"** while the campaign is
+   live — hence the step-1 gate. The 2,060 figure above is an upper bound.
+
+**Residual risks.**
+
+* **Namespace shadowing (§9.2).** Any *future* tool added to the recovery checkout
+  that imports a symbol the deployed tree's copy does not define will fail at run
+  time. The failure is loud, and `test_missing_cells_imports_nothing_from_the_planner`
+  guards the one case that exists — but the trap is structural.
+* **`p90` mode is a bet.** At B=63 a `bingo:feynman` chunk holds ~6 cells above
+  p90 in expectation, and the observed max is 6.69 h. It clears the 34.5 h
+  deadline comfortably at the mean, but it is not a proof. Prefer `safe` unless
+  the placement count is the binding constraint.
+* **The `safe` margin is 30 minutes.** B=3 at a 38 h wall gives a 25.5 h deadline
+  against a 25.0 h worst case. That half-hour is the teardown budget for two
+  cells; the largest post-search tail on record is 7 minutes (§11.1, 2026-08-03),
+  so the margin is ~4× the observed worst — but it is not unbounded. If teardown
+  ever grows, use `--bundle 2` (deadline 13.5 h against a 12.5 h worst case).
+* **The recovery pass runs 1,140 tasks at `safe`**, which is a real load on the
+  scheduler and a real conversation with SCBI. §11.3 has the numbers for it.
+
+**Standing warnings, unchanged.** §5.5 still governs: every run either produces a
+valid `run_log.json` or a ledger row naming its cause, and any truncation drops
+whole `(method, problem, seed)` triples across **all three arms**. And **do not
+delete the campaign root to "start clean"** — resume is additive precisely so that
+you never have to, and a partially completed triple is worse than a missing one.
