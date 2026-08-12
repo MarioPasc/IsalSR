@@ -261,12 +261,30 @@ def test_main_plan_is_unaffected_by_the_recovery_additions() -> None:
 
 
 def _write_run_log(root: Path, cell: mc.Cell, *, valid: bool = True) -> Path:
+    """Write a run log in the REAL C2 schema.
+
+    🔴 The identity fields live under ``metadata``, and the arm is
+    ``representation`` — not top-level ``variant``. The original fixture invented
+    the flat shape, the predicate asserted the same invented shape, and the two
+    agreed with each other while disagreeing with all 11,999 real cells. The
+    result was a ``--strict`` census reporting 0 present / 12,600 missing.
+    Keep this mirroring an actual ``run_log.json``.
+    """
     path = root / cell.relpath() / "run_log.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = (
-        {"method": cell.method, "variant": cell.arm, "problem": cell.problem, "seed": cell.seed}
+        {
+            "metadata": {
+                "method": cell.method,
+                "representation": cell.arm,
+                "problem": cell.problem,
+                "seed": cell.seed,
+            },
+            "results": {},
+            "best_expression": "x",
+        }
         if valid
-        else {"method": cell.method}
+        else {"metadata": {"method": cell.method}}
     )
     path.write_text(json.dumps(payload))
     return path
@@ -331,6 +349,35 @@ def test_strict_mode_treats_a_truncated_run_log_as_missing(tmp_path: Path) -> No
     assert mc.missing_cells(str(tmp_path), [cell], strict=True) == [cell]
     path.write_text("{ this is not json")
     assert mc.missing_cells(str(tmp_path), [cell], strict=True) == [cell]
+
+
+def test_strict_mode_ACCEPTS_a_well_formed_run_log(tmp_path: Path) -> None:
+    """A valid cell must NOT be reported missing under ``--strict``.
+
+    🔴 The regression this pins. Its absence is what let the inverted predicate
+    ship: the suite asserted only that BAD logs are rejected, which an
+    always-false predicate satisfies trivially. Against the pre-fix code this
+    test fails, reporting the cell as missing.
+    """
+    cell = mc.Cell("udfs", "baseline", "feynman", "I.6.2", 1)
+    _write_run_log(tmp_path, cell)
+    assert mc.missing_cells(str(tmp_path), [cell], strict=True) == []
+    assert mc.missing_cells(str(tmp_path), [cell]) == []
+
+
+def test_strict_required_fields_match_the_real_run_log_schema() -> None:
+    """The strict predicate must name fields the campaign actually emits.
+
+    Guards the specific error: ``variant`` is not a run-log field (the arm is
+    recorded as ``representation``), and none of these sit at the top level.
+    """
+    assert "variant" not in mc.STRICT_REQUIRED_METADATA_FIELDS
+    assert set(mc.STRICT_REQUIRED_METADATA_FIELDS) == {
+        "method",
+        "representation",
+        "problem",
+        "seed",
+    }
 
 
 def test_selectors_names_every_array_with_a_gap_and_nothing_else() -> None:

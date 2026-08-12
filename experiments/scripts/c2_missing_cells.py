@@ -109,7 +109,30 @@ def match_selector(key: str, patterns: list[str]) -> bool:
 #: specification; duplicating it here would make two definitions of "valid" that
 #: can drift. What this needs is only the property the *resume* logic needs: the
 #: file parses and names the run it claims to be.
-STRICT_REQUIRED_FIELDS: tuple[str, ...] = ("method", "variant", "problem", "seed")
+#:
+#: 🔴 These live under ``metadata``, NOT at the top level, and the arm field is
+#: ``representation``, not ``variant`` (measured against the C2 tree, 2026-08-12).
+#: The original spelling — top-level ``("method", "variant", "problem", "seed")``
+#: — matched NOTHING, so ``--strict`` reported every one of the 11,999 written
+#: cells as missing and the census returned 0 present / 12,600 missing. That is
+#: worse than a crash: the plan's workflow feeds this census straight into
+#: ``submit_recovery.sh --only``, so following the documented procedure would
+#: have scoped the recovery pass to the ENTIRE campaign. The resume logic would
+#: still have skipped completed cells, so no data was ever at risk, but the plan
+#: and every count derived from it would have been nonsense.
+#:
+#: A ``--strict`` predicate that can never be satisfied is the inverse of the
+#: SP-6 pattern this project keeps hitting: instead of silently passing, it
+#: silently condemns. Both come from asserting a shape nobody measured.
+STRICT_REQUIRED_METADATA_FIELDS: tuple[str, ...] = (
+    "method",
+    "representation",
+    "problem",
+    "seed",
+)
+
+#: Backwards-compatible alias. Retained so existing imports keep resolving.
+STRICT_REQUIRED_FIELDS: tuple[str, ...] = STRICT_REQUIRED_METADATA_FIELDS
 
 
 class MissingCellsError(Exception):
@@ -201,8 +224,8 @@ def _run_log_is_valid(path: str) -> bool:
         path: Absolute path to the file.
 
     Returns:
-        ``True`` when the JSON loads to a mapping carrying every field of
-        :data:`STRICT_REQUIRED_FIELDS`.
+        ``True`` when the JSON loads to a mapping whose ``metadata`` block
+        carries every field of :data:`STRICT_REQUIRED_METADATA_FIELDS`.
     """
     try:
         with open(path) as handle:
@@ -211,7 +234,10 @@ def _run_log_is_valid(path: str) -> bool:
         return False
     if not isinstance(blob, dict):
         return False
-    return all(field in blob for field in STRICT_REQUIRED_FIELDS)
+    metadata = blob.get("metadata")
+    if not isinstance(metadata, dict):
+        return False
+    return all(field in metadata for field in STRICT_REQUIRED_METADATA_FIELDS)
 
 
 def missing_cells(root: str, cells: list[Cell], strict: bool = False) -> list[Cell]:
