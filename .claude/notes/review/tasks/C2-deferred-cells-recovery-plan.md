@@ -757,9 +757,22 @@ you never have to, and a partially completed triple is worse than a missing one.
 ## 13. Outcome — CLOSED 2026-08-14
 
 **12,600 / 12,600 cells. Strict census: 0 missing. Certifier: GO, 0 blocking
-failures, 19/19 criteria.** Corpus mirrored to the Sandisk backup and verified
-byte-exact (12,600 run logs, 65,944 files, 38,338,981,466 B) with a matching
-content digest over the 840 analysis artefacts.
+failures, 19/19 criteria.**
+
+Execution health, from the 12,600-row ledger: `terminal_status` = `completed`
+×12,600, `exit_code` = 0 ×12,600, `engine` = `native` ×12,600, **0** cells with
+NaN metrics, **0** with an exception, 14 distinct `config_sha256`. The grid is
+exactly balanced at **2,100 cells per (method, arm)** across all six arms.
+Wall clock median 18,981 s, max 43,223 s (the 12 h cap plus teardown — nothing
+time-killed); peak RSS max 9.42 GB against a 32 GB request.
+
+Aggregation: 420 `aggregate.csv` all at 23 metric rows, 420 `paired_stats*.json`
+all at `n_seeds = 30` and 23 metrics, none empty, 140 per contrast.
+
+Integrity against Picasso — 65,944 files, 38,338,981,466 B, manifest digest
+(path+size, all files) `17d6f23e…`, content digest over all 12,600 `run_log.json`
+`0594504a…`, content digest over the 840 stats artefacts + ledger `a46658ab…`,
+all identical both sides. `convergence_log.npz` (~35 GB) is path+size only.
 
 The recovery needed **two rounds**, and the reason is the single most transferable
 lesson here.

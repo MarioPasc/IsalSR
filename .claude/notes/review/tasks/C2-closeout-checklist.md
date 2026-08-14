@@ -7,8 +7,12 @@
 >   420 `paired_stats*.json`, `status_ledger.csv` (12,600 rows).
 > - **Certification**: **GO**, 0 blocking failures, 19/19 criteria
 >   (job 1993088, after fixing C1.16 — see §13.3 of the recovery plan).
-> - **Backup**: byte-exact on both sides — 12,600 run logs, 65,944 files,
->   38,338,981,466 B; analysis-artefact digest `a46658ab…` matches.
+> - **Execution health**: `completed`/`exit_code 0`/`native` on 12,600/12,600;
+>   0 NaN-metric cells, 0 exceptions; grid balanced at 2,100 per (method, arm);
+>   nothing time-killed (max wall 43,223 s vs the 12 h cap + teardown).
+> - **Backup**: identical on both sides — 65,944 files, 38,338,981,466 B;
+>   manifest digest `17d6f23e…`, run-log content digest `0594504a…`,
+>   stats digest `a46658ab…`. `convergence_log.npz` is path+size only.
 > - **README**: written at the results root of the backup.
 > - **Docs**: EXECUTION-PLAN §11.1/§11.3 and the recovery plan §13 updated.
 
