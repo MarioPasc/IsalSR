@@ -30,6 +30,7 @@ from experiments.scripts.numerical_audit import (
     find_cross_file_duplicates,
     generate,
     is_notation_script,
+    macro_suffix,
     normalise,
     propose_macros,
     run_audit,
@@ -163,6 +164,52 @@ def test_digits_to_words_is_letters_only() -> None:
     out = digits_to_words("I.10.7")
     assert out == "IOneZeroSeven"
     assert out.isalpha()
+
+
+@pytest.mark.parametrize(
+    ("index", "expected"),
+    [(0, "A"), (1, "B"), (25, "Z"), (26, "AA"), (27, "AB"), (51, "AZ"), (52, "BA")],
+)
+def test_macro_suffix_is_bijective_base_26(index: int, expected: str) -> None:
+    """The collision suffix continues into two letters instead of into digits."""
+    assert macro_suffix(index) == expected
+
+
+def test_macro_suffix_is_letters_only_unique_and_stable() -> None:
+    """Suffixes stay catcode-11, injective and a pure function of the index."""
+    suffixes = [macro_suffix(i) for i in range(1000)]
+    assert all(s.isalpha() and s.isupper() for s in suffixes)
+    assert len(set(suffixes)) == len(suffixes), "suffixes must be unique"
+    assert suffixes == [macro_suffix(i) for i in range(1000)], "suffixes must be stable"
+
+
+def test_macro_suffix_rejects_negative_index() -> None:
+    """A negative collision index is a programming error, not a silent name."""
+    with pytest.raises(NumericalAuditError):
+        macro_suffix(-1)
+
+
+#: 30 rho measurements in one file: more than the 26 single-letter suffixes, so
+#: the collision counter must roll over without emitting a digit.
+FIXTURE_MANY_RHO = "\\subsection{Rho}\n" + "".join(
+    f"The reduction factor is $\\rho = 1.{n:02d}$ on the suite.\n" for n in range(30)
+)
+
+
+def test_macro_proposals_survive_more_than_26_collisions() -> None:
+    """A base shared by >26 measurements still yields letters-only unique names."""
+    lines = FIXTURE_MANY_RHO.splitlines()
+    entries = audit_file(AUDITED_FILES[0], FIXTURE_MANY_RHO, frozenset(), frozenset())
+    propose_macros(entries, {AUDITED_FILES[0]: lines})
+    macros = [e.proposed_macro for e in entries if e.proposed_macro]
+    assert len(macros) >= 27, f"fixture must overflow the 26 letters, got {len(macros)}"
+    offenders = [m for m in macros if not m.startswith("\\") or not m[1:].isalpha()]
+    assert not offenders, f"macro names must be letters-only: {offenders}"
+    assert len(set(macros)) == len(macros), "macro proposals must be unique"
+    # Stability: a second pass over freshly parsed entries reproduces the names.
+    again = audit_file(AUDITED_FILES[0], FIXTURE_MANY_RHO, frozenset(), frozenset())
+    propose_macros(again, {AUDITED_FILES[0]: lines})
+    assert [e.proposed_macro for e in again if e.proposed_macro] == macros
 
 
 # ---------------------------------------------------------------------------
@@ -325,17 +372,39 @@ def test_known_problem_id_fragments_are_not_measurements(payload: dict[str, Any]
 
 @requires_manuscript
 def test_hand_verified_cross_file_duplicates_are_rediscovered(payload: dict[str, Any]) -> None:
-    """The tool independently finds the duplicates identified by hand."""
-    expected = {"0.28", "0.82", "1.56", "1.83", "1.07"}
+    """The tool independently finds the duplicates identified by hand.
+
+    This test is a *canary*, not an invariant of the tool: its literals are the
+    numbers the manuscript currently reports, so they move whenever the reported
+    campaign is re-executed. When it fires, check whether the campaign changed
+    before touching the tool.
+
+    Pinned on 2026-08-14 to campaign **C2** (three arms, 70 problems, 30 seeds,
+    12,600 runs), verified against
+    ``results/review/c2_3arm/analyses/values/summary.json``. The previous pin
+    (``0.28``/``0.82`` canonicalisation times, ``1.56``/``1.83`` per-host $\\rho$
+    means, ``1.07`` speedup $S$) belonged to the submitted campaign and was
+    legitimately superseded; the test fired correctly on that replacement.
+    """
+    # rho per host: mean (1.6637 / 1.7850), min and max over the 70 problems.
+    expected = {"1.66", "1.79", "1.11", "2.12", "1.19", "1.85", "16.1"}
     for key in ("duplicates", "narrative_duplicates"):
         found = {g["normalised"] for g in payload[key]}
         missing = expected - found
         assert not missing, f"{key}: hand-verified duplicates not rediscovered: {sorted(missing)}"
     narrative = {g["normalised"]: g for g in payload["narrative_duplicates"]}
-    # discussion.tex:22 and results.tex:170/175 state the same two medians.
-    for value in ("0.28", "0.82"):
-        sites = {(o["file"], o["line"]) for o in narrative[value]["occurrences"]}
-        assert ("paper/discussion.tex", 22) in sites, sites
+    # The discussion states both rho ranges inline; the supplementary restates
+    # each as an interval in its per-method paragraph. Anchor on the file and on
+    # the sentence text rather than on a line number: the manuscript is a live
+    # checkout, so line numbers drift under edits that leave the claim intact.
+    for value in ("1.11", "1.19"):
+        occurrences = narrative[value]["occurrences"]
+        files = {o["file"] for o in occurrences}
+        assert {"paper/discussion.tex", "supplementary/supplementary.tex"} <= files, files
+        supp = [o for o in occurrences if o["file"] == "supplementary/supplementary.tex"]
+        assert any("Reduction factors span" in o["surrounding_sentence"] for o in supp), supp
+        disc = [o for o in occurrences if o["file"] == "paper/discussion.tex"]
+        assert any("The observed" in o["surrounding_sentence"] for o in disc), disc
 
 
 @requires_manuscript

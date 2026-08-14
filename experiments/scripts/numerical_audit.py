@@ -671,6 +671,36 @@ _SUPP_TABLE_COLUMNS: Final[tuple[str, ...]] = (
 _SUFFIX_LETTERS: Final[str] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
+def macro_suffix(index: int) -> str:
+    """Encode a collision index as a letters-only, order-preserving suffix.
+
+    A LaTeX control word admits catcode-11 characters only, so the suffix that
+    disambiguates macros sharing a base may not carry digits. The encoding is
+    bijective base-26 over ``A``--``Z`` (``0 -> A``, ``25 -> Z``, ``26 -> AA``,
+    ``27 -> AB``, ...): every index maps to a distinct string, so uniqueness of
+    ``base + suffix`` follows from uniqueness of the index within a base, and
+    the map is a pure function of the index, so names are stable across runs.
+
+    Args:
+        index: Zero-based number of earlier entries sharing the same base.
+
+    Returns:
+        Letters-only suffix.
+
+    Raises:
+        NumericalAuditError: If ``index`` is negative.
+    """
+    if index < 0:
+        raise NumericalAuditError(f"collision index must be non-negative, got {index}")
+    out: list[str] = []
+    n = index + 1
+    while n > 0:
+        n -= 1
+        out.append(_SUFFIX_LETTERS[n % 26])
+        n //= 26
+    return "".join(reversed(out))
+
+
 def _table_macro_base(line: str, literal: RawLiteral, tag: str) -> str | None:
     """Build a per-cell macro base for a row of a supplementary table.
 
@@ -745,8 +775,10 @@ def propose_macros(
     """Assign a unique LaTeX macro proposal to every measurement, in place.
 
     Macro names are letters-only (LaTeX control sequences admit nothing else)
-    and are made unique by appending a suffix letter in file/line/column order,
-    so re-running the tool reproduces the same names byte for byte.
+    and are made unique by appending a bijective base-26 suffix (:func:`macro_suffix`)
+    in file/line/column order, so re-running the tool reproduces the same names
+    byte for byte. The suffix must not overflow into digits: a base with more
+    than 26 occurrences continues ``AA``, ``AB``, ... rather than ``X26``.
 
     Args:
         entries: All audit entries, already ordered deterministically.
@@ -772,8 +804,7 @@ def propose_macros(
             base = _narrative_macro_base(lines, literal, tag)
         count = used[base]
         used[base] += 1
-        suffix = _SUFFIX_LETTERS[count] if count < len(_SUFFIX_LETTERS) else f"X{count}"
-        entry.proposed_macro = "\\" + base + suffix
+        entry.proposed_macro = "\\" + base + macro_suffix(count)
 
 
 # --------------------------------------------------------------------------

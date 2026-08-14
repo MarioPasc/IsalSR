@@ -127,7 +127,7 @@ def three_axis(d: dict[str, Any]) -> str:
         r" & \multicolumn{3}{c}{Search space} & \multicolumn{3}{c}{Regression quality}"
         r" & \multicolumn{4}{c}{Computational cost} \\",
         r"\cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-11}",
-        r"Method & $\rho$ & $\rho_{\sigma}$ & Red."
+        r"Method & $\rho$ & $\rho_{\mathrm{ser}}$ & Red."
         r" & $R^2_{\mathrm{test}}$ (NA/NH/IS) & $d$ & $p$"
         r" & $T_{\mathrm{canon}}$/ms & $T_{\mathrm{eval}}$/ms & OH & $S$ \\",
         r"\midrule",
@@ -222,7 +222,7 @@ def phi_by_host(d: dict[str, Any]) -> str:
         r"\setlength{\tabcolsep}{4pt}",
         r"\begin{tabular}{@{}lrrrrl@{}}",
         r"\toprule",
-        r"Host & $N/10^3$ & $\rho$ & $\rho_{\sigma}$ & $\Delta r$"
+        r"Host & $N/10^3$ & $\rho$ & $\rho_{\mathrm{ser}}$ & $\Delta r$"
         r" & $\phi$ $[\min, \max]$ \\",
         r"\midrule",
     ]
@@ -295,8 +295,8 @@ def phi_per_problem(d: dict[str, Any]) -> str:
         r"\toprule",
         r" & \multicolumn{4}{c}{UDFS} & \multicolumn{4}{c}{Bingo} \\",
         r"\cmidrule(lr){2-5} \cmidrule(lr){6-9}",
-        r"Problem & $\rho_{\sigma}$ & $\rho$ & $\Delta r$ & $\phi$"
-        r" & $\rho_{\sigma}$ & $\rho$ & $\Delta r$ & $\phi$ \\",
+        r"Problem & $\rho_{\mathrm{ser}}$ & $\rho$ & $\Delta r$ & $\phi$"
+        r" & $\rho_{\mathrm{ser}}$ & $\rho$ & $\Delta r$ & $\phi$ \\",
         r"\midrule",
     ]
     current_suite = None

@@ -3,7 +3,8 @@
 
 Single-panel figure combining canonicalization timing (left y-axis) with
 the k! equivalent-representations curve (right y-axis).  A text annotation
-states the invariance result (rho = k! for all expressions).
+states the invariance result: rho = k! when every ordering was enumerated,
+and the observed canonical invariance when orderings were sampled instead.
 
 Also exports a standalone LaTeX table (tab_synthetic_scalability.tex).
 
@@ -115,7 +116,11 @@ def load_synthetic_data(data_dir: str) -> list[dict[str, float | int]]:
 def _aggregate_per_k(
     rows: list[dict[str, float | int]],
 ) -> list[dict[str, object]]:
-    """Aggregate rows by k (pooling all m values)."""
+    """Aggregate rows by k (pooling all m values).
+
+    Timing statistics are reported in microseconds (``*_us`` keys): the raw
+    ``mean_canon_time_s`` column is in seconds.
+    """
     by_k: dict[int, list[dict[str, float | int]]] = defaultdict(list)
     for r in rows:
         by_k[int(r["k"])].append(r)
@@ -127,10 +132,12 @@ def _aggregate_per_k(
         kfact = math.factorial(k)
         n_perms = int(group[0]["n_perms"])
         n_invariant = sum(1 for r in group if int(r["n_unique_canonicals"]) == 1)
-        times_ms = [float(r["mean_canon_time_s"]) * 1000 for r in group]
-        med_t = float(np.median(times_ms))
-        iqr_lo = float(np.percentile(times_ms, 25))
-        iqr_hi = float(np.percentile(times_ms, 75))
+        # Microseconds: on the compiled engine every per-k median rounds to
+        # 0.01-0.02 ms, which collapses the column and hides the k trend.
+        times_us = [float(r["mean_canon_time_s"]) * 1e6 for r in group]
+        med_t = float(np.median(times_us))
+        iqr_lo = float(np.percentile(times_us, 25))
+        iqr_hi = float(np.percentile(times_us, 75))
         rho_kfact = [float(r["rho_over_kfact"]) for r in group]
         all_exact = all(abs(v - 1.0) < 1e-6 for v in rho_kfact)
 
@@ -143,9 +150,9 @@ def _aggregate_per_k(
                 "n_invariant": n_invariant,
                 "pct_invariant": 100.0 * n_invariant / n,
                 "rho_equals_kfact": all_exact,
-                "median_time_ms": med_t,
-                "iqr_lo_ms": iqr_lo,
-                "iqr_hi_ms": iqr_hi,
+                "median_time_us": med_t,
+                "iqr_lo_us": iqr_lo,
+                "iqr_hi_us": iqr_hi,
             }
         )
     return table
@@ -156,19 +163,108 @@ def _aggregate_per_k(
 # =============================================================================
 
 
+def _rho_equals_kfact_everywhere(rows: list[dict[str, float | int]]) -> bool:
+    """Whether ``rho = k!`` holds on every row.
+
+    This is the exact predicate ``_export_latex_table`` uses to decide between
+    ``\\checkmark`` and ``$\\times$`` in its ``rho = k!`` column, hoisted so the
+    figure annotation and the table cannot disagree about the same data.
+
+    Args:
+        rows: Per-expression records as loaded by :func:`load_synthetic_data`.
+
+    Returns:
+        True when every row has ``rho_over_kfact`` equal to one.
+    """
+    return all(abs(float(r["rho_over_kfact"]) - 1.0) < 1e-6 for r in rows)
+
+
+def _format_power_of_ten(value: float) -> str:
+    """Render a large count as LaTeX scientific notation with two decimals."""
+    exponent = int(math.floor(math.log10(value))) if value > 0 else 0
+    mantissa = value / (10.0**exponent)
+    return rf"{mantissa:.2f} \times 10^{{{exponent}}}"
+
+
+def _invariance_badge_text(rows: list[dict[str, float | int]]) -> str:
+    """Build the annotation stating what the data actually supports.
+
+    ``rho = k!`` is only claimable when every expression enumerated all ``k!``
+    orderings. When orderings are *sampled* instead, ``rho`` equals the sample
+    size, so the claim is false and the standing result is the invariance itself:
+    every sampled ordering of a given DAG produced one and the same canonical
+    string.
+
+    Args:
+        rows: Per-expression records as loaded by :func:`load_synthetic_data`.
+
+    Returns:
+        LaTeX-ready annotation text.
+    """
+    if _rho_equals_kfact_everywhere(rows):
+        return r"$\rho = k!\;\;\forall\; k,\, m$"
+
+    n_invariant = sum(1 for r in rows if int(r["n_unique_canonicals"]) == 1)
+    n_orderings = float(sum(int(r["n_perms"]) for r in rows))
+    if n_invariant != len(rows):
+        return rf"{100.0 * n_invariant / len(rows):.1f}\% canonical invariance"
+    return (
+        "one canonical string on all\n"
+        rf"${_format_power_of_ten(n_orderings)}$ sampled orderings"
+    )
+
+
+def _thinned_xticks(k_values: list[int], max_labels: int = 9) -> list[int]:
+    """Choose a legible subset of ``k`` values to label on the x-axis.
+
+    Labelling all 21 ``k`` values of the scaling grid produces an unreadable run
+    of digits at column width. The stride is chosen in ``k`` units (not index
+    units) so the printed labels stay evenly spaced even where the grid itself
+    is not.
+
+    Args:
+        k_values: Sorted ``k`` values present in the data.
+        max_labels: Largest number of labels considered legible.
+
+    Returns:
+        The ``k`` values to label, always including the smallest one.
+    """
+    if len(k_values) <= max_labels:
+        return list(k_values)
+    k_min = min(k_values)
+    for stride in (2, 4, 5, 10, 20, 50):
+        labelled = [k for k in k_values if (k - k_min) % stride == 0]
+        if len(labelled) <= max_labels:
+            return labelled
+    return [k_values[0], k_values[-1]]
+
+
 def plot_figure(
     ax: plt.Axes,
     rows: list[dict[str, float | int]],
+    powerlaw_fit: bool = False,
 ) -> float:
-    """Plot timing boxplots (left y) + k! curve (right y) + annotation.
+    """Plot timing boxplots (left y, microseconds) + k! curve (right y) + annotation.
+
+    The power-law fit is always computed and returned; ``powerlaw_fit`` controls
+    only whether the fitted curve and its legend entry are drawn. It defaults to
+    ``False`` because on the exhaustive dataset the permutation count per
+    expression is itself :math:`k!`, so any per-expression warm-up amortises as
+    ``C / k!`` and biases the fitted exponent downward. The reportable exponent
+    comes from a fixed-permutation-count run.
+
+    Args:
+        ax: Axes to draw on.
+        rows: Per-expression records as loaded by :func:`load_synthetic_data`.
+        powerlaw_fit: Draw the fitted power-law curve and its legend entry.
 
     Returns:
         Fitted power-law exponent b.
     """
-    # ---- Group by (k, m) ----
+    # ---- Group by (k, m); times in microseconds (the CSV column is seconds) ----
     cell: dict[tuple[int, int], list[float]] = defaultdict(list)
     for r in rows:
-        cell[(int(r["k"]), int(r["m"]))].append(float(r["mean_canon_time_s"]) * 1000)
+        cell[(int(r["k"]), int(r["m"]))].append(float(r["mean_canon_time_s"]) * 1e6)
 
     k_values = sorted({k for k, _ in cell})
     m_values = sorted({m for _, m in cell})
@@ -204,7 +300,7 @@ def plot_figure(
             patch.set_alpha(0.6)
         bp["boxes"][0].set_label(M_LABELS[m_val])
 
-    # ---- Power-law fit ----
+    # ---- Power-law fit (always computed; drawn only when requested) ----
     all_k: list[float] = []
     all_t: list[float] = []
     for (_k, _m), times in cell.items():
@@ -217,25 +313,37 @@ def plot_figure(
     mask = (all_k_arr > 0) & (all_t_arr > 0)
     b_fit, log_a_fit = np.polyfit(np.log(all_k_arr[mask]), np.log(all_t_arr[mask]), 1)
     a_fit = np.exp(log_a_fit)
-    k_arr = np.linspace(min(k_values), max(k_values), 200)
-    poly_curve = a_fit * k_arr**b_fit
 
-    ax.plot(
-        k_arr,
-        poly_curve,
-        color="0.3",
-        linestyle="--",
-        linewidth=float(PLOT_SETTINGS["line_width_thick"]),
-        label=rf"$O(k^{{{b_fit:.1f}}})$ (fitted)",
-        zorder=5,
-    )
+    if powerlaw_fit:
+        k_arr = np.linspace(min(k_values), max(k_values), 200)
+        poly_curve = a_fit * k_arr**b_fit
+
+        ax.plot(
+            k_arr,
+            poly_curve,
+            color="0.3",
+            linestyle="--",
+            linewidth=float(PLOT_SETTINGS["line_width_thick"]),
+            # Two decimals, matching the exponent as the prose and the JSON state
+            # it. One decimal printed 1.4 beside a sentence saying 1.43 -- the same
+            # fit at two precisions in one document. "(fitted)" is dropped: the
+            # dashed key already reads as a fit, and the parenthetical was wide
+            # enough to be clipped by the legend frame.
+            label=rf"$O(k^{{{b_fit:.2f}}})$ fit",
+            zorder=5,
+        )
 
     ax.set_yscale("log")
     ax.set_xlim(min(k_values) - 0.6, max(k_values) + 0.6)
     ax.set_xlabel("Internal nodes $k$")
-    ax.set_ylabel("Canonicalization time (ms)")
-    ax.set_xticks(k_values)
-    ax.set_xticklabels([str(k) for k in k_values])
+    ax.set_ylabel(r"Canonicalization time ($\mu$s)")
+    labelled_k = _thinned_xticks(k_values)
+    ax.set_xticks(labelled_k)
+    ax.set_xticklabels([str(k) for k in labelled_k])
+    ax.set_xticks(k_values, minor=True)
+    ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    ax.tick_params(axis="x", which="minor", length=2.0)
+
     ax.yaxis.set_minor_locator(
         matplotlib.ticker.LogLocator(
             base=10.0,
@@ -243,7 +351,24 @@ def plot_figure(
             numticks=20,
         )
     )
-    ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    # A log axis whose view contains at most one power of ten shows a single
+    # labelled tick, off which no value can be read. Label minor ticks there.
+    # Both datasets are in this regime: 10-26 us (exhaustive, sub-decade) and
+    # ~30-400 us (scaling, 1.1 decades but still only 10^2 inside the view).
+    y_lo, y_hi = ax.get_ylim()
+    decades_in_view = [d for d in range(-15, 16) if y_lo <= 10.0**d <= y_hi]
+    if y_lo > 0 and len(decades_in_view) <= 1:
+        if math.log10(y_hi / y_lo) >= 1.0:
+            # Over a decade, subs 2..9 would print ~15 labels; keep 2, 3, 5.
+            ax.yaxis.set_minor_locator(
+                matplotlib.ticker.LogLocator(base=10.0, subs=(0.2, 0.3, 0.5), numticks=20)
+            )
+        plain = matplotlib.ticker.FormatStrFormatter("%g")
+        ax.yaxis.set_major_formatter(plain)
+        ax.yaxis.set_minor_formatter(plain)
+        ax.tick_params(axis="y", which="minor", labelsize=int(PLOT_SETTINGS["tick_labelsize"]) - 1)
+    else:
+        ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
 
     # ---- k! curve on secondary y-axis (right) ----
     ax2 = ax.twinx()
@@ -304,7 +429,7 @@ def plot_figure(
     ax.text(
         0.97,
         0.04,
-        r"$\rho = k!\;\;\forall\; k,\, m$",
+        _invariance_badge_text(rows),
         transform=ax.transAxes,
         fontsize=int(PLOT_SETTINGS["annotation_fontsize"]) + 1,
         verticalalignment="bottom",
@@ -331,21 +456,33 @@ def _export_latex_table(
     output_dir: str,
 ) -> str:
     """Export a standalone LaTeX table summarizing the synthetic results."""
+    exhaustive = all(bool(row["rho_equals_kfact"]) for row in table_data)
+    if exhaustive:
+        protocol = (
+            r"All $k!$ internal-node permutations were exhaustively "
+            r"canonicalized. $\rho = k!$ confirms that every permuted DAG maps "
+            r"to the same canonical string "
+            r"($|\mathrm{Aut}(D)| = 1$ for all expressions)."
+        )
+    else:
+        protocol = (
+            r"The Perms column gives the number of internal-node orderings "
+            r"sampled per expression; $k!$ is not enumerable at these $k$, so "
+            r"$\rho$ is bounded by the sample size and $\rho = k!$ does not "
+            r"hold. The Invariance column is the claim under test: the fraction "
+            r"of expressions whose sampled orderings all yielded one canonical "
+            r"string."
+        )
     lines = [
         r"\begin{table}[htbp]",
         r"  \centering",
         r"  \caption{Synthetic scalability: canonical invariance and timing "
-        r"for random expression DAGs with $k$ internal nodes. "
-        r"For each $k$, 200 expressions $\times$ 3 variable counts were "
-        r"generated (600 total) and all $k!$ internal-node permutations "
-        r"were exhaustively canonicalized. $\rho = k!$ confirms that every "
-        r"permuted DAG maps to the same canonical string "
-        r"($|\mathrm{Aut}(D)| = 1$ for all expressions).}",
+        r"for random expression DAGs with $k$ internal nodes. " + protocol + "}",
         r"  \label{tab:synthetic_scalability}",
         r"  \small",
         r"  \begin{tabular}{r r r c c r}",
         r"    \toprule",
-        r"    $k$ & $k!$ & Perms & $\rho = k!$ & Invariance & Time (ms) \\",
+        r"    $k$ & $k!$ & Perms & $\rho = k!$ & Invariance & Time ($\mu$s) \\",
         r"    \midrule",
     ]
     for row in table_data:
@@ -354,9 +491,9 @@ def _export_latex_table(
         n_perms = int(row["n_perms"])
         rho_ok = r"\checkmark" if row["rho_equals_kfact"] else r"$\times$"
         inv_pct = f"{float(row['pct_invariant']):.0f}\\%"
-        med = float(row["median_time_ms"])
-        iqr_lo = float(row["iqr_lo_ms"])
-        iqr_hi = float(row["iqr_hi_ms"])
+        med = float(row["median_time_us"])
+        iqr_lo = float(row["iqr_lo_us"])
+        iqr_hi = float(row["iqr_hi_us"])
         time_str = f"{med:.2f} [{iqr_lo:.2f}--{iqr_hi:.2f}]"
 
         kf_str = f"{kf:,}".replace(",", r"{,}")
@@ -386,8 +523,20 @@ def _export_latex_table(
 def _build_caption(
     rows: list[dict[str, float | int]],
     b_fit: float,
+    powerlaw_fit: bool = False,
 ) -> str:
-    """Generate figure caption from data summary."""
+    """Generate figure caption from data summary.
+
+    Args:
+        rows: Per-expression records as loaded by :func:`load_synthetic_data`.
+        b_fit: Fitted power-law exponent.
+        powerlaw_fit: Whether the figure shows the fitted curve. When ``False``
+            the caption states the measured median growth instead of the fit,
+            because no fitted curve is drawn to refer to.
+
+    Returns:
+        The caption text.
+    """
     k_values = sorted({int(r["k"]) for r in rows})
     m_values = sorted({int(r["m"]) for r in rows})
     n_total = len(rows)
@@ -396,6 +545,68 @@ def _build_caption(
     k_max_fact = math.factorial(k_max)
 
     n_exact_kfact = sum(1 for r in rows if abs(float(r["rho_over_kfact"]) - 1.0) < 1e-6)
+    n_invariant = sum(1 for r in rows if int(r["n_unique_canonicals"]) == 1)
+    n_orderings = float(sum(int(r["n_perms"]) for r in rows))
+
+    k_min = min(k_values)
+    med_lo = float(
+        np.median([float(r["mean_canon_time_s"]) * 1e6 for r in rows if int(r["k"]) == k_min])
+    )
+    med_hi = float(
+        np.median([float(r["mean_canon_time_s"]) * 1e6 for r in rows if int(r["k"]) == k_max])
+    )
+
+    if powerlaw_fit:
+        growth = (
+            f"Left axis (boxplots): canonicalization time grows as "
+            f"$O(k^{{{b_fit:.2f}}})$ (power-law fit, dashed), confirming that "
+            f"the greedy-invariant algorithm avoids the factorial worst case. "
+        )
+    else:
+        growth = (
+            f"Left axis (boxplots): the median canonicalization time rises only "
+            f"from {med_lo:.2f} to {med_hi:.2f}\\,$\\mu$s between "
+            f"$k = {k_min}$ and $k = {k_max}$ "
+            f"(a factor of {med_hi / med_lo:.2f}), confirming that the "
+            f"greedy-invariant algorithm avoids the factorial worst case. "
+        )
+
+    if _rho_equals_kfact_everywhere(rows):
+        protocol = (
+            "For each expression, all $k!$ permutations of internal node IDs "
+            "were exhaustively canonicalized via the WL-guided greedy algorithm. "
+        )
+        outcome = (
+            f"The reduction factor equals $k!$ for all "
+            f"{n_exact_kfact}/{n_total} expressions "
+            f"($|\\mathrm{{Aut}}(D)| = 1$, trivial automorphism group), with "
+            f"100\\% canonical invariance. "
+            f"At $k = {k_max}$, ${k_max_fact:,}$ equivalent representations "
+            f"are collapsed in $< 1$\\,ms."
+        )
+    else:
+        # Sampled orderings: rho is the sample size, not k!, so the claim that
+        # survives is the invariance -- one canonical string per expression.
+        perms_per_expr = sorted({int(r["n_perms"]) for r in rows})
+        perms_str = (
+            f"{perms_per_expr[0]:,}".replace(",", "{,}")
+            if len(perms_per_expr) == 1
+            else f"{perms_per_expr[0]:,}--{perms_per_expr[-1]:,}".replace(",", "{,}")
+        )
+        protocol = (
+            f"For each expression, ${perms_str}$ uniformly sampled permutations "
+            f"of internal node IDs were canonicalized via the WL-guided greedy "
+            f"algorithm; $k!$ is not enumerable at these $k$. "
+        )
+        outcome = (
+            f"All ${_format_power_of_ten(n_orderings)}$ sampled orderings "
+            f"collapsed to one canonical string per expression "
+            f"({n_invariant}/{n_total} expressions, 100\\% canonical "
+            f"invariance), so no automorphism was observed and the measured "
+            f"reduction factor is bounded below only by the sample size. "
+            f"At $k = {k_max}$ the right axis plots "
+            f"${_format_power_of_ten(float(k_max_fact))}$ orderings."
+        )
 
     return (
         f"Synthetic scalability analysis. "
@@ -404,19 +615,12 @@ def _build_caption(
         f"$\\{{+, \\times, \\hat{{}}, \\sin, \\cos, \\exp, \\log, "
         f"\\mathrm{{neg}}, \\mathrm{{inv}}\\}}$ and "
         f"$m \\in \\{{{', '.join(str(v) for v in m_values)}\\}}$ variables. "
-        f"For each expression, all $k!$ permutations of internal node IDs "
-        f"were exhaustively canonicalized via the WL-guided greedy algorithm. "
-        f"Left axis (boxplots): canonicalization time grows as "
-        f"$O(k^{{{b_fit:.1f}}})$ (power-law fit, dashed), confirming that "
-        f"the greedy-invariant algorithm avoids the factorial worst case. "
+        f"{protocol}"
+        f"{growth}"
         f"Right axis (dotted, red shading): the $k!$ equivalent "
         f"representations that canonicalization collapses to a single "
-        f"canonical string. The reduction factor equals $k!$ for all "
-        f"{n_exact_kfact}/{n_total} expressions "
-        f"($|\\mathrm{{Aut}}(D)| = 1$, trivial automorphism group), with "
-        f"100\\% canonical invariance. "
-        f"At $k = {k_max}$, ${k_max_fact:,}$ equivalent representations "
-        f"are collapsed in $< 1$\\,ms."
+        f"canonical string. "
+        f"{outcome}"
     )
 
 
@@ -425,8 +629,17 @@ def _build_caption(
 # =============================================================================
 
 
-def generate_figure(data_dir: str, output_dir: str) -> str:
-    """Generate the single-panel synthetic scalability figure."""
+def generate_figure(data_dir: str, output_dir: str, powerlaw_fit: bool = False) -> str:
+    """Generate the single-panel synthetic scalability figure.
+
+    Args:
+        data_dir: Directory holding the ``synth_k*_m*.csv`` fragments.
+        output_dir: Destination for the figure, caption and LaTeX table.
+        powerlaw_fit: Overlay the fitted power law on the timing axis.
+
+    Returns:
+        The output path stem of the saved figure.
+    """
     apply_ieee_style()
 
     rows = load_synthetic_data(data_dir)
@@ -449,7 +662,8 @@ def generate_figure(data_dir: str, output_dir: str) -> str:
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     fig.subplots_adjust(left=0.16, right=0.82, top=0.95, bottom=0.14)
 
-    b_fit = plot_figure(ax, rows)
+    b_fit = plot_figure(ax, rows, powerlaw_fit=powerlaw_fit)
+    logger.info("Power-law exponent b = %.3f (drawn=%s)", b_fit, powerlaw_fit)
 
     # Save figure
     os.makedirs(output_dir, exist_ok=True)
@@ -460,7 +674,7 @@ def generate_figure(data_dir: str, output_dir: str) -> str:
     plt.close(fig)
 
     # Save caption
-    caption = _build_caption(rows, b_fit)
+    caption = _build_caption(rows, b_fit, powerlaw_fit=powerlaw_fit)
     caption_path = os.path.join(output_dir, "fig_synthetic_scalability.caption.txt")
     Path(caption_path).write_text(caption)
     logger.info("Caption: %s", caption_path)
@@ -492,5 +706,14 @@ if __name__ == "__main__":
         default=_OUTPUT_DIR,
         help="Output directory for figure and caption.",
     )
+    parser.add_argument(
+        "--powerlaw-fit",
+        action="store_true",
+        help=(
+            "Overlay the fitted power law on the timing axis. Off by default: on "
+            "the exhaustive dataset the permutation count per expression is k!, so "
+            "per-expression warm-up amortises as C/k! and biases the exponent down."
+        ),
+    )
     args = parser.parse_args()
-    generate_figure(args.data_dir, args.output_dir)
+    generate_figure(args.data_dir, args.output_dir, powerlaw_fit=args.powerlaw_fit)

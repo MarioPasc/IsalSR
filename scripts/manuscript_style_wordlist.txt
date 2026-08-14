@@ -13,31 +13,36 @@
 #
 # Consumed by scripts/check_manuscript_style.sh.
 
-# --- the -ise / -ize family (stems, so all inflections are covered) -------
-canonicalis	canonicaliz
-normalis	normaliz
-standardis	standardiz
-generalis	generaliz
-specialis	specializ
-optimis	optimiz
-minimis	minimiz
-maximis	maximiz
-utilis	utiliz
-organis	organiz
-characteris	characteriz
-summaris	summariz
-penalis	penaliz
-parameteris	parameteriz
-randomis	randomiz
-regularis	regulariz
-vectoris	vectoriz
-visualis	visualiz
-recognis	recogniz
-emphasis[ei]	emphasiz
-stabilis	stabiliz
-initialis	initializ
-serialis	serializ
-tokenis	tokeniz
+# --- the -ise / -ize family ------------------------------------------------
+# Every stem carries the lookahead (?=ation|e|ing), which admits -isation,
+# -ise, -ised, -ises, -iser and -ising while refusing the American words that
+# merely start the same way. Without it the bare stem is a substring of
+# "optimistic", "optimism", "specialist", "generalist", "organism" and
+# "characteristic", and the guard then demands a misspelling ("optimiztic").
+canonicalis(?=ation|e|ing)	canonicaliz
+normalis(?=ation|e|ing)	normaliz
+standardis(?=ation|e|ing)	standardiz
+generalis(?=ation|e|ing)	generaliz
+specialis(?=ation|e|ing)	specializ
+optimis(?=ation|e|ing)	optimiz
+minimis(?=ation|e|ing)	minimiz
+maximis(?=ation|e|ing)	maximiz
+utilis(?=ation|e|ing)	utiliz
+organis(?=ation|e|ing)	organiz
+characteris(?=ation|e|ing)	characteriz
+summaris(?=ation|e|ing)	summariz
+penalis(?=ation|e|ing)	penaliz
+parameteris(?=ation|e|ing)	parameteriz
+randomis(?=ation|e|ing)	randomiz
+regularis(?=ation|e|ing)	regulariz
+vectoris(?=ation|e|ing)	vectoriz
+visualis(?=ation|e|ing)	visualiz
+recognis(?=ation|e|ing)	recogniz
+emphasis(?=e|ing)	emphasiz
+stabilis(?=ation|e|ing)	stabiliz
+initialis(?=ation|e|ing)	initializ
+serialis(?=ation|e|ing)	serializ
+tokenis(?=ation|e|ing)	tokeniz
 
 # --- the -our / -or family ------------------------------------------------
 behaviour	behavior

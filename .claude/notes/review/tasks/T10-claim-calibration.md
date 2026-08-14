@@ -7,7 +7,7 @@
 | Owner | **Mario** (`discussion.tex`, `results.tex`) · **Ezequiel** (`conclusion.tex`) |
 | Depends on | T02 (the new `S`), T01 (§8.1 projection), T03 (if Gray changes cost) |
 | Blocks | T12, T13 |
-| Status | **IN PROGRESS — text half done, numbers pending T02.** The R1.1 answer is written into `reviews/response_to_reviewers.tex` with every campaign-dependent value wrapped in a new `\pendingnum{}` macro (7 placeholders, listed in §8). E3 is **complete**: "near-linear" is gone from `discussion.tex` and `conclusion.tex` in the annotated copy, and the relation between the O(k^0.7) fit and the near-O(k²) bound is stated once. "Approximately neutral" is gone. AC-2, AC-4, AC-5, AC-6, AC-7, AC-8 met; AC-0 met; **AC-1 met with a negative result** (§8: the §4 formula does **not** follow from the code's `S`); **AC-3 blocked on T02** and re-scoped away from the formula. |
+| Status | **COMPLETE 2026-08-14.** All nine acceptance criteria met, every number personally re-derived. The seven `\pendingnum{}` placeholders are filled from campaign C2 and the letter now carries none. **Answer A is confirmed by the data and the concession got harder, not softer**: Bingo's `S` fell 0.93 → 0.72. AC-1 stands as a negative result (§4's break-even formula is refuted by the code's `S`), and a second premise failed on the data — there is **no ρ range in which Bingo's `S ≥ 1`**, because ρ is nearly constant on that host (corr(ρ, `S`) = +0.04); the letter says so and names run length (`r = +0.41`) as what actually predicts `S`. Four defects fixed beyond the original scope: the `T_eval/T_canon` median mislabel (4 sites), a false CD separation claim in `results.tex`, p-values without effect sizes in `conclusion.tex`, and a 3× understatement of the Bingo wall-clock cost in the abstract. **Three edits need Ezequiel's and Karl's sign-off — see §9.4.** |
 | Target | 2026-09-10 |
 
 ---
@@ -186,6 +186,306 @@ trust. Then report the measured `T_c/T_e` per method and the implied break-even 
 
 ## 8. Work log
 
+### 2026-08-14 — reopened on T02's completion; plan for the closing pass
+
+T02's campaign C2 completed on 2026-08-14 (12,600 cells, certifier GO 19/19), and
+the numbers were carried into all five documents by commit `1f9a77d`. **T10's
+blocker is gone and its seven `\pendingnum{}` placeholders are already filled** —
+`grep` returns one occurrence in the letter and it is the macro definition itself.
+What is left is therefore not writing but *verification*: the ticket's own standing
+rule is that a number nobody re-derived is a number nobody checked.
+
+Plan for this pass:
+
+1. Run `experiments/scripts/review_campaign/verify.py` in the main tree. It asserts
+   each quoted literal against `analyses/values/summary.json` and exits non-zero on
+   drift. **Done — 49 literals, 16 derived-value gates, all pass; 0 placeholders in
+   the paper, 0 in the letter, 12 in the supplementary (the synthetic permutation
+   study, not T10's).**
+2. Verify the **eleven** R1.1/discussion numbers `verify.py` does *not* cover
+   (the two `T_eval/T_canon` medians, the UDFS suite-level `S`, the ρ–`S`
+   correlation, the two ρ intervals, the 66-of-70 count, the run-length
+   correlation, the UDFS 29-of-70 count, the CD mean ranks, the 1.45× slowdown,
+   the Korns-12 triple). Delegated read-only, with the *median-of-ratios versus
+   ratio-of-medians* distinction called out explicitly as a fail condition.
+3. Re-sweep AC-5 and AC-7 against the current text rather than against the
+   2026-08-06 state, since the whole Practical Impact subsection was rewritten
+   after that entry was written.
+4. Judge over- **and under**-claiming in both directions, and close.
+
+Two facts established before delegating, both of which change what R1.1 may say:
+
+- **The baseline arm was re-run.** The 2026-07-27 decision (README) was that the
+  native arm would *not* be re-executed on the original 50 problems. The campaign
+  as executed is 2 methods × 3 arms × 70 problems × 30 seeds = 12,600 cells, and
+  `verify.py` confirms 2,100 cells per (method, arm) — i.e. all 70 problems in
+  every arm. The letter's claim that the comparison has "a baseline re-run on the
+  same hardware in the same campaign rather than inherited from an earlier one" is
+  therefore true, and the residual wall-clock confound that `EXECUTION-PLAN.md` §5
+  reserved a disclosure for **no longer exists on this contrast**. Do not carry
+  that disclosure into R1.1.
+- **The Bingo number moved against us**, from `S = 0.93` to `S = 0.72`. The C++
+  engine's speedup did not cancel T16's alphabet cost; §15's warning was correct in
+  direction. R1.1 states this outright and names it a worse ratio than the one the
+  reviewer objected to. That is the right call and it is not to be softened.
+
+### 2026-08-14 — R1.2's measurement was already in the campaign; `reachability/` built from it
+
+Asked to make the T06 numbers self-contained. Investigating where to copy them
+from turned up something better: **every deduplicating cell of C2 already writes a
+`fallback_ledger.json` carrying exactly the quantities R1.2 asks for**, and nobody
+had pooled them. Mario's rule — *"everything we can re-derive from the C2 campaign
+rather than re-computing is worth doing"* — then settles the whole question.
+
+`…/results/review/c2_3arm/reachability/` now holds three files, all campaign-derived:
+`README.md`, `reachability.json`, `reachability_cells.csv` (8,400 rows). Generator:
+`experiments/scripts/review_campaign/reachability.py`, exits non-zero on a failed check.
+
+| Quantity | T06 probe (what the letter quotes) | C2-derived |
+|---|---|---|
+| Candidates | 154,568 Bingo / 3,890 UDFS | **17,270,162,980** |
+| Violate on arrival | 85.88 % / 100 % | **74.72 %** — 74.15 % Bingo, **100.0000 %** UDFS |
+| Violate after `𝒩` | 0 | **0** |
+| Bypass events (4 paths) | 0, bound 1.64e-5 | **0**, bound **1.74e-10** |
+
+**Six validation checks, all 8,400/8,400** — and the first two are the point, not
+ceremony: `instrumentation_enabled` and `population_non_empty`. This is SP-6, the
+failure that cost a 1,260-run wave: a disabled counter and a counter that saw
+nothing both report zero. Without those two checks, C4's four zeros would be
+indistinguishable from "nothing was measured". The other four are `readable`,
+`full_census` (`sample_rate = 1`, `n_seen == n_sampled`, so these are census rates
+and not estimates), `histograms_sum_to_counters`, and
+`violations_never_exceed_samples`.
+
+**An independent cross-check on what is being counted.** Ledger candidates ÷
+campaign evaluations reproduces `ρ` through separate code: `udfs/hash` **1.0000**
+against `ρ_σ = 1.0000` — exact, to the unit, over 146,745,434 candidates, which it
+must be because the naive hash provably removes nothing on UDFS — then 1.6837,
+1.7604, 1.8201 against 1.6637, 1.7270, 1.7850.
+
+**Cleaned on instruction.** The first cut of this folder also carried the T06/T15
+local probes (`norm_arms/`, `t06_ledger/`). Mario: *"only numbers derived from the
+campaign"*. Removed, after preserving the Picasso-recovered UDFS half — which
+existed in no local copy — at
+`/media/mpascual/Sandisk2TB/research/isalsr/results/t15_norm_arms/udfs/`. Nothing
+was lost; the folder no longer invites a comparison between populations five orders
+of magnitude apart.
+
+**What this unblocks and what it changes.**
+
+- The provenance objection to writing the Appendix D block is **gone**. It can be
+  sourced from a committed, regenerable artefact instead of ticket prose.
+- **The letter's R1.2 figures are now the weaker evidence** and should be replaced
+  wholesale, not patched. Whoever writes that block should also drop four claims
+  the extraction found unsupportable: the bounds are **Wilson**, not "one-sided
+  Poisson" as the letter says; `atlas_hit = 0` is zero **by configuration**, the
+  atlas being disabled, not by a live path declining to fire; T06's fourth
+  population (49,980 synthetic DAGs at 0 %) is **vacuous**, its generator emitting
+  no `Const` so it cannot exhibit the violation; and the `ρ = 1.80 → 3.91`
+  timeout-bias pair quoted in the letter **has no artefact at all**, the surviving
+  one giving 1.7759 → 2.6595, which T06 itself records must not be quoted.
+- `74.72 %` is a pooled census dominated by Bingo's long runs, not a per-problem
+  mean. `reachability_cells.csv` carries the distribution.
+
+Certified tree untouched — `find -newermt` confirms nothing outside `reachability/`
+was written. Artefact byte-reproducible on re-run; ruff clean; all 17 figures in
+its README re-checked programmatically against the JSON.
+
+### 2026-08-14 — audit findings fixed on Mario's instruction; two items blocked on the supplementary lane
+
+Mario: *"Fix everything you have found. Don't worry about the hardcoded appendix
+references, I will reconcile them in a different ticket."* Fixed accordingly, in
+files across four tickets' lanes. **Recorded here rather than in each ticket
+because a fix nobody can find is a fix nobody can audit** — T06, T07, T11, T12 and
+T14 each need to be told.
+
+| # | Was | Now | File |
+|---|---|---|---|
+| 1 | *"count timed-out DAGs as unique, which is conservative"* — the letter itself concedes at `:529` that the implementation does the opposite | Corrected: a timed-out candidate is evaluated **without** its string entering the dedup set, so the bias on ρ is **upward**, not conservative; and no timeout occurred on any of the 12,176,790 Bingo or 234,865 UDFS candidates, so nothing depends on it | `discussion.tex:166` |
+| 2 | *"The effective number of paired seeds … is reported per problem in the appendix tables"* — the tables assert a uniform 30 | Measured and stated: **exactly 30 on every problem, host and contrast**. Verified myself: 12,600 cells, **zero** non-finite `r2_test`, all 420 (method, problem, arm) groups at 30. R2.7's NaN failure does not recur | `computational_experiments.tex:248` |
+| 3 | The `\changeref` promised a Section 6 future-work remark on `𝒩` that did not exist | **Written**, rather than deleting the promise: the creation edge is an artefact of Σ_SR, and an insertion that creates a node without an edge would remove `𝒩` and weaken the reachability condition, at the cost of a larger string space | `discussion.tex`, Limitations |
+| 4 | Letter claimed the wall-clock winner count "moves into the main text", then gave 13 (Bingo) **and 29 (UDFS)**; only 13 was there | UDFS's 29 added, and **registered in `verify.py`** (121 checks now) so it cannot drift | `discussion.tex:78`, `verify.py` |
+| 5 | R2.8/R3.2: *"it now reads ``on both methods''"* | The clause was not repaired, it was **deleted** — the campaign replaced the quantity it reported. Both answers now say so | letter `:1831`, `:2195` |
+| 6 | R2.8: *"The campaign that replaces them is running … we have not written provisional values"* | Replaced with what is true: every abstract figure is the re-executed campaign's, produced by the pipeline that produces the tables, with a check asserting each against it | letter `:1912` |
+| 7 | R2.4: *"The main document has three tables"* | Submitted had three, the revision has five, and the FCS pseudocode is in neither | letter `:1526` |
+| 8 | R1.3: claimed **pseudocode** for `𝒩`; `\changeref` claimed it sits "immediately before the D2S insertion rules" | Pseudocode claim dropped (Appendix C holds only S2D, D2S, FastCanonical); position corrected to §3.6 | letter `:561`, `:821` |
+| 9 | R1.4 `\changeref`: tree-hashing precedent "in Sec. 2.4" | §2.3 — 2.4 is *Benchmarking in SR* | letter `:1002` |
+| 10 | R2.7 `\changeref`: "Tables 6 and 7 … per-problem effective seed count"; "Korns-12 a tie at $R^2 = 0.0000$ under both variants" | Table numbers dropped for a description; Korns-12 restated for **three** arms as 0.000 / 0.016 / 0.000 | letter `:1810` |
+| 11 | R2.5: present-tense "Tables 6--7 **are** per-problem result tables" | Past tense, plus a note that both have been renumbered by the appendix additions | letter `:1583` |
+| 12 | R3.1 `\changeref`: "new table" in App. D.1 | Two tables, documenting all seventy | letter `:2177` |
+| 13 | Summary-of-changes R2.7 row pointed at "Tables 6--7" | App. D | letter `:260` |
+| 14 | **`previously_published_statement`** described *the journal manuscript* with the submitted campaign's numbers: 50 problems, 8 sources, ρ = 1.56/1.83, d = 2.38, p = 2.7×10⁻²², overhead 39 %, and a top-gain problem list from the old campaign | Rebuilt on C2: 70 problems, 9 sources, three arms, ρ = 1.66/1.79, d = 2.54/7.05 at p < 10⁻¹², R² p with effect sizes, overhead 0.04 %/16.1 % **and the 1.45× Bingo cost**. Top-gain list **recomputed** from `per_problem.csv` (I.30.3, Strogatz-lv2, I.12.4, III.17.37, II.34.29a), not transcribed. Supplementary page count 13 → 18 | `previously_published_statement/main.tex` |
+
+**Verification.** `verify.py` **121/121**, ruff clean. Paper 18 pp, `main_anonymous`
+18 pp, letter 36 pp, previously-published statement — all 0 errors, 0 overfull,
+0 undefined references. Three double-blind paper mirrors byte-identical;
+`double_blind/paper/computational_experiments.tex` carries its anonymisation delta
+and received the same edit separately.
+
+**Blocked on the supplementary lane** (held by the T09 session for a compute job
+filling its twelve remaining `\pendingnum`):
+
+1. **The Appendix D subsection for R1.2.** Letter `:539` still says the
+   violation-rate measurements "are collected in Appendix~D"; they are collected
+   nowhere. **This sentence must not ship until the appendix exists**, and it is
+   the last false claim left in the letter.
+2. `supplementary.tex:983–984`, the twin of fix 1 above.
+3. `double_blind/supplementary/supplementary_anonymous.tex`, stale by 59 lines and
+   both `bench_struct` tables — the double-blind tree documents **42 of 70**
+   problems where the live tree documents 70 of 70 (**T14**).
+
+**A provenance gap Mario must rule on.** T06 is closed and its numbers are real,
+but they live at `picasso:~/execs/isalsr/t15_norm_arms/udfs/` and in per-run
+`run_log.json`, **not** in a committed artefact — there is no `reachability.json`
+answering to `appendix_d_benchmarks.json`. Everything else in the revision now
+stands on a generated file that `verify.py` can assert against. If the Appendix D
+block is written from the ticket's recorded measurement, it will be the one
+headline block in the revision that is not reproducible from the repository.
+Reporting it is still strictly better than R1.2's status quo, in which the
+quantity is never reported at all — but the decision to pull T06's JSON down and
+commit it is Mario's, and it should be taken before the appendix is written, not
+after.
+
+### 2026-08-14 — letter audit: three broken cross-references fixed in `discussion.tex`; six defects filed out of lane
+
+Asked after T10 closed: *what is left to write in the letter, and is anything in
+it stale against the article?* Two independent read-only audits — one over all 18
+`\changeref` usages, one over the letter's prose assertions — converged on the
+same two defects, which is the agreement that made them worth acting on.
+
+**In lane, fixed.** The revision inserted the naive-hash comparator as a **new
+Appendix E**, so everything after it shifted a letter: scalability moved E → **F**.
+`discussion.tex` hard-codes its appendix pointers rather than using `\ref`, and
+all three were left behind:
+
+| Line | Was | Should be | Target |
+|---|---|---|---|
+| 36 | Appendix E.2 | **F.2** | `sec:supp_scalability_synthetic` — the 5,400-DAG study (9 k × 3 m × 200 = 5,400, checked) |
+| 58 | Appendix E.1 | **F.1** | `sec:supp_scalability_empirical` — per-`k` over the 70 problems |
+| 159 | Appendix E.1 | **F.2** | the `O(k^{0.7})` fit is the *synthetic* study; this one had **both** parts wrong |
+
+All three now point at the naive-hash appendix in the shipped PDF. This is R2.4's
+own defect — a cross-reference to something that is not there — recurring inside
+the revision that answers it. Fixed, double-blind mirror re-synced, paper rebuilt
+(18 pp, 0/0/0), `verify.py` 120/120.
+
+**The root cause is not fixed and cannot be fixed here.** ~20 hardcoded
+`Appendix~X` pointers remain across `methodology.tex`, `computational_experiments.tex`
+and `results.tex`; every one of them re-breaks if another `\section` is inserted
+into the supplementary. The paper and the supplementary are separate documents, so
+`\ref` does not resolve across them without `xr`. **T11 owns cross-document
+consistency and should carry a standing check**, not a one-time sweep.
+
+**Out of lane, filed with evidence, not absorbed:**
+
+| # | Defect | Owner |
+|---|---|---|
+| 1 | **Letter `:539` and its `\changeref` `:541` tell R1 the reachability violation-rate measurements "are collected in Appendix~D".** They are in no `article/` file. Nine independent search patterns — `violation rate`, `violation-rate`, `85.88`, `154{,}568`, `3{,}890`, `12{,}176`, `234{,}865`, `reachability failure`, `fail the precondition` — return **zero hits** across all paper `.tex` and the supplementary. A promise to a reviewer, about that reviewer's own comment, that the manuscript does not keep | **T06** |
+| 2 | Letter `:1905–1912` (R2.8) says the abstract's figures "are those of the submitted campaign" and "the campaign that replaces them is running". C2 finished 2026-08-14 and the abstract carries its figures under `verify.py`. Three false clauses in a paragraph opening *"we would rather say so than let it be discovered"* | **T12** |
+| 3 | Letter `:1831` (R2.8) and `:2195` (R3.2) both say the abstract "now reads ``on both methods''". That phrase is absent — now **and at HEAD before my edits**, so not a regression of mine. The abstract says "under both hosts" | **T12** |
+| 4 | Letter `:561` claims the revision gives `normalize_const_creation` **pseudocode**. Appendix C holds exactly three algorithm tables — S2D, D2S, FastCanonical. Definition 3.16 is prose | **T07** |
+| 5 | Letter `:1525` says "the main document has three tables"; `main.aux` lists **five**. Letter `:257–260` and `:1582` point at supplementary "Tables 6--7" for per-problem results; those are now the new benchmark-inventory tables, and the per-problem tables are 10–11 | **T11** |
+| 6 | Letter `:1836` says the previously-published statement carries the corrected headline figures. It still reports the 50-problem campaign (ρ = 1.56/1.83, d = 2.38, p = 2.7×10⁻²², overhead 39 %) | **T11** |
+| 7 | **`double_blind/supplementary/supplementary_anonymous.tex` is stale**: 1,670 lines / 4 `\input`s against the live 1,729 / 6, missing both `bench_struct` tables — so the double-blind tree still documents 42 of 70 problems while the live tree documents 70 of 70. Under double-blind that is the tree reviewers read, and **no harness checks it**: `verify.py`'s `GROUPS` is `{paper, supplementary, letter}` | **T14** |
+
+**One imprecision in R1.1 itself, left as written and recorded here.** The letter
+says the count of wall-clock winners "moves into the main text", then gives
+13 of 70 for Bingo *and* 29 of 70 for UDFS. Only the Bingo count is in
+`discussion.tex`; `29` appears nowhere in `article/paper/*.tex`. The sentence is
+defensible — the count the reviewer asked about is Bingo's, and that one did move
+— but a reviewer who greps for 29 will not find it. Either add the UDFS count to
+`discussion.tex` or attribute it to the letter. **Flagged for T14's final pass
+rather than changed unilaterally**, because it trades against T13's page budget.
+
+### 2026-08-14 — every R1.1 number re-derived; one real defect, three overclaims removed
+
+**The pipeline verifier passes, and passing it was not sufficient.**
+`experiments/scripts/review_campaign/verify.py` asserts 117 checks and all pass,
+but its coverage is the set of literals someone thought to register. Eleven
+R1.1-bearing numbers sat outside it. Recomputed from
+`analyses/data/*.csv` (script kept at `scratchpad/t10_recompute.py`):
+
+| # | Printed | Recomputed | Verdict |
+|---|---|---|---|
+| 1 | Bingo "median per-DAG ratio `T_eval/T_canon` of 20" | median-of-ratios **23.21**; ratio-of-medians **20.08** | **FAIL — mislabelled** |
+| 2 | UDFS "median ratio exceeds 5,000" | 6851.1 / 5761.5 | passes as an inequality, same mislabel |
+| 3 | UDFS suite-level `S = 1.00` | 1.0005 over cells | ✅ |
+| 4 | Bingo corr(ρ, `S`) `= +0.04` | Pearson +0.0435, N = 70 | ✅ |
+| 5 | 22 with `S ≥ 1` over ρ ∈ [1.77, 1.84]; 48 over [1.19, 1.85] | 22 / 48; [1.7727, 1.8377] / [1.1889, 1.8530] | ✅ |
+| 6 | \|ρ − 1.79\| ≤ 0.09 on 66 of 70 | 66 | ✅ |
+| 7 | `r = +0.41` vs log native wall clock | Pearson +0.4066 | ✅ |
+| 8 | UDFS 29 of 70 faster end to end | 29 | ✅ |
+| 9 | CD mean ranks 1.51 / 2.10 / 2.39 | baseline 1.5143, hash 2.100, isalsr 2.3857 | ✅ |
+| 10 | Bingo median seed-matched slowdown 1.45× | 1.4462 | ✅ |
+| 11 | Korns-12 R²: 0.000 / 0.016 / 0.000 | 0.000000 / 0.015980 / 0.000000 | ✅ |
+
+**Item 1 is the defect and it is now fixed.** "A median per-DAG ratio of 20" is
+the *ratio of the two medians* (1.48 / 0.074), not the *median of the per-cell
+ratios*, which is 23.21 — 16 % higher. The letter stated it as an equality, so
+the two readings are not interchangeable there. Relabelled to "a ratio of median
+per-DAG costs" at all four sites (`letter` R1.1 ×2, `discussion.tex:68`,
+`results.tex:296`) rather than swapping in 23, because 20 is reproducible by a
+reader dividing Table 2's two printed medians and 23 is reproducible from
+nothing in the paper. The relabel also does not flatter us: 20 is the *smaller*
+ratio. The same mislabel in the provenance ledger (`values.py:406, 513`,
+`"median ratio of…"`) is corrected.
+
+**Two overclaims removed that no reviewer raised.**
+
+1. `results.tex:149` said *"On UDFS the three separate"* on the R² critical-
+   difference axis. They do not. Mean ranks are 2.25 (native), 2.393 (naive
+   hash), 1.357 (IsalSR); the native and naive-hash arms differ by **0.143**
+   against a critical difference of **0.396**, and `critical_difference.json`
+   puts them in one clique. Only IsalSR separates. Rewritten to say exactly
+   that — which is the *stronger* claim for IsalSR as well as the true one.
+2. `conclusion.tex:23–26` reported the R² paired test as two p-values and called
+   them "what settles the effect of deduplication on regression quality", with
+   no effect size. Against Table 2's Bingo row — 0.976 / 0.975 / 0.976, mean
+   difference **+0.0006**, `d = +0.08` — a bare `p = 7.5×10⁻⁴` reads as a quality
+   claim the data does not carry. Effect sizes added on Mario's decision, and
+   the sentence now separates the two hosts: improvement where the budget binds,
+   unchanged where the host saturates. **`conclusion.tex` is Ezequiel's file; this
+   is the second T10 edit in it and both need flagging to him.**
+
+**The abstract understated the Bingo cost by roughly 3×.** It reported the
+canonicalisation overhead (16.1 %) and no wall-clock verdict, so a reader of the
+abstract alone infers a 16 % cost where `results.tex:311` measures **1.45×**.
+That is the R1.1 defect surviving in the most-read part of the paper. On Mario's
+decision the closing sentence now carries one clause of cost —
+*"…and $16.1\%$ on Bingo, where the deduplicated search is $1.45\times$ slower end
+to end"* — and the abstract was tightened from **343 to 297 words** by cutting two
+explanatory relative clauses and four redundant phrases. No advantage was
+removed. `main.tex` is Ezequiel's and the abstract pass is **T12/Karl's** — this
+is a substantive edit in both their lanes and must not be silently inherited.
+
+**A √2 error survives in a generated artefact.** `analyses/values/critical_difference.json`
+carries `cd_value = 0.5603` on **every** per-host axis. The Demšar-correct value
+for k = 3, N = 70 is `q₀.₀₅(3,∞)/√2 · √(3·4/(6·70)) = 0.3962`, and
+0.5603 = 0.3962·√2 — i.e. the raw studentized range, the exact bug that
+`statistical_tests.py:233` was fixed for and that
+`tests/unit/test_nemenyi_critical_difference.py` pins. **No printed number is
+affected**: the paper's 0.40 and 0.90 are correct (I recomputed both against
+scipy), nothing in `review_campaign/` writes or reads that file, and
+`cd_diagram.py` goes through `critdd` directly. Every clique conclusion in the
+manuscript holds under either threshold. But the file is a provenance trap for
+anyone who reads it as the source of the figure. **Filed, not absorbed — it
+belongs to whoever owns the CD figure.**
+
+**Not a defect, checked and cleared.** `discussion.tex:110` says IsalSR
+"preserves regression quality" on cheap-evaluation workloads while the paired
+test returns a significant `+0.08` on Bingo. That is the right word, not an
+under-claim: the means agree to three decimals and `d = 0.08` is negligible.
+Calling it an improvement would be the overclaim.
+
+**Verification.** `verify.py` 117/117 after the edits (two of its anchors were
+tied to abstract phrasing I rewrote; the anchors were re-pointed, the checks were
+not weakened). `pytest tests/unit -k "statistical or analyzer or aggregation or
+nemenyi or nan_integrity"` → 100 passed. `ruff` clean. All four documents build
+at 0 errors, 0 overfull boxes, 0 undefined references: paper 18 pp,
+`main_anonymous` 18 pp, letter, and the three double-blind mirrors
+(`discussion`, `results`, `conclusion`) restored to byte-identical after my edits
+broke them.
+
 ### 2026-08-06 — `S` verified against the code; §4's break-even formula does not survive it
 
 **AC-1, and it came out negative.** The formula proposed in §4,
@@ -311,15 +611,22 @@ preamble macro enters that float. Owner of that table needs to shorten a cell.
 
 | Quantity | Submitted | Revised | Source |
 |---|---|---|---|
-| `S`, Bingo | **0.93** | `\pendingnum` 3 | T02 |
-| `S`, UDFS | 1.07 | `\pendingnum` 5 | T02 |
+| `S`, Bingo | **0.93** | **0.72** — moved *against* us | C2, verified |
+| `S`, UDFS | 1.07 | **1.96** unsaturated / **1.00** suite median (1,727 of 2,100 cells at the cap) | C2, verified |
 | Discussion characterisation | "approximately neutral" | **removed**; net cost stated outright, regime given as a joint condition on ρ and `T_eval/T_canon` | AC-2 ✅ |
-| Break-even condition stated | no | **yes, as a condition on the two measured ratios** — not as §4's formula, which the code refutes (§8) | AC-3, re-scoped |
-| `T_c / T_e`, Bingo | 3.3 : 1 | `\pendingnum` 1 | T02 |
-| `T_c / T_e`, UDFS | 1 : 64 | `\pendingnum` 4 | T02 |
-| Break-even ρ, Bingo | ≈ 1.85 (implicit) | `\pendingnum` 6, phrased so "no such range" is a legal answer | AC-3 |
-| Problems with `T_IS < T_BL`, Bingo | 4 / 50 (supplementary only) | **now in the main text**, `discussion.tex`; re-executed value is `\pendingnum` 7 | AC-4 ✅ |
-| Median canon overhead, Bingo | 39.2 % | `\pendingnum` 2 | T02 |
+| Break-even condition stated | no | **yes, as a condition on the two measured ratios** — not as §4's formula, which the code refutes (§8) | AC-3 ✅, re-scoped |
+| `T_e / T_c`, Bingo | 1 : 3.3 | **20 : 1** (ratio of medians; median-of-ratios 23.2) | C2, verified |
+| `T_e / T_c`, UDFS | 64 : 1 | **> 5,000 : 1** (5,762 ratio-of-medians; 6,851 median-of-ratios) | C2, verified |
+| Break-even ρ, Bingo | ≈ 1.85 (implicit) | **no such range exists** — ρ spans [1.19, 1.85] on the losers and [1.77, 1.84] on the winners; corr(ρ, `S`) = **+0.04** | C2, verified |
+| What *does* predict `S` on Bingo | — | **run length**, `r = +0.41` against log native wall clock | C2, verified |
+| Problems with `T_IS < T_BL`, Bingo | 4 / 50 (supplementary only) | **13 / 70, in the main text** | AC-4 ✅ |
+| Problems with `T_IS < T_BL`, UDFS | not reported | **29 / 70** (letter) | C2, verified |
+| Median canon overhead, Bingo | 39.2 % | **16.1 %** | C2, verified |
+| Median canon overhead, UDFS | — | **0.04 %** | C2, verified |
+| Abstract's cost statement | overhead only, no wall-clock verdict | **overhead + the 1.45× Bingo slowdown**, one clause; abstract 343 → 297 words | AC-7 ✅ |
+| Conclusion's R² claim | two p-values, no effect size | **p with Cohen's `d`**, and the two hosts separated | new, 2026-08-14 |
+| `results.tex:149` R² CD claim | "on UDFS the three separate" — **false** | only IsalSR separates; native and naive hash are one clique (0.143 < CD 0.396) | new, 2026-08-14 |
+| `T_eval/T_canon` label | "median ratio" | "ratio of median costs" at all four sites | new, 2026-08-14 |
 | Complexity in conclusion | "near-linear" | near-$O(k^2)$ | AC-6 ✅ |
 | Complexity in discussion (×2) | "near-linear" | near-$O(k^2)$ | AC-6 ✅ |
 | Complexity in introduction | near-O(k²) ✓ | unchanged | AC-7 ✅ |
@@ -327,24 +634,44 @@ preamble macro enters that float. Owner of that table needs to shorten a cell.
 | Relationship of O(k^0.7) to O(k²) | unstated | stated once, `discussion.tex:100–107` | AC-6 ✅ |
 | Answer chosen | — | **A**, and structured so it stays true if T02 delivers B | §4 |
 
-Answer A was chosen not because the data favoured it but because the data does not
-exist yet. The text concedes, characterises the regime, and defers only the
-numbers; if T02 returns `S > 1` for Bingo, filling the placeholders converts it
-into Answer B without rewriting a sentence.
+Answer A was chosen not because the data favoured it but because the data did not
+exist yet. **The campaign has now settled it: Answer A is correct, and by a wider
+margin than the submitted numbers implied.** Bingo's `S` fell from 0.93 to 0.72;
+the C++ engine's speedup did not offset T16's alphabet cost, exactly as §15
+warned. The letter states this outright and calls 0.72 "a worse ratio than the
+0.93 the reviewer objected to". That sentence stays.
+
+**One structural claim in §4 also failed and had to be withdrawn from the answer.**
+§4 and the reviewer both assumed the winning problems are "the subset where ρ is
+large enough". They are not. On Bingo ρ is nearly constant — within 0.09 of 1.79
+on 66 of 70 problems — so it cannot discriminate, and corr(ρ, `S`) = +0.04. The
+22 problems with `S ≥ 1` span ρ ∈ [1.77, 1.84], *inside* the [1.19, 1.85] the
+losers span. R1.1 therefore concedes the reviewer's premise is wrong in our
+favour on the mechanism and against us on the outcome, and names what does
+predict `S`: run length, `r = +0.41`. This is the honest form of the answer and
+it is more useful to a practitioner than the conditional the reviewer proposed.
 
 ### 9.2 Changes made to the manuscript
 
-Applied to `reviews/internal_copy_reviewed_article/`, in blue. **Not** applied
-under `article/` and **not** pushed to Overleaf.
+Applied under `article/` (the `changes`-package tree is the single marked-up
+source; there is no separate annotated copy). **Not** pushed to Overleaf.
 
-| File | Lines (revised) | Change |
+| File | Lines | Change |
 |---|---|---|
-| `paper/discussion.tex` | 21–31 | the growth-rate inference from two median timings withdrawn; the medians reattributed to backtracking frequency; growth pointed at `Section~\ref{sec:canonical}` |
-| `paper/discussion.tex` | 65–82 | "approximately neutral" removed; net wall-clock cost stated with `S = 0.93` and 4 of 50; sign of `S − 1` given as the joint condition on ρ and `T_eval/T_canon`; "at neutral wall-clock cost" replaced |
-| `paper/discussion.tex` | 100–113 | "near-linear" → near-$O(k^2)$; the `O(k^{0.7})` fit qualified as a range description, with why it sits below the bound |
-| `paper/conclusion.tex` | 10–11 | "near-linear" → near-$O(k^2)$ |
-| `paper/results.tex` | — | untouched; it was already conditional, which is the whole point of the fix |
-| `reviews/response_to_reviewers.tex` | preamble, R1.1 | `\pendingnum` macro added; R1.1 answer written |
+| `paper/discussion.tex` | 19–34 | growth-rate inference from two median timings withdrawn; medians reattributed to backtracking frequency; growth pointed at `Section~\ref{sec:canonical}` |
+| `paper/discussion.tex` | 62–120 | "approximately neutral" removed; net wall-clock cost stated with `S = 0.72`, 13 of 70 and the 1.45× slowdown; sign of `S − 1` given as the joint condition on ρ and `T_eval/T_canon`; the ρ-conditional explicitly withdrawn on the data; "at neutral wall-clock cost" replaced |
+| `paper/discussion.tex` | 68 | **2026-08-14** — "the median `T_eval/T_canon`" → "the ratio of median costs" |
+| `paper/discussion.tex` | 154–165 | "near-linear" → near-$O(k^2)$; the `O(k^{0.7})` fit qualified as a range description, with why it sits below the bound |
+| `paper/conclusion.tex` | 11 | "near-linear" → near-$O(k^2)$ |
+| `paper/conclusion.tex` | 23–26 | **2026-08-14** — R² p-values given their Cohen's `d`; the two hosts separated (improves where the budget binds, unchanged where the host saturates) |
+| `paper/results.tex` | 149–152 | **2026-08-14** — "on UDFS the three separate" corrected: only IsalSR separates; native and naive hash are one clique |
+| `paper/results.tex` | 296–298 | **2026-08-14** — same `T_eval/T_canon` relabel |
+| `paper/main.tex` | 90 (abstract) | **2026-08-14** — the 1.45× Bingo slowdown added as one clause; two explanatory relative clauses and four redundant phrases cut; 343 → 297 words |
+| `reviews/response_to_reviewers.tex` | preamble, R1.1 | `\pendingnum` macro added; R1.1 answer written, then filled from C2; **2026-08-14** the `T_eval/T_canon` relabel ×2 |
+| `double_blind/paper/{discussion,results,conclusion}.tex` | — | re-synced byte-identical after the above |
+| `double_blind/paper/main_anonymous.tex` | 79 | abstract delta mirrored |
+| `experiments/scripts/review_campaign/values.py` | 406, 513 | provenance note relabelled to "ratio of median…" |
+| `experiments/scripts/review_campaign/verify.py` | 458, 468 | two abstract anchors re-pointed at the rewritten sentence (checks unchanged) |
 
 ### 9.3 Response text — WRITTEN
 
@@ -374,20 +701,38 @@ comment is about.
 
 ### 9.4 Residual risk
 
-- **The placeholders must not ship.** Seven of them, all red. Whoever closes T02
-  fills them from the campaign and re-reads §9.1 for the two hard-coded submitted
-  values (`0.93`, `4 of 50`), which must then be restated as "in the submitted
-  manuscript" or removed if the surrounding sentence no longer needs them.
+- **Closed.** The seven placeholders are filled; `grep` finds one `\pendingnum` in
+  the letter and it is the macro definition. The two hard-coded submitted values
+  survive and are correctly attributed: `0.93` as "the $0.93$ the reviewer
+  objected to", `4 of 50` as "In the submitted manuscript that count was four of
+  the fifty problems". `discussion.tex` no longer carries any submitted-campaign
+  number — the whole Practical Impact subsection was rebuilt on C2.
 - **Anticipated and realised**: "the break-even formula not matching the code's
-  `S` definition" (§9.4 as originally written). It did not match. Handled in §8.
-- If T02 returns `S > 1` for Bingo, a reviewer may ask whether the engine change
-  rather than the method produced it. The letter already answers this: it states
-  the engine change and the alphabet correction up front and declines to predict
-  their net effect, so the improvement is never attributed to the representation.
-- `discussion.tex:65–82` still carries `S = 0.93`, `39\%`, `1.07`, `34\%`, `1.83`,
-  `1.56` and "the $50$ problems". These are the submitted campaign's numbers and
-  are T02/T09's to refresh **as a block**; the calibration change is orthogonal to
-  them and must not be read as having endorsed them.
-- `conclusion.tex` is listed as Ezequiel's in the header. The E3 edit there is one
-  hyphenated complexity claim, made to keep the letter's statement true; flag it to
-  him rather than assuming silent consent.
+  `S` definition". It did not match. Handled in §8 (2026-08-06).
+- **The one a round-2 reviewer can still press.** `S` is measured under equal
+  wall-clock budgets, and the letter volunteers this. A reviewer may reply that an
+  evaluation-count budget is the fairer accounting for a method whose whole claim
+  is that it removes evaluations, and that under it Bingo's number would improve.
+  We do not report that number and do not know it. The letter's position — we
+  report seconds because seconds are what a practitioner spends, and we make no
+  claim under the other accounting — is defensible but it is a refusal, not an
+  answer. **If queue time allows before the freeze, the cheapest possible answer
+  is an offline replay: `ρ` is already measured, so `S` under an evaluation budget
+  is bounded below by `ρ/(1 + ρ·T_c/T_e)` with the measured `T_c/T_e = 1/20`,
+  giving ≈ 1.66 on Bingo.** That is a *model*, not a measurement, and §8 is
+  explicit that models of `S` must not be published as if measured — so it would
+  have to be labelled as an upper-bound argument or run for real.
+- **Three edits sit in files this ticket does not own.** `conclusion.tex` (×2: the
+  near-$O(k^2)$ complexity claim and the R² effect sizes) and `main.tex` (the
+  abstract's cost clause and the 343 → 297 word trim) are **Ezequiel's**, and the
+  abstract pass is **T12/Karl's**. All three were made because leaving them would
+  have left the letter's own statements untrue or the abstract understating a cost
+  by 3×. They need explicit sign-off, not silent inheritance.
+- **`analyses/values/critical_difference.json` carries a √2-too-wide `cd_value`**
+  (0.5603 where Demšar gives 0.3962). Nothing printed depends on it and every
+  clique conclusion survives either threshold, but it is a provenance trap and it
+  is not T10's to fix. Filed for the CD-figure owner.
+- **`verify.py`'s coverage is a whitelist, not a guarantee.** Eleven R1.1 numbers
+  were outside it and one of them was wrong. Any future ticket that adds a number
+  to the manuscript must add it to `build_checks`, or the next audit finds it the
+  hard way.

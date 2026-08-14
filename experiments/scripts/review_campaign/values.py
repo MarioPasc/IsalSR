@@ -403,7 +403,7 @@ def build(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "paper:53",
         f"${eval_over_key:.0f}$",
         eval_over_key,
-        "median ratio of per-evaluation cost to per-candidate key cost, UDFS",
+        "ratio of median per-evaluation cost to median per-candidate key cost, UDFS",
     )
 
     # per-problem descriptive summary: the targets that move most, either way
@@ -510,7 +510,7 @@ def build(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "paper:59",
         "$T_{\\mathrm{eval}}/T_{\\mathrm{canon}} > 5{,}000$",
         ratio_u,
-        "median ratio of per-evaluation to per-candidate key cost, UDFS",
+        "ratio of median per-evaluation to median per-candidate key cost, UDFS",
     )
     put(
         "paper:60",
