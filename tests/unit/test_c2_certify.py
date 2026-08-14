@@ -531,6 +531,34 @@ def test_missing_contrast_file_fails_c1_16(clean_root: Path) -> None:
     assert _run(clean_root)["C1.16"] == "FAIL"
 
 
+def test_c1_16_passes_when_the_declared_seed_count_matches(clean_root: Path) -> None:
+    """Positive control for the regression below."""
+    assert _run(clean_root)["C1.16"] == "PASS"
+
+
+def test_c1_16_honours_the_declared_seed_count(clean_root: Path) -> None:
+    """C1.16 must validate against the seeds it is GIVEN, not ``DEFAULT_SEEDS``.
+
+    The fixture root holds three paired seeds, so declaring a four-seed campaign
+    must fail. Before the 2026-08-14 fix the check compared every contrast
+    against the hardcoded Stage C smoke default of three, which made C1.16
+    unpassable for any campaign with a different seed count: the real C2 run
+    reported ``0/420 valid`` and a spurious **NO-GO** on complete, correct data.
+    A blocking check whose failure probability rises with the sample size is
+    worse than no check at all.
+    """
+    results = certify(
+        root=clean_root,
+        expected_tasks=24,
+        max_time=15.0,
+        wall_slack=600.0,
+        seeds=(*SEEDS_3, 103),
+        sacct_csv=None,
+    )
+    status = {r.id: r.status for r in results}
+    assert status["C1.16"] == "FAIL"
+
+
 def test_wrong_aggregate_row_count_fails_c1_17(clean_root: Path) -> None:
     target = clean_root / "udfs" / BENCH / "nguyen_1" / "isalsr" / "aggregate.csv"
     lines = target.read_text().splitlines()

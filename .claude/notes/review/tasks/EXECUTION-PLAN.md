@@ -1217,6 +1217,8 @@ wrong at cost:
 
 | 2026-08-05 | ✅ **STAGE D COMPLETE — GO, 8/8, and it resolves the C5 §3.5 ρ handoff** | **13/13 cells COMPLETED, zero failures**, on `00635ae` with clean provenance (one `build_hash`, two `config_sha256` = 8 certification cells + the trace, exactly as the shadow split intends). UDFS landed at **12:00:12** — saturating `max_time` to the second, as C1's n=600 predicted. **D1.4 is the one that mattered and it passes: Korns-12 and Vlad-2 Bingo-isalsr both finite** (R²_test −0.0217 and 0.9940). The C1 NaN does not recur, so the root cause is dead rather than dormant. **D1.6 answers what C5 §3.5 handed forward.** Stage C's 900 s wave put Bingo ρ **1.1–1.7 % below C1**, and Mario signed C5 with that deviation deferred to D1.6. At 12 h against 12 h the gap collapses: ratios `ρ_C2/ρ_C1` = **0.9973** (Pagie-1), **0.9977** (Vlad-2), **1.0013** (Korns-12), and UDFS Pagie-1 **rose to 1.0656**. Zero excursions against a one-sided 10 % floor. **The Stage C shortfall was the budget gap, exactly as hypothesised** — not a canonicaliser regression. The ρ reconstruction (`1 + δ_ρ`, since the baseline arm reports ρ = 1 by construction) was **cross-checked, not assumed**: it reproduces the published `mean_reduction_factor` to `abs_gap` 0.0005 (bingo) and 0.0 (udfs) over 50 problems. R²: 0 excursions on 4 comparisons, largest 0.115 against a 0.15 band. **D1.2 independently corroborates the 32 GB decision.** Its own rule — `ceil_to_8GB(peak / 0.70)` — recommends **8 GB for every group including `bingo/isalsr`** (peak 1.193 GB). The shipped 32 GB is **4× the certifier's recommendation and 27× the observed peak**, so the reduction from 256 GB is conservative under two independent derivations. **D1.7** overhead under the corrected canon+conversion accounting: Bingo mean **7.83 %** of eval (p50 8.7 %, max 17.7 %), UDFS **0.027 %** — above the old canon-only ≈7.4 % projection, which §11.1 2026-08-04 already flagged as an accounting change rather than a regression. 🔴 **One reporting defect worth carrying: the Picasso certifier printed `GO`, `n_blocking_failures: 0` while D1.6 — whose own rules say BLOCKING, twice — had status `SKIP` and `blocking: false`.** Its C1 reference is `/media/.../Sandisk2TB/...`, a workstation path no compute node can reach, so it could never have evaluated. The report does say SKIP rather than claiming a pass, but the headline hides it: a reader stopping at the verdict banks an unevaluated blocking criterion. **Either ship the C1 analysis directory to FSCRATCH before Stage D, or run the certifier where C1 lives.** Same family as the two C1.11 defects and the inode guard: a check that degrades to advisory when its input is missing | Claude, `stage_d_certification_with_c1.json` |
 
+| 2026-08-14 | ✅ **C2 COMPLETE — 12,600/12,600, certifier GO, 0 blocking failures** | Strict census **12600 expected / 12600 present / 0 missing**; certification **GO** on all 19 criteria. Corpus mirrored to the Sandisk backup and verified byte-exact on both sides: **12,600 run logs, 65,944 files, 38,338,981,466 B**, plus an independent content digest over the 840 analysis artefacts + ledger (`a46658ab…` on both sides). 🔴 **Two smoke-calibrated constants had to be defeated to get here, the second one new.** (1) `C2_EXPECTED_TASKS` is a CELL count — already known (§11.1 2026-08-07). (2) **`c2_certify.py`'s C1.16 compared each contrast's paired-seed count against `len(DEFAULT_SEEDS)`, hardcoded to the Stage C smoke's `(0, 101, 102)`, ignoring the `--seeds` flag the parser already accepted.** At 30 seeds it reported **0/420 valid** and a **NO-GO** on a corpus whose paired stats were complete and correct — a blocking failure whose probability of firing *increases* with data quality. Fixed by threading `len(seeds)` into `check_c1_16`; C1.16 now reads **420/420 valid, 30 paired seeds**. ⚠ **The fix was invisible for two runs**: `experiments.scripts.c2_certify` resolves from the **deployed** tree even with `PYTHONPATH` and `sys.path.insert(0, …)` pointing at the tools checkout (an editable install wins the import), so the certifier must be loaded by file path via `importlib.util.spec_from_file_location`. Same family as the stale-`.so` trap in CLAUDE.md. ⚠ `submit_recovery.sh` hardcodes `--array="1-42"` for the aggregation while `C2_CONFIG_LIST` holds **14** entries (2 methods × 7 suites), so tasks 15–42 die with `[FATAL] array index N outside [1, 14]`; the 14 real tasks all complete, so the 28 failures are cosmetic — but they make a healthy aggregation look 67 % failed | Claude |
+
 ### 11.2 Pre-flight sign-off
 
 | Stage | # | Check | Date | Result | Evidence artefact |
@@ -1359,3 +1361,45 @@ finish alongside it. Regenerate with
 **Totals**: 3,474 tasks across 42 arrays (UDFS 867 per arm, Bingo 291 per arm),
 plus 3,474 sweep tasks that exit in seconds wherever their cells already
 completed. Job ids in `<logs>/job_ids.txt` and `<logs>/sweep_job_ids.txt`.
+
+> ### ✅ COMPLETE 2026-08-14 — 12,600/12,600 cells, certifier **GO**
+>
+> **Recovery pass** (the cells the start-deadline deferred), `c2r_` prefix, ids
+> in `<logs_recovery>/recovery_job_ids.txt`:
+>
+> | Job | Array | Mode | Outcome |
+> |---|---|---|---|
+> | 1960414 / 1960514 / 1960614 | `c2r_u{b,h,i}_feynman` | `safe`, B=3 | COMPLETE, 0 deferrals |
+> | 1960724 | `c2r_bi_nguyen` | `p90`, B=36 | COMPLETE (closes the empty `nguyen_8/isalsr` block) |
+> | 1960714 / 1960719 / 1960734 | `c2r_b{b,h,i}_feynman` | `p90`, B=60 | **CANCELLED 2026-08-13**, see below |
+> | **1986376 / 1986377 / 1986385** | `c2r_b{b,h,i}_feynman` | **`safe`, B=3**, 100 tasks/array | COMPLETE, 0 deferrals |
+> | 1993035 | `c2r_aggregate` | 42-task array | 14 real tasks COMPLETE; 15–42 out-of-range (see §11.1) |
+> | 1993088 | `c2r_cert_fix3` | certifier, fixed C1.16 | **GO**, 0 blocking failures |
+>
+> 🔴 **The `p90` Bingo arrays could not have finished.** `submit_recovery.sh`
+> offers `safe` (charges every cell the 12 h cap; deferral impossible by
+> construction) and `p90` (charges the measured p90; ~4× fewer placements, "a
+> merely probabilistic guarantee" — its own header). UDFS ran `safe` (B=3) and
+> held. Bingo ran `p90` (B=60), which back-solves to an allowance of **~11
+> min/cell** against an observed 1 h+; three serial tasks held 120 cells against
+> ~20 h of wall, so ~100 cells would have deferred a *second* time.
+>
+> **Why the p90 estimate was the wrong statistic**, and the lesson to keep: the
+> start-deadline defers exactly those cells that *did not fit*, so the deferred
+> set is a **length-biased sample** of the duration distribution — conditioned on
+> being long. A p90 drawn from the unbiased population understates it
+> systematically. Sizing a recovery pass on any central estimate of the *general*
+> population is therefore unsound; charge the cap.
+>
+> Cancelled on Mario's instruction after verifying **copy-back is per-cell** —
+> `i.10.7` held exactly seeds 1–27 / 1–18 / 1–15, matching each task's current
+> cell — so cancelling forfeited only the 3 in-flight cells rather than ~60
+> completed ones. Resubmitted `safe`: 40 tasks carried the real work in parallel
+> and drained in ~21 h.
+>
+> ⚠ **Trap C fired on the resubmission and only `--dry-run` caught it.** The
+> `c2r_*` name dedup (`submit_recovery.sh:245`) matches over `sacct -S today`
+> scoped by `C2_MIN_JOBID` (default **0**), so the just-cancelled jobs masked
+> their own replacements and printed `SKIP (already submitted today)`. A real
+> submission would have been a **silent no-op**. Fix: `C2_MIN_JOBID=1960800`.
+> **Always dry-run a resubmission that reuses a job name.**

@@ -751,3 +751,66 @@ valid `run_log.json` or a ledger row naming its cause, and any truncation drops
 whole `(method, problem, seed)` triples across **all three arms**. And **do not
 delete the campaign root to "start clean"** — resume is additive precisely so that
 you never have to, and a partially completed triple is worse than a missing one.
+
+---
+
+## 13. Outcome — CLOSED 2026-08-14
+
+**12,600 / 12,600 cells. Strict census: 0 missing. Certifier: GO, 0 blocking
+failures, 19/19 criteria.** Corpus mirrored to the Sandisk backup and verified
+byte-exact (12,600 run logs, 65,944 files, 38,338,981,466 B) with a matching
+content digest over the 840 analysis artefacts.
+
+The recovery needed **two rounds**, and the reason is the single most transferable
+lesson here.
+
+### 13.1 `--mode p90` cannot size a recovery pass
+
+Round 1 sized UDFS with `safe` (B=3) and Bingo with `p90` (B=60). UDFS held and
+finished with zero deferrals. Bingo could not: B=60 back-solves to an allowance of
+**~11 min/cell** against an observed **1 h+**, leaving three serial tasks holding
+120 cells against ~20 h of wall. About 100 cells would have deferred a second time.
+
+The flaw is statistical, not operational. **The start-deadline defers exactly
+those cells that did not fit**, so the deferred population is a *length-biased*
+sample of the cell-duration distribution — conditioned on being long. A p90 taken
+from the **unbiased** population therefore understates the deferred set
+systematically, and the error grows with each round as the surviving tail gets
+slower. §9's header already said "any bundle sized on a central estimate is a bet,
+and this pass is not the place to bet"; the bet was taken anyway, for Bingo only.
+
+**Rule: size every recovery pass with `safe`. Charge each cell the cap.**
+
+### 13.2 Round 2
+
+Cancelled `1960714 / 1960719 / 1960734` after verifying **copy-back is per-cell**
+(`i.10.7` held exactly seeds 1–27 / 1–18 / 1–15, matching each task's current
+cell), so only the 3 in-flight cells were forfeited rather than ~60 completed
+ones. Resubmitted `safe` as **1986376 / 1986377 / 1986385** — 40 tasks carrying
+the work in parallel instead of 3 in series; drained in ~21 h with zero deferrals.
+
+⚠ The resubmission printed `SKIP (already submitted today)` on the first attempt:
+the `c2r_*` name dedup is scoped by `C2_MIN_JOBID` (default 0), so the cancelled
+jobs masked their own replacements. Only `--dry-run` caught it. Use
+`C2_MIN_JOBID` above the newest job id, and **always dry-run a resubmission that
+reuses a job name**.
+
+### 13.3 Two defects found while certifying
+
+- **`c2_certify.py` C1.16 was unpassable at 30 seeds.** It compared each
+  contrast's paired-seed count against `len(DEFAULT_SEEDS)` — the Stage C smoke's
+  `(0, 101, 102)` — ignoring the `--seeds` flag the parser already accepted. It
+  reported `0/420 valid` and **NO-GO** on complete, correct data. Fixed by
+  threading `len(seeds)` through; now `420/420 valid, 30 paired seeds`.
+  A blocking check whose failure probability *rises* with sample size is the
+  `C2_EXPECTED_TASKS` trap in a second form.
+- **The fix was invisible for two runs.** `experiments.scripts.c2_certify`
+  resolves from the **deployed** tree even with `PYTHONPATH` and
+  `sys.path.insert(0, …)` pointing elsewhere — an editable install wins the
+  import. Load the certifier by file path
+  (`importlib.util.spec_from_file_location`) when running a patched copy. Same
+  family as the stale-`.so` trap in CLAUDE.md.
+- Cosmetic: `submit_recovery.sh` hardcodes `--array="1-42"` for the aggregation
+  while `C2_CONFIG_LIST` holds 14 entries, so tasks 15–42 die with
+  `[FATAL] array index N outside [1, 14]`. The 14 real tasks all complete — but a
+  healthy aggregation looks 67 % failed.

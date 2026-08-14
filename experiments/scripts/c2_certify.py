@@ -1503,12 +1503,22 @@ def check_c1_15(
     )
 
 
-def check_c1_16(root: Path, cells: list[Cell]) -> CriterionResult:
+def check_c1_16(
+    root: Path, cells: list[Cell], expected_n_seeds: int = len(DEFAULT_SEEDS)
+) -> CriterionResult:
     """C1.16 -- all three contrasts emit a parseable file per (method, problem).
 
-    Existence and validity only. At n = 3 the minimum two-sided Wilcoxon p is
-    0.25, so **nothing** is asserted about any p-value; asserting significance
-    at this sample size would be a category error.
+    Existence and validity only; **nothing** is asserted about any p-value. At
+    the Stage C smoke's n = 3 the minimum two-sided Wilcoxon p is 0.25, so
+    asserting significance at that sample size would be a category error.
+
+    Args:
+        root: Results root.
+        cells: Hydrated campaign cells.
+        expected_n_seeds: Number of seeds each contrast must pair. Defaults to
+            the smoke's seed count; a campaign MUST pass its own (e.g. 30 via
+            ``--seeds``). Hardcoding the smoke default here made the check
+            unpassable for any campaign with a different seed count.
     """
     try:
         from experiments.models.schemas import PairedStats
@@ -1550,9 +1560,9 @@ def check_c1_16(root: Path, cells: list[Cell]) -> CriterionResult:
                 seeds_with_log[(method, ref_arm, problem)]
                 & seeds_with_log[(method, treat_arm, problem)]
             )
-            if n_seeds != len(DEFAULT_SEEDS):
+            if n_seeds != expected_n_seeds:
                 wrong_n_seeds.append(
-                    f"{path}: n_paired_seeds={n_seeds} (expected {len(DEFAULT_SEEDS)})"
+                    f"{path}: n_paired_seeds={n_seeds} (expected {expected_n_seeds})"
                 )
                 continue
             if not stats.metrics:
@@ -1563,14 +1573,18 @@ def check_c1_16(root: Path, cells: list[Cell]) -> CriterionResult:
     ok = not missing and not unreadable and not wrong_n_seeds and expected_files > 0
     return CriterionResult(
         id="C1.16",
-        title="3 paired-stats contrasts per (method, problem), each with 3 paired seeds",
+        title=(
+            "3 paired-stats contrasts per (method, problem), each with "
+            f"{expected_n_seeds} paired seeds"
+        ),
         status=_verdict(ok),
         expected=f"{expected_files} files (3 contrasts x {len(pairs)} method-problem pairs)",
         observed=f"{n_ok}/{expected_files} valid",
         detail={
             "p_value_note": (
-                "existence and validity only. At n=3 the minimum two-sided "
-                "Wilcoxon p is 0.25; nothing is asserted about significance."
+                "existence and validity only; nothing is asserted about "
+                "significance. At the smoke's n=3 the minimum two-sided "
+                "Wilcoxon p is 0.25."
             ),
             "missing": _truncate(missing),
             "unreadable_or_empty": _truncate(unreadable),
@@ -1973,7 +1987,7 @@ def certify(
         check_c1_13(cells),
         check_c1_14(cells),
         check_c1_15(root, by_key, expected, source, expected_tasks),
-        check_c1_16(root, cells),
+        check_c1_16(root, cells, len(seeds)),
         check_c1_17(root, cells),
         check_c2(root, expected),
         check_c4(cells),
