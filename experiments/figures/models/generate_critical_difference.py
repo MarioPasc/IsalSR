@@ -37,6 +37,7 @@ from critdd import Diagram, Diagrams  # noqa: E402
 
 from experiments.models.io_utils import load_all_run_logs  # noqa: E402
 from experiments.plotting_styles import (  # noqa: E402
+    COLOR_HASH,
     COLOR_ISALSR,
     COLOR_NATIVE,
 )
@@ -362,36 +363,62 @@ def generate_cd_nrmse(
     _tikz_to_pdf(tikz_str, out_path)
 
 
-def _style_2d_tikz(tikz_str: str) -> str:
-    """Inject custom PGFPlots styling into 2D CD diagram TikZ code.
+#: Colour per arm and its LaTeX name. Colour carries the representation, which
+#: is the contrast every diagram exists to show.
+_ARM_COLOURS: tuple[tuple[str, str, str], ...] = (
+    ("baseline", "clrNative", COLOR_NATIVE),
+    ("hash", "clrHash", COLOR_HASH),
+    ("isalsr", "clrIsalsr", COLOR_ISALSR),
+)
 
-    Design principles:
-      - Same SHAPE  per algorithm:  UDFS = circle (o),  Bingo = triangle (triangle*)
-      - Same COLOR  per representation: native DAG = gray (dim), IsalSR = red (vivid)
-      - Mark size increased for readability in TPAMI double-column
+#: Marker per host solver. Constant within a single-host diagram, so colour is
+#: then the only encoding and the legend reduces to the three arms.
+_METHOD_MARKS = {
+    "udfs": "mark=o, mark size=4pt",
+    "bingo": "mark=triangle*, mark size=5pt",
+}
+
+
+def _style_2d_tikz(
+    tikz_str: str, group_names: Sequence[str], mark_override: str | None = None
+) -> str:
+    """Inject the shape and colour encoding into the diagram's TikZ source.
+
+    Colour encodes the arm and marker encodes the host, and the cycle list is
+    built from the groups actually plotted. A fixed four-entry list silently
+    wrapped once the hash arm made six groups, so half the markers carried
+    another arm's colour.
+
+    Args:
+        tikz_str: TikZ source as ``critdd`` emits it.
+        group_names: Plotted groups, in the order their ``\\addplot`` calls
+            appear, each shaped ``"<METHOD> <arm label>"``.
+
+    Returns:
+        The source with the cycle list defined and selected.
     """
-    # Convert hex colours to LaTeX {HTML}{RRGGBB} specs
-    native_hex = COLOR_NATIVE.lstrip("#")
-    isalsr_hex = COLOR_ISALSR.lstrip("#")
-    native_color_def = f"\\definecolor{{clrNative}}{{HTML}}{{{native_hex}}}"
-    isalsr_color_def = f"\\definecolor{{clrIsalsr}}{{HTML}}{{{isalsr_hex}}}"
-
-    # Define the custom cycle list BEFORE \\begin{axis}
-    cycle_def = (
-        f"{native_color_def}\n"
-        f"{isalsr_color_def}\n"
-        "\\pgfplotscreateplotcyclelist{isalsr}{\n"
-        "  {clrNative, mark=o, mark size=4pt, very thick},\n"  # UDFS native DAG
-        "  {clrIsalsr, mark=o, mark size=4pt, very thick},\n"  # UDFS IsalSR
-        "  {clrNative, mark=triangle*, mark size=5pt, very thick},\n"  # Bingo native DAG
-        "  {clrIsalsr, mark=triangle*, mark size=5pt, very thick},\n"  # Bingo IsalSR
-        "}\n"
+    colour_defs = "\n".join(
+        f"\\definecolor{{{name}}}{{HTML}}{{{hex_value.lstrip('#')}}}"
+        for _arm, name, hex_value in _ARM_COLOURS
     )
-    tikz_str = tikz_str.replace(
+
+    entries = []
+    for group in group_names:
+        method = group.split()[0].lower()
+        colour = next(
+            (name for arm, name, _hex in _ARM_COLOURS if VARIANT_LABELS.get(arm, arm) in group),
+            "clrNative",
+        )
+        mark = mark_override or _METHOD_MARKS.get(method, "mark=o, mark size=4pt")
+        entries.append(f"  {{{colour}, {mark}, very thick}},")
+
+    cycle_def = (
+        f"{colour_defs}\n\\pgfplotscreateplotcyclelist{{isalsr}}{{\n" + "\n".join(entries) + "\n}\n"
+    )
+    return tikz_str.replace(
         "\\begin{axis}[",
         cycle_def + "\\begin{axis}[\n  cycle list name=isalsr,",
     )
-    return tikz_str
 
 
 # Treatment label map: algorithm-first naming with representation qualifier
@@ -441,6 +468,9 @@ def generate_cd_2d(
     methods: list[str],
     benchmarks: list[str],
     variants: Sequence[str] | None = None,
+    out_stem: str = "cd_2d_r2_rf",
+    treatment_labels: dict[str, str] | None = None,
+    mark_override: str | None = None,
 ) -> None:
     """Generate 3-row CD diagram: R² test + Reduction Factor + Wall-clock time.
 
@@ -504,7 +534,8 @@ def generate_cd_2d(
     )
 
     # Apply label renaming
-    display_names = [_TREATMENT_LABELS.get(g, g) for g in group_names]
+    labels = _TREATMENT_LABELS if treatment_labels is None else treatment_labels
+    display_names = [labels.get(g, g) for g in group_names]
 
     diagrams = Diagrams(
         [X_r2_combined, X_rf_combined, X_time_combined],
@@ -519,9 +550,9 @@ def generate_cd_2d(
     tikz_str = diagrams.to_str(alpha=0.05, adjustment="holm", as_document=True)
 
     # Inject custom shape/color styling
-    tikz_str = _style_2d_tikz(tikz_str)
+    tikz_str = _style_2d_tikz(tikz_str, group_names, mark_override)
 
-    out_path = output_dir / "cd_2d_r2_rf"
+    out_path = output_dir / out_stem
     out_path.with_suffix(".tex").write_text(tikz_str)
     log.info("Saved %s", out_path.with_suffix(".tex"))
     _tikz_to_pdf(tikz_str, out_path)

@@ -425,6 +425,69 @@ digest `17d6f23e…`, run-log content digest `0594504a…`, stats digest
 `a46658ab…`. `convergence_log.npz` (~35 GB) is path+size only, not content
 hashed.
 
+**2026-08-14 (later) — analysis regenerated and carried into the manuscript.
+AC-5, AC-6 and AC-8 now met.** Code in
+`experiments/scripts/review_campaign/` (README there); outputs in
+`…/c2_3arm/analyses/`; one command rebuilds both
+(`run_all.sh`), and its last step re-checks every quoted literal against the
+derived value.
+
+| | |
+|---|---|
+| Placeholders filled | 75/75 in `paper/`, 22/34 in `supplementary/`; the letter's 6 |
+| Left open | the 12 synthetic-permutation rows (`supp:21`–`supp:32`), a separate measurement |
+| Documents | paper 18 pp, supplementary 17 pp, letter 35 pp, and the double-blind mirror at 18/17 — all zero errors, zero overfull |
+
+**Headline movement.** ρ 1.56→1.66 (UDFS) and 1.83→1.79 (Bingo); redundancy
+34.2 %→38.1 % and 45.2 %→43.7 %; CPDT R²ₜₑₛₜ *d* +0.30→+0.41 (p 5.9e-5→2.0e-9)
+and +0.05→+0.08 (4.4e-4→7.5e-4); T_canon 0.296→0.126 ms and 0.817→0.074 ms;
+overhead 0.05 %→0.04 % and **39.2 %→16.1 %**; **S 0.93→0.72 on Bingo**. Full map
+in the letter's continuity appendix (`tab_letter_continuity`), which is AC-6.
+
+**Five findings that changed what the manuscript can say.**
+
+1. 🔴 **ρ against the native arm carries no p-value.** ρ ≡ 1 there by
+   construction, and `CPDT_CONTRAST_POLICY` correctly marks the contrast
+   `descriptive_definitional_baseline`. The abstract, results and conclusion
+   promised a p-value on ρ; they now report the naive-hash contrast
+   (*d* = 2.54 / 7.05, p = 1.8e-13, the Wilcoxon floor at N=70) and state why.
+2. 🔴 **ρ does not predict S within a host.** *r*(ρ, S) = **+0.04** on Bingo;
+   the 22 problems with S ≥ 1 span ρ ∈ [1.77, 1.84] against [1.19, 1.85] for the
+   other 48. ρ sits within 0.09 of 1.79 on 66 of 70 problems, so it cannot
+   discriminate. Run length does, at *r* = +0.41 (Bingo) and −0.64 (UDFS). The
+   submitted claim "S rises with ρ across the suite" is withdrawn, and R1.1's own
+   proposed mechanism is answered as not holding.
+3. 🔴 **The Nemenyi critical difference was 41 % too wide.**
+   `statistical_tests.critical_difference_data` used the raw studentized range;
+   Demšar (2006 §3.2.2) divides it by √2, and the divided values reproduce his
+   Table 5 to 3 dp for k = 2…10. Fixed; pinned by
+   `tests/unit/test_nemenyi_critical_difference.py` (11 tests). Pre-existing, so
+   the submitted figure's CD was also too wide.
+4. ⚠ **The same-stream φ does not exist at campaign scale.** Shadow sketches ran
+   off on all 12,600 cells (`audit.md` §7.3, deliberate). φ is therefore a
+   cross-arm estimate through the scale-free identity φ = 1 − r_σ/r, and the
+   trajectory-divergence confound is stated in the manuscript rather than
+   removed. The HyperLogLog paragraphs are replaced: each arm's count is exact.
+5. ⚠ **The CD figure is now per host.** Pooling six groups let the host
+   difference absorb the axis (Bingo 1.95–2.73, UDFS 4.20–5.10 on R²ₜₑₛₜ) and
+   widened CD from 0.40 to 0.90. At the narrower threshold Bingo's native arm is
+   separated from both dedup arms on wall clock, which the pooled diagram could
+   not resolve — a result against us that the old arrangement hid.
+
+**The result R1.4 asked for.** ρ_σ = 1.0000 on **all 2,100** UDFS hash cells, so
+φ = 1 there and the naive hash merges nothing; on Bingo it recovers 95.3 % of the
+removable redundancy at half the per-candidate cost. The boundary of the claim is
+now explicit in the paper, the supplementary and the letter.
+
+**Double-blind mirror re-synced** by recovering each anonymisation delta as a
+patch from HEAD and re-applying it, rather than retyping the rules. Leak scan
+clean apart from two pre-existing `IsalGraph` mentions in
+`double_blind/paper/{introduction,related_work}.tex`, which predate this session.
+
+**Not done here:** the synthetic permutation study (separate ticket), AC-3's
+`MANIFEST.json`, and the letter's two remaining `\todoblock`s (C4/C6 length
+reduction — T13).
+
 ---
 
 ## 8. Proposed answer
