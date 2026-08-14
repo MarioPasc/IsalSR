@@ -7,8 +7,39 @@
 | Owner | **Mario** (+ Claude Code) |
 | Depends on | T01 (equivalence gate) · T04 + T05 (both gate the launch) · `EXECUTION-PLAN.md` §4 |
 | Blocks | T04, T08, T09, T10 |
-| Status | NOT STARTED |
+| Status | ✅ **CAMPAIGN COMPLETE 2026-08-14** — 12,600/12,600 cells, certifier **GO**. ⚠ **Ticket not closed**: AC-3, AC-6, AC-7 and AC-8 remain open (§6) |
 | Target | pre-flight complete ≈2026-08-18 · **C2 launch on Mario's sign-off only** · results 2026-09-03 · **hard freeze 2026-09-10** |
+
+---
+
+## ✅ Campaign C2 finished 2026-08-14 — what is done, what is not
+
+**The compute is finished and certified. The ticket is not closed.** Four
+acceptance criteria remain open and they are all downstream *analysis* work, not
+execution.
+
+| | |
+|---|---|
+| Cells | **12,600 / 12,600**, strict census **0 missing** |
+| Certification | **GO** — 19/19 criteria PASS, 18 blocking, 0 blocking failures |
+| Execution health | `terminal_status` `completed`, `exit_code` 0, `engine` `native` on **every** cell; **0** NaN-metric cells, **0** exceptions |
+| Grid | exactly **2,100 cells per (method, arm)** across all six arms; 70 problems x 30 seeds |
+| Config integrity | **14** distinct `config_sha256` = 2 methods x 7 suites — nothing drifted mid-campaign |
+| Budget | wall median 18,981 s, max 43,223 s (12 h cap + 23 s teardown) — **nothing time-killed**; peak RSS max 9.42 GB vs a 32 GB request |
+| Statistics | 420 `aggregate.csv` all at 23 metric rows; 420 `paired_stats*.json` all at `n_seeds = 30`, 23 metrics, none empty |
+| Backup | verified against Picasso: 65,944 files, 38,338,981,466 B; manifest digest `17d6f23e…`, run-log content digest `0594504a…`, stats digest `a46658ab…` |
+
+Corpus: `$FSCRATCH/results/isalsr/c2_3arm` (Picasso) and
+`/media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/results/review/c2_3arm`
+(local, with a `README.md` describing the layout and the standing caveats).
+
+**Note the scale correction.** AC-2 below says *"C2 complete (8,400 runs)"*. That
+is the superseded 20-seed figure; the campaign moved to **30 seeds = 12,600
+cells** (`EXECUTION-PLAN.md` §11.1, 2026-08-05). 12,600 is the number that was
+certified.
+
+Full narrative: `EXECUTION-PLAN.md` §11.1/§11.3 and
+`C2-deferred-cells-recovery-plan.md` §13.
 
 ---
 
@@ -275,6 +306,36 @@ R² *did* move materially, that is a finding: investigate it before writing it u
 
 ## 6. Acceptance criteria
 
+**Status as of 2026-08-14** — execution criteria met, analysis criteria open:
+
+| AC | State | Evidence |
+|---|---|---|
+| AC-0 | ✅ | §7 filled |
+| AC-1 | ⚠ partial | Audit was recorded in `EXECUTION-PLAN.md` §11.1, not here |
+| AC-1b | ✅ | Stages A–E in §11.2; Stage F **13 PASS / 0 FAIL** at submission (§11.3) |
+| AC-2 | ✅ | 12,600/12,600, strict census 0 missing (scale corrected from 8,400) |
+| AC-3 | 🔴 **NOT MET** | **No `MANIFEST.json` exists.** Root holds `metadata.json` + `status_ledger.csv` |
+| AC-4 | ✅ **exceeded** | `node_cpu_model` on 12,600/12,600 and **exactly one model** campaign-wide |
+| AC-5 | ✅ | 420 + 420 + ledger regenerated over the full corpus; certifier GO |
+| AC-6 | 🔴 open | Continuity table (§5.6) not produced |
+| AC-7 | 🔴 open | ρ/R² Python-vs-C++ statistical comparison not run for C2 |
+| AC-8 | 🔴 open | §8 not filled |
+
+**AC-3 is a real gap, not a naming quibble.** The ticket requires a
+`MANIFEST.json`; the campaign shipped `metadata.json` (2.3 KB, campaign-level)
+plus the 12,600-row `status_ledger.csv`. Between them these carry the
+traceability AC-3 wanted — every cell's provenance, config hash and terminal
+state — but no file answers to the name the ticket specifies, so either the
+artefact is produced or AC-3 is formally amended to name the two that exist.
+Decide before quoting AC-3 as satisfied anywhere.
+
+**AC-4 landed better than it was written.** It asked for arm balance across node
+types to be *reported as a measured covariate* because pinning might fail. It did
+not fail: B6's `--constraint=sr` put all 12,600 cells on a single CPU model (AMD
+EPYC 7H12 64-Core), 2,100 per (method, arm). **There is no node-type confound to
+adjust for** — the covariate is constant, so no hardware term is needed in any
+arm-versus-arm contrast.
+
 - **AC-0.** §7 Work log filled in as the work proceeds (see README standing rules).
 - **AC-1.** Pre-launch audit (§5.1) recorded in §7, including a definitive answer on
   the B12 fix and the submitted Bingo+IsalSR arm.
@@ -305,7 +366,64 @@ R² *did* move materially, that is a finding: investigate it before writing it u
 
 ## 7. Work log
 
-_(empty — to be filled by the implementing agent)_
+**2026-08-07 — submitted.** Commit `2dd56fd`, tag `campaign/c2`. Stage F gate
+13 PASS / 0 FAIL. 12,600 cells in 3,474 tasks across 42 arrays, plus a paced
+sweep pass. Job ids in `EXECUTION-PLAN.md` §11.3.
+
+**2026-08-09 → 08-12 — main pass + sweeps drained**, leaving ~2,160 cells
+unwritten. These are not failures: a chunked task starts a cell only if the full
+payload budget still fits in its remaining wall, so an unlucky run of long cells
+leaves the tail unstarted and the task exits `COMPLETED`. Invisible to `sacct` by
+construction.
+
+**2026-08-12 → 08-13 — recovery round 1.** UDFS sized `safe` (B=3, deferral
+impossible); Bingo sized `p90` (B=60). UDFS held and closed at 6,300/6,300 with
+zero deferrals. **Bingo could not close**: B=60 back-solves to ~11 min/cell
+against an observed 1 h+, so three serial tasks held 120 cells against ~20 h of
+wall and ~100 would have deferred a second time.
+
+The sizing error is statistical and worth carrying: **the start-deadline defers
+exactly those cells that did not fit**, so the deferred set is a *length-biased*
+sample of the duration distribution. A p90 taken from the unbiased population
+understates it systematically, and the bias compounds each round as the surviving
+tail gets slower. Size every recovery pass with `safe`; charge each cell the cap.
+
+**2026-08-13 — recovery round 2.** Verified first that **copy-back is per-cell**
+(`i.10.7` held exactly seeds 1–27 / 1–18 / 1–15, matching each task's current
+cell), so cancelling cost 3 in-flight cells rather than ~60 completed ones.
+Cancelled `1960714/1960719/1960734`; resubmitted `safe` as
+**`1986376` / `1986377` / `1986385`** — 40 tasks in parallel instead of 3 in
+series. ⚠ The first resubmission attempt was a **silent no-op**: the `c2r_*` name
+dedup is scoped by `C2_MIN_JOBID` (default 0), so the just-cancelled jobs masked
+their own replacements. Only `--dry-run` caught it. Fixed with
+`C2_MIN_JOBID=1960800`.
+
+**2026-08-14 — closed.** Last cell `bingo/feynman/i.10.7/isalsr/seed_18`. Strict
+census 12,600/12,600, 0 missing. Aggregation over the whole corpus (14/14
+configs). Certifier **GO**, 19/19.
+
+Two defects found while certifying:
+
+- 🔴 **`c2_certify.py` C1.16 was unpassable at 30 seeds.** It compared each
+  contrast's paired-seed count against `len(DEFAULT_SEEDS)` — the Stage C smoke's
+  `(0, 101, 102)` — ignoring the `--seeds` flag its parser already accepted. It
+  reported `0/420 valid` and **NO-GO on complete, correct data**. A blocking check
+  whose failure probability *rises* with sample size; the `C2_EXPECTED_TASKS` trap
+  in a second form. Fixed and locked by a regression test (commit `8aaf07e`).
+- ⚠ **The fix was invisible for two runs.** `experiments.scripts.c2_certify`
+  resolves from the **deployed** tree even against `PYTHONPATH` and
+  `sys.path.insert(0, …)` — an editable install wins the import. A patched
+  certifier must be loaded by file path via
+  `importlib.util.spec_from_file_location`. Same family as the stale-`.so` trap.
+- Cosmetic: the aggregation array is hardcoded `--array="1-42"` against a
+  **14**-entry config list, so tasks 15–42 die `[FATAL] array index N outside
+  [1, 14]`. All 14 real tasks complete — but a healthy aggregation reads as 67 %
+  failed.
+
+**Backup verified** against Picasso: 65,944 files, 38,338,981,466 B, manifest
+digest `17d6f23e…`, run-log content digest `0594504a…`, stats digest
+`a46658ab…`. `convergence_log.npz` (~35 GB) is path+size only, not content
+hashed.
 
 ---
 
