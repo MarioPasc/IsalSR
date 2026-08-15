@@ -442,6 +442,22 @@ def main() -> None:
         print(f"  {r['method']}/{r['problem']}/seed{r['seed']}: {r['error']}")
     print(f"\nwrote {out_dir}/summary.json")
 
+    # A run that canonicalised nothing reports zero failures out of zero DAGs,
+    # which is indistinguishable from the clean result this probe exists to
+    # confirm. Exit non-zero so SLURM marks the task FAILED instead of
+    # COMPLETED, and so the aggregate never pools an empty arm as evidence.
+    n_calls = summary["global"]["submitted"]["n_calls"]
+    if n_calls == 0:
+        raise SystemExit(
+            f"FATAL: no DAG reached the canonicaliser across {len(records)} run(s). "
+            f"{len(errors)} run(s) errored. This is not a zero failure rate — it is no data."
+        )
+    if errors:
+        raise SystemExit(
+            f"FATAL: {len(errors)}/{len(records)} run(s) errored; the pooled counters "
+            "cover only the runs that survived and must not be reported as a rate."
+        )
+
 
 if __name__ == "__main__":
     main()

@@ -179,18 +179,48 @@ must be measured rather than assumed (T15 §5.3, AC-4, AC-5).
 
 ---
 
-## 8. Open questions (owned by T15)
+## 8. Resolution (T15, closed 2026-07-27/28)
 
-1. What is the failure rate on **real** Bingo and UDFS DAGs? If it is zero, the
-   whole phenomenon is an artefact of uniform random generation and no reported
-   number is affected. That is a good outcome and should be reported plainly.
-2. What is the weakest sufficient precondition? Candidate: the stated reachability
-   condition **plus** "no CONST node can reach node 0 by directed edges".
-3. Does the theorem need the extra hypothesis, or should `normalize_const_creation`
-   pick a non-cycle-closing anchor instead of always node 0? The second would be a
-   change to a Critical Invariant and needs Ezequiel's sign-off.
-4. Should a canonicalisation failure be counted in `n_total`? Excluding it from
-   both numerator and denominator would remove the upward bias in ρ.
+The four questions this section originally posed are answered. The mechanism
+recorded in §5 was **corrected** on 2026-07-27: the normalised graph is never
+cyclic. `LabeledDAG.add_edge` returns `False` and adds nothing when an edge would
+close a cycle, and `normalize_const_creation` discarded that return value — so the
+CONST's original creation edge was deleted during the copy and the replacement
+`0 -> c` silently refused, leaving the CONST with in-degree 0. D2S cannot
+materialise a node no pointer can reach.
+
+1. **Failure rate on real DAGs: zero.** Bingo, 12,176,790 DAGs across 5 problems ×
+   3 seeds: **0 failures**, Wilson 95 % upper bound 3.1×10⁻⁷, and all three
+   normalisation policies produced *structurally identical* graphs on
+   12,176,790 / 12,176,790. UDFS measured separately on Picasso. The trigger is
+   impossible by construction on adapter output: neither `bingo/adapter.py` nor
+   `udfs/adapter.py` ever makes a VAR an edge target, so `in_degree(x1) = 0`, no
+   CONST can reach x1, and the old policy's relocation could never be refused.
+   **No reported number is affected**, by the defect or by the fix.
+2. **The weakest sufficient precondition is the stated one.** No extra clause is
+   needed. Validated on 10⁵ random S2D DAGs, all satisfying the reachability
+   hypothesis: **0** genuine failures under the repaired policy against 48 under
+   the old one. (46 residual exceptions are `CanonicalTimeoutError` at k = 24–30
+   against the probe's 10 s budget; production allows 60 s.)
+3. **The fix went to the algorithm, not the theorem.** `normalize_const_creation`
+   now adds `x_i -> c` only for CONST nodes with in-degree 0, taking the
+   lowest-indexed variable that does not close a cycle, and never removes an edge.
+   Chosen over a cycle-safe relocation because it is **the identity on exactly the
+   class the theorem quantifies over**, so completeness holds unqualified. A
+   cycle-safe relocation would have fixed totality and left completeness broken —
+   and completeness *was* broken: two non-isomorphic DAGs differing only in CONST
+   provenance both produced `VkVspv+NnC`. Critical Invariant 9 rewritten
+   accordingly, in both engines.
+4. **ρ's definition is unchanged, and the bias is disclosed.** Each failure
+   inflates ρ (the candidate lands in `n_total`, never in `n_unique`), but the
+   measured magnitude on every real population is exactly zero. Redefining the
+   estimator would move no reported number while breaking comparability with the
+   submitted tables.
+
+One consequence worth stating plainly: the old policy merged **169** extra
+equivalence classes per 10⁵ synthetic DAGs that it should have kept apart,
+inflating ρ from 1.040 to 1.042 — in the flattering direction. On real search
+output it merged nothing, because the provenance there is always x₁.
 
 ---
 

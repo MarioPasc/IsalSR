@@ -96,8 +96,14 @@ pip install -e ".[dev,native]" -v         # builds isalsr.core._native via CMake
 python -c "from isalsr.core import backends; print(backends.engine())"   # -> cpp
 ```
 
-Requires gcc ≥ 10, cmake ≥ 3.18 and ninja. Full build guide, ISA-level rationale and the
-Picasso/SLURM recipe: [`docs/engineering/CPP_BUILD.md`](docs/engineering/CPP_BUILD.md).
+Requires **GCC ≥ 11**, cmake ≥ 3.18 and ninja. `CMakeLists.txt` targets `-march=x86-64-v3`
+(AVX2 + FMA), an architecture value GCC did not accept before 11; it is the lowest common
+denominator across the cluster nodes we run on, so one binary covers all of them. Set
+`CMAKE_ARGS="-DISALSR_NATIVE_MARCH=ON"` to build with `-march=native` instead when the
+binary does not need to be portable. Add `".[experiments]"` to run the SR campaigns.
+
+Full build guide, ISA-level rationale and the Picasso/SLURM recipe:
+[`docs/engineering/CPP_BUILD.md`](docs/engineering/CPP_BUILD.md).
 
 ### Pure Python engine
 
@@ -109,9 +115,16 @@ pip install -e ".[dev]"
 python -c "from isalsr.core import backends; print(backends.engine())"   # -> python
 ```
 
-If the compiled extension is absent, every call falls back to Python transparently. Set
-`ISALSR_ENGINE=python` to force the fallback in a session with the extension installed;
-`ISALSR_ENGINE=cpp` raises immediately if it is missing, rather than failing silently later.
+If the compiled extension is absent, every call falls back to Python transparently — which
+means **a failed compile degrades silently instead of raising**. Always check which engine
+is live before trusting a benchmark. Set `ISALSR_ENGINE=python` to force the fallback in a
+session that has the extension; `ISALSR_ENGINE=cpp` raises immediately if it is missing,
+rather than failing quietly later.
+
+```bash
+python -c "from isalsr.core.backends import build_info; print(build_info())"
+# {'engine': 'cpp', 'isa_level': 'x86-64-v3', 'compiler': 'gcc 12.2.0', ...}
+```
 
 ### Why C++
 
