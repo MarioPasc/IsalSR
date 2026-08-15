@@ -24,6 +24,7 @@ _BACKENDS: dict[str, Callable[[], DagVizBackend]] = {}
 # Map of backend name -> module path that will register it on import.
 _LAZY_MODULES: dict[str, str] = {
     "matplotlib": "isalsr.viz.backends.matplotlib_dag",
+    "graphviz": "isalsr.viz.backends.graphviz_dag",
 }
 
 

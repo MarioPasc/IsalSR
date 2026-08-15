@@ -54,16 +54,17 @@
           </h1>
           <p class="hero__subtitle">
             IsalSR encodes symbolic regression expression DAGs as instruction strings
-            over a 31-token alphabet using a circular doubly linked list with two
-            mobile pointers. The canonical string is a complete labeled-DAG invariant
-            &mdash; achieving <strong>O(k!)</strong> search space reduction.
+            over a 31-token alphabet, using a circular doubly linked list with two
+            mobile pointers. A greedy 1-WL-guided algorithm computes a canonical
+            string that is a <strong>complete labeled-DAG invariant</strong>, collapsing
+            the <strong>&Theta;(k!)</strong> node numberings of one expression into one form.
           </p>
           <div class="hero__ctas">
             <a href="how-it-works.html" class="btn btn-primary">Explore How It Works &rarr;</a>
             <a href="playground.html" class="btn btn-outline">Try the Playground &rarr;</a>
           </div>
         </div>
-        <div class="hero__viz" role="img" aria-label="Animated DAG construction of sin(x1+x2) from IsalSR instruction string V+NnncVs">
+        <div class="hero__viz" role="img" aria-label="Animated DAG construction of sin(x1)*x2 + cos(x1) from its IsalSR canonical string VcVspv*pv+PpcnnC">
           <!-- Expression display -->
           <div id="hero-expression" style="text-align: center; font-family: var(--font-mono); font-size: var(--text-lg); font-weight: 600; color: var(--accent-primary); min-height: 1.8em; padding: var(--space-xs) 0;">&nbsp;</div>
           <!-- D3-rendered DAG with auto-play animation -->
@@ -71,7 +72,7 @@
           <div style="text-align: center; margin-top: var(--space-xs);">
             <span id="hero-token-display" class="instruction-string" style="font-size: var(--text-base);"></span>
             <div style="font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 2px;">
-              <span id="hero-step-label">canonical string w*</span>
+              <span id="hero-step-label">canonical string &#x175;<sub>D</sub></span>
             </div>
           </div>
         </div>
@@ -86,15 +87,17 @@
           <h3 class="result-card__title">Complete Invariant</h3>
           <div class="result-card__math" id="math-invariant"></div>
           <p class="result-card__text">
-            Two expression DAGs are isomorphic if and only if their canonical strings are identical.
+            Two expression DAGs share their canonical string if and only if they are
+            isomorphic (Theorem 3.15, under the reachability condition of Theorem 3.13).
           </p>
         </div>
         <div class="card result-card">
-          <div class="result-card__icon" aria-hidden="true">k!</div>
-          <h3 class="result-card__title">O(k!) Reduction</h3>
+          <div class="result-card__icon" aria-hidden="true">38&ndash;44%</div>
+          <h3 class="result-card__title">Evaluations Removed</h3>
           <div class="result-card__math" id="math-reduction"></div>
           <p class="result-card__text">
-            For k non-variable nodes, up to k! redundant representations collapse to a single canonical form.
+            A mean of 38.1% of evaluations on UDFS and 43.7% on Bingo are structural
+            duplicates &mdash; on every one of 70 benchmark problems, under both hosts.
           </p>
         </div>
         <div class="card result-card">
@@ -106,7 +109,8 @@
             </span>
           </div>
           <p class="result-card__text">
-            Two-tier encoding: 7 single-char tokens for movement/edges, 24 compound tokens for labeled node insertion.
+            Two-tier encoding: 7 single-character tokens for movement, edges and no-op,
+            plus 2 &times; 12 compound tokens for labeled node insertion.
           </p>
         </div>
       </div>
@@ -139,8 +143,9 @@
           <div class="step__number">3</div>
           <h3 class="step__title">Canonical String</h3>
           <p class="step__text">
-            The lexicographically smallest shortest encoding is a complete labeled-DAG invariant.
-            All k! equivalent node numberings map to one representative.
+            At each insertion the candidate with the smallest isomorphism-invariant key
+            (label character, then 1-WL subtree hash) is taken greedily. All &Theta;(k!)
+            node numberings of one expression map to one string, in near-O(k&sup2;) time.
           </p>
         </div>
       </div>
@@ -172,8 +177,9 @@
             <h3 style="color: var(--accent-primary); font-size: var(--text-lg); margin-bottom: var(--space-sm);">IsalSR</h3>
             <p style="color: var(--text-secondary); font-size: var(--text-sm);">
               31-token alphabet for labeled DAGs.
-              14 operation types with arity constraints, directed edges with cycle detection,
-              commutative encoding (SUB&rarr;ADD+NEG, DIV&rarr;MUL+INV).
+              Twelve operation labels with arity constraints, directed edges with cycle
+              detection, and a commutative encoding (x&minus;y as Add(x, Neg(y)),
+              x/y as Mul(x, Inv(y))) that leaves Pow as the only non-commutative operation.
               Complete labeled-DAG invariant for expressions.
             </p>
           </div>
@@ -188,17 +194,17 @@
         <p>Research papers from the Isal framework family.</p>
       </div>
       <div class="pub-teaser">
+        <div class="card pub-teaser__card" style="border-color: var(--accent-primary);">
+          <div class="pub-teaser__year"><span class="badge badge--amber">2026</span> <span class="badge badge--amber">Under review</span></div>
+          <h3 class="pub-teaser__title">Representation of Directed Acyclic Graphs by Sequences of Instructions for Symbolic Regression</h3>
+          <p class="pub-teaser__authors">E. López-Rubio, M. Pascual-González, K. Thurnhofer-Hemsi</p>
+          <span style="color: var(--text-tertiary); font-size: var(--text-sm);">IEEE Transactions on Pattern Analysis and Machine Intelligence</span>
+        </div>
         <div class="card pub-teaser__card">
           <div class="pub-teaser__year"><span class="badge badge--green">2026</span></div>
           <h3 class="pub-teaser__title">Instruction set for the representation of graphs</h3>
           <p class="pub-teaser__authors">E. Lopez-Rubio, M. Pascual-Gonzalez</p>
           <a href="https://arxiv.org/abs/2603.11039" class="pub-teaser__link" target="_blank" rel="noopener noreferrer">arXiv &rarr;</a>
-        </div>
-        <div class="card pub-teaser__card">
-          <div class="pub-teaser__year"><span class="badge badge--amber">2026</span> <span class="badge badge--amber">In preparation</span></div>
-          <h3 class="pub-teaser__title">Representation of DAGs by Sequences of Instructions for Symbolic Regression</h3>
-          <p class="pub-teaser__authors">E. López-Rubio, M. Pascual-González, K. Thurnhofer-Hemsi</p>
-          <span style="color: var(--text-tertiary); font-size: var(--text-sm);">Targeting IEEE TPAMI</span>
         </div>
       </div>
       <div style="text-align: center; margin-top: var(--space-xl);">
@@ -234,22 +240,16 @@
       var interval = setInterval(function () {
         if (window.katex) {
           clearInterval(interval);
-          renderMath('math-invariant', 'w^*_{D_1} = w^*_{D_2} \\iff D_1 \\cong D_2');
-          renderMath('math-reduction', '\\text{Reduction factor} = \\Theta(k!)');
+          renderMath('math-invariant', '\\hat{w}_{D_1} = \\hat{w}_{D_2} \\iff D_1 \\cong D_2');
+          renderMath('math-reduction', '\\rho = N_{\\mathrm{total}} / N_{\\mathrm{unique}}');
         }
       }, 100);
 
-      // Hero auto-play animation — sin(x₁ + x₂) with pointer movement + edge
-      var heroStr = 'V+NnncVs';
+      // Hero auto-play animation — the canonical string of Fig. 1 of the paper,
+      // sin(x₁)·x₂ + cos(x₁) over m = 2 variables.
+      var heroStr = 'VcVspv*pv+PpcnnC';
       var heroNumVars = 2;
-      var heroTokens = [
-        { token: 'V+', css: 'token-variadic' },
-        { token: 'N',  css: 'token-movement-fwd' },
-        { token: 'n',  css: 'token-movement-fwd' },
-        { token: 'n',  css: 'token-movement-fwd' },
-        { token: 'c',  css: 'token-edge' },
-        { token: 'Vs', css: 'token-unary' }
-      ];
+      var heroTokens = IsalSR.tokenize(heroStr);
 
       try {
         var s2d = new IsalSR.StringToDAG(heroStr, heroNumVars);
@@ -287,7 +287,7 @@
           if (idx === 0) {
             stepLabel.textContent = 'initial state: x\u2081, x\u2082';
           } else if (idx >= steps.length - 1) {
-            stepLabel.textContent = 'canonical string w*';
+            stepLabel.textContent = 'canonical string \u0175\u2009=\u2009' + heroStr;
           } else {
             stepLabel.textContent = 'step ' + idx + ': ' + heroTokens[idx - 1].token;
           }

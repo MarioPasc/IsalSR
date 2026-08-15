@@ -67,6 +67,24 @@ CREATION_EDGE_COLOR: str = "#1b7f4b"
 #: Alert colour for violating nodes (in-degree 0 CONST).
 ALERT_COLOR: str = "#b02a2a"
 
+#: Halo colour marking the node created by the step being displayed.
+NEW_NODE_ACCENT: str = "#d9911f"
+
+#: Face colour for ghost nodes (target structure not yet encoded).
+GHOST_FACE: str = "#ffffff"
+
+#: Border and arrow colour for ghost nodes and ghost edges.
+GHOST_EDGE_COLOR: str = "#b9bec7"
+
+#: Glyph colour inside ghost nodes.
+GHOST_TEXT_COLOR: str = "#8b939e"
+
+#: Colour of the primary-pointer marker (p).
+PRIMARY_PTR_COLOR: str = "#2c6fad"
+
+#: Colour of the secondary-pointer marker (q).
+SECONDARY_PTR_COLOR: str = "#1b7f4b"
+
 # ---------------------------------------------------------------------------
 # Token-strip colours.
 # ---------------------------------------------------------------------------

@@ -63,6 +63,10 @@ def draw_instruction_strip(
     ax: Axes,
     instruction_string: str,
     *,
+    emitted: str | None = None,
+    solid_side: str = "prefix",
+    n_slots: int | None = None,
+    future_alpha: float = 0.25,
     cell_width: float = 1.05,
     cell_height: float = 1.1,
     show_labels: bool = True,
@@ -72,8 +76,11 @@ def draw_instruction_strip(
 ) -> list[str]:
     """Draw an instruction-string token strip on ``ax``.
 
-    All tokens are rendered at full opacity. The function returns the token
-    list so the caller can use it for assertions or annotations.
+    By default all tokens are rendered at full opacity. Passing ``emitted``
+    splits the strip into a solid prefix and a faded remainder, which is what
+    turns a static strip into a progress indicator for one step of a trace.
+    The function returns the token list so the caller can use it for
+    assertions or annotations.
 
     Parameters
     ----------
@@ -81,6 +88,20 @@ def draw_instruction_strip(
         Target matplotlib axes. The function disables all spines and ticks.
     instruction_string:
         The IsalSR instruction string to render.
+    emitted:
+        Prefix of ``instruction_string`` already processed at the step being
+        displayed. When ``None`` every token is drawn solid.
+    solid_side:
+        Which side of that boundary is drawn solid. ``"prefix"`` suits a string
+        being *produced*, where the processed prefix is what exists so far.
+        ``"suffix"`` suits a string being *consumed*, where the processed prefix
+        has been spent and the remainder is what is left to read. The faded side
+        is drawn at ``future_alpha``.
+    n_slots:
+        Fixed slot count for the x-axis, so panels holding different numbers
+        of tokens still share one cell size.
+    future_alpha:
+        Opacity applied to not-yet-emitted tokens.
     cell_width:
         Width of each token cell in axes units.
     cell_height:
@@ -104,6 +125,13 @@ def draw_instruction_strip(
 
     tokens = tokenize_string(instruction_string)
     n = len(tokens)
+    n_emitted = len(tokenize_string(emitted)) if emitted else (n if emitted is None else 0)
+    if emitted is not None and n_emitted > n:
+        raise ValueError(
+            f"emitted holds {n_emitted} tokens, more than the {n} of instruction_string"
+        )
+    if solid_side not in ("prefix", "suffix"):
+        raise ValueError(f"solid_side must be 'prefix' or 'suffix', got {solid_side!r}")
 
     if label_fontsize is None:
         if axis_width_inches is not None:
@@ -125,6 +153,9 @@ def draw_instruction_strip(
     else:
         for i, tok in enumerate(tokens):
             x = i * cell_width
+            processed = i < n_emitted
+            solid = processed if solid_side == "prefix" else not processed
+            alpha = 1.0 if solid else future_alpha
             face = color_for_token(tok)
             patch = FancyBboxPatch(
                 (x + 0.05, 0.05),
@@ -134,6 +165,7 @@ def draw_instruction_strip(
                 facecolor=face,
                 edgecolor="#333333",
                 lw=0.6,
+                alpha=alpha,
             )
             ax.add_patch(patch)
             if show_labels:
@@ -147,9 +179,11 @@ def draw_instruction_strip(
                     color="#111111",
                     rotation=label_rotation,
                     family="monospace",
+                    alpha=alpha,
                 )
 
-    ax.set_xlim(-0.1, n * cell_width + 0.1)
+    slots = n_slots if n_slots is not None else n
+    ax.set_xlim(-0.1, slots * cell_width + 0.1)
     ax.set_ylim(-0.05, cell_height + 0.05)
     ax.set_aspect("auto")
     ax.set_xticks([])

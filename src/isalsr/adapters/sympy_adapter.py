@@ -35,6 +35,23 @@ class SympyAdapter(DAGAdapter[sympy.Expr]):
     def to_sympy(self, dag: LabeledDAG) -> sympy.Expr:
         """Convert a LabeledDAG to a SymPy expression.
 
+        Returns the expression rooted at ``dag.output_node()``. A DAG with
+        several sinks therefore yields only one of them; use
+        :meth:`node_expressions` when every sink matters, as it does when
+        drawing an intermediate that is a forest rather than a single
+        expression.
+
+        Args:
+            dag: The expression DAG.
+
+        Returns:
+            A SymPy expression equivalent to the DAG.
+        """
+        return self.node_expressions(dag)[dag.output_node()]
+
+    def node_expressions(self, dag: LabeledDAG) -> dict[int, sympy.Expr]:
+        """Return the SymPy expression rooted at every node of ``dag``.
+
         Traverses the DAG in topological order, building the SymPy
         expression bottom-up.
 
@@ -42,7 +59,7 @@ class SympyAdapter(DAGAdapter[sympy.Expr]):
             dag: The expression DAG.
 
         Returns:
-            A SymPy expression equivalent to the DAG.
+            Mapping from node ID to the expression rooted at that node.
         """
         order = dag.topological_sort()
         node_exprs: dict[int, sympy.Expr] = {}
@@ -108,8 +125,7 @@ class SympyAdapter(DAGAdapter[sympy.Expr]):
             elif label == NodeType.INV:
                 node_exprs[node] = sympy.Integer(1) / node_exprs[in_nodes[0]]
 
-        out = dag.output_node()
-        return node_exprs[out]
+        return node_exprs
 
     def to_external(self, dag: LabeledDAG) -> sympy.Expr:
         """Alias for to_sympy (implements DAGAdapter interface)."""

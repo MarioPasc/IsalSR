@@ -26,10 +26,27 @@ guarantee. Nothing in ``core``, ``adapters``, ``evaluation`` or ``search`` may
 import this package.
 """
 
+from isalsr.viz.algorithm_trace import (
+    DAG_TO_STRING,
+    STRING_TO_DAG,
+    AlgorithmTraceLayout,
+    TraceConsistencyError,
+    evenly_spaced_steps,
+    make_algorithm_trace_figure,
+)
+from isalsr.viz.bands import draw_axes_bands
 from isalsr.viz.base import DagVizBackend, Position
-from isalsr.viz.cdll_view import cdll_traversal, draw_cdll, stable_anchor
+from isalsr.viz.cdll_view import cdll_traversal, draw_cdll, draw_cdll_ring, stable_anchor
 from isalsr.viz.composite import assign_positions, make_trace_figure
 from isalsr.viz.dag_view import draw_dag
+from isalsr.viz.expression_grid import (
+    BY_ROW,
+    BY_VIEW,
+    ExpressionCell,
+    ExpressionGridLayout,
+    ExpressionRow,
+    make_expression_grid_figure,
+)
 from isalsr.viz.instruction_view import draw_instruction_strip, tokenize_string
 from isalsr.viz.layout import DEFAULT_TRACE_LAYOUT, TraceLayout
 from isalsr.viz.registry import (
@@ -40,18 +57,32 @@ from isalsr.viz.registry import (
 )
 
 __all__ = [
+    "BY_ROW",
+    "BY_VIEW",
+    "DAG_TO_STRING",
     "DEFAULT_TRACE_LAYOUT",
+    "STRING_TO_DAG",
+    "AlgorithmTraceLayout",
+    "ExpressionCell",
+    "ExpressionGridLayout",
+    "ExpressionRow",
+    "draw_axes_bands",
+    "make_expression_grid_figure",
     "DagVizBackend",
     "Position",
+    "TraceConsistencyError",
     "TraceLayout",
     "VizBackendNotFoundError",
     "assign_positions",
     "available_backends",
     "cdll_traversal",
     "draw_cdll",
+    "draw_cdll_ring",
     "draw_dag",
     "draw_instruction_strip",
+    "evenly_spaced_steps",
     "get_backend",
+    "make_algorithm_trace_figure",
     "make_trace_figure",
     "register_backend",
     "stable_anchor",

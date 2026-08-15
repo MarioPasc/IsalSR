@@ -43,6 +43,12 @@ class DagVizBackend(ABC):
         node_colors: dict[int, str] | None = None,
         reachable: frozenset[int] = frozenset(),
         layout: dict[int, Position] | None = None,
+        ghost_dag: LabeledDAG | None = None,
+        accent_nodes: frozenset[int] = frozenset(),
+        dim_nodes: frozenset[int] = frozenset(),
+        dim_edges: frozenset[tuple[int, int]] = frozenset(),
+        dim_alpha: float = 0.28,
+        alert_nodes: frozenset[int] = frozenset(),
     ) -> dict[int, Position]:
         """Draw ``dag`` on ``ax`` and return the layout used.
 
@@ -62,6 +68,21 @@ class DagVizBackend(ABC):
         layout:
             If provided, the backend must use this layout instead of computing
             one. Otherwise the backend computes and returns its own layout.
+        ghost_dag:
+            A superset DAG whose nodes and edges are drawn as dashed ghosts
+            wherever ``dag`` does not yet contain them, so a partially
+            completed run can be shown against its target.
+        accent_nodes:
+            Node IDs to highlight as created by the step being displayed.
+        dim_nodes:
+            Node IDs already consumed, drawn faded rather than dashed.
+        dim_edges:
+            Edges already consumed, drawn faded.
+        dim_alpha:
+            Opacity applied to consumed nodes and edges.
+        alert_nodes:
+            Extra node IDs to ring in the alert colour, flagging defects the
+            caller has judged, such as an in-degree exceeding the arity.
 
         Returns
         -------

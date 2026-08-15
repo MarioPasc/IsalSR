@@ -40,6 +40,8 @@
           onclick="IsalSR.switchTab('d2s')">DAG &rarr; String</button>
         <button class="tab" role="tab" aria-selected="false" aria-controls="panel-rt" id="tab-rt"
           onclick="IsalSR.switchTab('rt')">Round-Trip</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="panel-canon" id="tab-canon"
+          onclick="IsalSR.switchTab('canon')">Canonicalization</button>
       </div>
 
       <!-- ============================================================
@@ -103,6 +105,11 @@
         <div class="card" style="padding:var(--space-md) var(--space-xl);margin-bottom:var(--space-md);">
           <div id="s2d-string-display" class="string-display" style="min-height:36px;justify-content:center;">
             <span style="color:var(--text-tertiary);font-size:var(--text-sm);font-weight:400;">Token display appears after decoding</span>
+          </div>
+          <div id="s2d-canon-row" style="display:none;text-align:center;margin-top:var(--space-sm);padding-top:var(--space-sm);border-top:1px solid var(--border-subtle);">
+            <span style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;font-family:var(--font-display);font-weight:700;">Canonical string &#x175;<sub>D</sub></span>
+            <div id="s2d-canon" class="string-display" style="justify-content:center;margin-top:4px;"></div>
+            <div id="s2d-canon-note" style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px;"></div>
           </div>
         </div>
         <div class="trace-timeline" id="s2d-transport" style="display:none;">
@@ -234,13 +241,84 @@
         </div>
       </div>
 
+      <!-- ============================================================
+           PANEL 4: CANONICALIZATION — the k! collapse, computed live
+           ============================================================ -->
+      <div class="tab-panel" id="panel-canon" role="tabpanel" aria-labelledby="tab-canon">
+        <p style="color:var(--text-secondary);margin-bottom:var(--space-lg);">
+          This is the paper's central claim, run in your browser. Pick an expression, and every one of
+          the <strong>k!</strong> ways of numbering its k internal nodes is enumerated. Each numbering
+          is a genuinely different labeled DAG object, and greedy D2S reads that numbering &mdash; so
+          it returns several different strings. The <strong>fast canonical string</strong> of
+          Definition&nbsp;3.8 returns <em>one</em>, on every numbering.
+        </p>
+        <div class="playground-layout">
+          <div class="playground-input">
+            <label class="playground-input__label">Expression DAG</label>
+            <div class="playground-presets" style="margin-top:0;">
+              <span class="playground-presets__label">Select an expression</span>
+              <div class="playground-presets__grid">
+                <button class="preset-btn" data-cn-preset="VcVspv+Ppc" data-cn-vars="1">sin(x&#x2081;) + cos(x&#x2081;) &middot; k=3 &middot; <em>the paper's worked example</em></button>
+                <button class="preset-btn" data-cn-preset="VcVspv*pv+PpcnnC" data-cn-vars="2">cos(x&#x2081;) + x&#x2082;&middot;sin(x&#x2081;) &middot; k=4 &middot; <em>Fig. 1&ndash;2</em></button>
+                <button class="preset-btn" data-cn-preset="VsVcpv*Ppc" data-cn-vars="1">sin(x&#x2081;) &middot; cos(x&#x2081;) &middot; k=3</button>
+                <button class="preset-btn" data-cn-preset="V+NnncVsnnvc" data-cn-vars="2">sin(s), cos(s) with s = x&#x2081;+x&#x2082; shared &middot; k=3</button>
+                <button class="preset-btn" data-cn-preset="VsNVeNVrNVl" data-cn-vars="1">log(&#x221A;(exp(sin(x&#x2081;)))) &middot; k=4 &middot; <em>a chain</em></button>
+              </div>
+            </div>
+            <div id="cn-input-info" style="font-size:var(--text-sm);color:var(--text-secondary);margin-top:var(--space-md);min-height:1.5em;"></div>
+            <div id="cn-error" class="playground-input__error"></div>
+            <button class="btn btn-primary" style="width:100%;margin-top:var(--space-md);" id="cn-run-btn" disabled>Enumerate all k! numberings &rarr;</button>
+            <p style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-sm);">
+              Variable nodes keep their identifiers throughout: an isomorphism must fix them, since
+              renaming x&#x2081; and x&#x2082; would change the function.
+            </p>
+          </div>
+
+          <div class="playground-output">
+            <div id="cn-expression-panel" style="display:none;padding:var(--space-sm) var(--space-md);background:var(--bg-code);border:1px solid var(--border-subtle);border-radius:var(--radius-md);margin-bottom:var(--space-sm);text-align:center;">
+              <span style="font-size:var(--text-xs);color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;font-family:var(--font-display);font-weight:700;">Expression</span>
+              <div id="cn-expression" style="font-family:var(--font-mono);font-size:var(--text-lg);font-weight:600;color:var(--accent-primary);margin-top:2px;min-height:1.5em;">&hellip;</div>
+            </div>
+            <svg id="cn-dag-svg" style="width:100%;height:330px;display:none;"></svg>
+            <div id="cn-placeholder" class="playground-output__viz" style="display:flex;">
+              <div class="playground-output__placeholder">
+                <div class="playground-output__placeholder-icon">&#x25C9;</div>
+                <p><strong>Select an expression preset</strong></p>
+                <p style="margin-top:var(--space-sm);">Its DAG will appear here.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="cn-results" style="display:none;">
+          <div class="card" style="padding:var(--space-xl);margin-top:var(--space-md);">
+            <div id="cn-counters" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-md);margin-bottom:var(--space-lg);"></div>
+
+            <h3 style="margin-bottom:var(--space-sm);">Greedy D2S over the numberings</h3>
+            <p style="font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--space-sm);">
+              Distinct strings the greedy encoder returns, with the number of numberings that produce
+              each. More than one row means the encoding is numbering-dependent.
+            </p>
+            <div id="cn-d2s-list" class="step-log" style="max-height:220px;"></div>
+
+            <h3 style="margin-top:var(--space-lg);margin-bottom:var(--space-sm);">Fast canonical string</h3>
+            <div id="cn-canon-list" class="step-log" style="max-height:160px;"></div>
+            <div id="cn-verdict" class="rt-verdict" style="margin-top:var(--space-md);"></div>
+          </div>
+        </div>
+      </div>
+
     </div><!-- container -->
 
     <section style="max-width:700px;margin:var(--space-3xl) auto 0;text-align:center;">
       <p style="color:var(--text-tertiary);font-size:var(--text-sm);">
-        The playground implements the S2D and D2S algorithms described in
-        <a href="how-it-works.html" style="color:var(--accent-primary);">How It Works</a>.
-        For the full specification, see <a href="math.html" style="color:var(--accent-primary);">Math Foundations</a>.
+        The playground implements S2D, greedy D2S and the fast canonical string exactly as
+        <a href="math.html" style="color:var(--accent-primary);">Section&nbsp;3 of the paper</a> defines
+        them, down to the 64-bit FNV-1a hash the 1-WL step uses &mdash; so a canonical string computed
+        here is the string the library returns.
+        See <a href="how-it-works.html" style="color:var(--accent-primary);">How It Works</a> for the
+        walkthrough.
       </p>
     </section>
   </main>
@@ -255,6 +333,7 @@
   <script src="js/core/labeled-dag.js"></script>
   <script src="js/core/s2d.js"></script>
   <script src="js/core/d2s.js"></script>
+  <script src="js/core/canonical.js"></script>
   <script src="js/viz/dag-renderer.js"></script>
   <script src="js/viz/step-player.js"></script>
 
@@ -344,6 +423,27 @@
         stringDisplayId: 's2d-string-display', expressionId: 's2d-expression', tokens: tokens
       });
       s2dPlayer.goToStep(result.traceSteps.length - 1);
+
+      // Canonical string of the decoded DAG.
+      var canonRow = document.getElementById('s2d-canon-row');
+      try {
+        var canon = IsalSR.fastCanonicalString(result.dag);
+        if (canon === null) {
+          canonRow.style.display = 'block';
+          document.getElementById('s2d-canon').innerHTML =
+            '<span style="color:var(--text-tertiary);font-size:var(--text-sm);">not encodable</span>';
+          document.getElementById('s2d-canon-note').textContent =
+            'Some node is unreachable from a variable, so the reachability condition of Theorem 3.13 fails.';
+        } else {
+          canonRow.style.display = 'block';
+          document.getElementById('s2d-canon').innerHTML = renderColoredTokens(canon, numVars);
+          document.getElementById('s2d-canon-note').textContent = canon === str
+            ? 'The input string is already canonical.'
+            : 'The input string and this one decode to isomorphic DAGs.';
+        }
+      } catch (e) {
+        canonRow.style.display = 'none';
+      }
     });
 
     // S2D transport
@@ -403,7 +503,12 @@
         document.getElementById('d2s-output-section').style.display = 'block';
         document.getElementById('d2s-output-string').innerHTML = renderColoredTokens(encoded, d2sCurrentVars);
         var tokens = IsalSR.tokenize(encoded);
-        document.getElementById('d2s-output-info').textContent = tokens.length + ' tokens, ' + encoded.length + ' characters';
+        var canon = IsalSR.fastCanonicalString(d2sCurrentDAG);
+        var info = tokens.length + ' tokens, ' + encoded.length + ' characters. ';
+        info += (canon === encoded)
+          ? 'The greedy string coincides with the canonical string on this numbering.'
+          : 'Canonical string: ' + canon + ' — the greedy string reads the node numbering, the canonical one does not.';
+        document.getElementById('d2s-output-info').textContent = info;
         errorEl.textContent = '';
       } catch (e) {
         errorEl.textContent = 'D2S error: ' + e.message;
@@ -472,6 +577,142 @@
         errorEl.textContent = 'Error: ' + e.message;
         outputDiv.style.display = 'block';
         outputDiv.innerHTML = '<div style="color:#ef4444;padding:var(--space-lg);">Error: ' + e.message + '</div>';
+      }
+    });
+
+    // ================================================================
+    // Canonicalization Panel — the k! collapse, computed live
+    // ================================================================
+    var cnDAG = null;
+    var cnVars = 1;
+    var PERM_CAP = 5040;   // 7!, the largest enumeration a browser should do eagerly
+
+    function countInternal(dag) {
+      var n = dag.nodeCount(), nv = 0;
+      for (var v = 0; v < n; v++) if (dag.getLabel(v) === 'VAR') nv++;
+      return n - nv;
+    }
+
+    function factorial(k) { var f = 1; for (var i = 2; i <= k; i++) f *= i; return f; }
+
+    document.querySelectorAll('.preset-btn[data-cn-preset]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var str = btn.getAttribute('data-cn-preset');
+        var nv = parseInt(btn.getAttribute('data-cn-vars'), 10) || 1;
+        cnVars = nv;
+        var errorEl = document.getElementById('cn-error');
+        try {
+          cnDAG = runS2D(str, nv).dag;
+          var d3Data = cnDAG.toD3Data();
+          document.getElementById('cn-dag-svg').style.display = 'block';
+          document.getElementById('cn-placeholder').style.display = 'none';
+          document.getElementById('cn-expression-panel').style.display = 'block';
+          document.getElementById('cn-expression').textContent = cnDAG.toExpression();
+          IsalSR.renderDAG('cn-dag-svg', d3Data, {});
+
+          var k = countInternal(cnDAG);
+          document.getElementById('cn-input-info').textContent =
+            d3Data.nodes.length + ' nodes, ' + d3Data.edges.length + ' edges, k = ' + k +
+            ' internal, k! = ' + factorial(k).toLocaleString();
+          document.getElementById('cn-run-btn').disabled = false;
+          errorEl.textContent = '';
+          document.getElementById('cn-results').style.display = 'none';
+        } catch (e) {
+          errorEl.textContent = 'Error: ' + e.message;
+        }
+      });
+    });
+
+    document.getElementById('cn-run-btn').addEventListener('click', function () {
+      if (!cnDAG) return;
+      var errorEl = document.getElementById('cn-error');
+      errorEl.textContent = '';
+      try {
+        var k = countInternal(cnDAG);
+        if (factorial(k) > PERM_CAP) {
+          errorEl.textContent = 'k = ' + k + ' gives ' + factorial(k).toLocaleString() +
+            ' numberings, above this page’s cap of ' + PERM_CAP.toLocaleString() + '.';
+          return;
+        }
+
+        var perms = IsalSR.permutations(k);
+        var d2sCounts = {};      // greedy string -> how many numberings produce it
+        var canonCounts = {};    // canonical string -> how many numberings produce it
+        var fingerprints = {};   // numbering-dependent fingerprint -> count
+        var tieTotal = 0;
+
+        for (var i = 0; i < perms.length; i++) {
+          var dp = IsalSR.permuteInternalNodes(cnDAG, perms[i]);
+          var g = new IsalSR.DAGToString(dp, 0).run().string;
+          d2sCounts[g] = (d2sCounts[g] || 0) + 1;
+          var res = IsalSR.fastCanonical(dp);
+          var c = res.string === null ? '(no encoding)' : res.string;
+          canonCounts[c] = (canonCounts[c] || 0) + 1;
+          tieTotal += res.ties;
+          var fp = IsalSR.structuralFingerprint(dp);
+          fingerprints[fp] = (fingerprints[fp] || 0) + 1;
+        }
+
+        var nDistinctD2S = Object.keys(d2sCounts).length;
+        var nDistinctCanon = Object.keys(canonCounts).length;
+        var nDistinctRepr = Object.keys(fingerprints).length;
+        var autOrder = perms.length / nDistinctRepr;
+
+        function counter(value, label) {
+          return '<div style="text-align:center;padding:var(--space-sm);background:var(--bg-code);' +
+            'border:1px solid var(--border-subtle);border-radius:var(--radius-md);">' +
+            '<div style="font-family:var(--font-mono);font-size:var(--text-xl);font-weight:700;' +
+            'color:var(--accent-primary);">' + value + '</div>' +
+            '<div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px;">' +
+            label + '</div></div>';
+        }
+
+        document.getElementById('cn-counters').innerHTML =
+          counter(k, 'internal nodes k') +
+          counter(perms.length.toLocaleString(), 'numberings enumerated (k!)') +
+          counter(nDistinctRepr.toLocaleString(), 'distinct DAG objects (k!/|Aut(D)|)') +
+          counter(nDistinctD2S, 'distinct greedy D2S strings') +
+          counter(nDistinctCanon, 'distinct canonical strings');
+
+        function listRows(counts, cssHighlight) {
+          var keys = Object.keys(counts).sort();
+          var html = '';
+          for (var j = 0; j < keys.length; j++) {
+            var pct = (100 * counts[keys[j]] / perms.length).toFixed(1);
+            html += '<div style="display:flex;align-items:center;gap:var(--space-md);' +
+              'padding:4px 0;border-bottom:1px solid var(--border-subtle);">' +
+              '<span class="instruction-string" style="flex:1;' +
+              (cssHighlight ? 'color:var(--accent-primary);font-weight:700;' : '') + '">' +
+              renderColoredTokens(keys[j], cnVars) + '</span>' +
+              '<span style="font-family:var(--font-mono);font-size:var(--text-xs);' +
+              'color:var(--text-tertiary);white-space:nowrap;">' +
+              counts[keys[j]] + ' / ' + perms.length + ' (' + pct + '%)</span></div>';
+          }
+          return html;
+        }
+
+        document.getElementById('cn-d2s-list').innerHTML = listRows(d2sCounts, false);
+        document.getElementById('cn-canon-list').innerHTML = listRows(canonCounts, true);
+
+        var verdictEl = document.getElementById('cn-verdict');
+        if (nDistinctCanon === 1) {
+          verdictEl.className = 'rt-verdict rt-verdict--success';
+          verdictEl.innerHTML = '&#x2714; All ' + perms.length.toLocaleString() +
+            ' numberings &mdash; ' + nDistinctRepr.toLocaleString() +
+            ' distinct labeled DAGs, |Aut(D)| = ' + autOrder +
+            ' &mdash; collapse to <strong>one</strong> canonical string. Greedy D2S alone returns ' +
+            nDistinctD2S + '. Backtracking was entered ' + tieTotal +
+            ' time' + (tieTotal === 1 ? '' : 's') + ' in total; every other step was greedy.';
+        } else {
+          verdictEl.className = 'rt-verdict rt-verdict--fail';
+          verdictEl.innerHTML = '&#x2718; ' + nDistinctCanon +
+            ' distinct canonical strings &mdash; this would contradict Theorem 3.15. ' +
+            'Please report it as a bug.';
+        }
+
+        document.getElementById('cn-results').style.display = 'block';
+      } catch (e) {
+        errorEl.textContent = 'Error: ' + e.message;
       }
     });
 

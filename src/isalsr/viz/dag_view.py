@@ -30,6 +30,8 @@ def draw_dag(
     node_colors: dict[int, str] | None = None,
     reachable: frozenset[int] = frozenset(),
     layout: dict[int, Position] | None = None,
+    ghost_dag: LabeledDAG | None = None,
+    accent_nodes: frozenset[int] = frozenset(),
 ) -> dict[int, Position]:
     """Draw ``dag`` on ``ax`` via the named backend.
 
@@ -50,6 +52,11 @@ def draw_dag(
     layout:
         Fixed node positions. When provided the backend must use these
         rather than computing its own.
+    ghost_dag:
+        Superset DAG drawn as dashed ghosts wherever ``dag`` does not yet
+        contain its nodes and edges.
+    accent_nodes:
+        Node IDs to highlight as created by the step being displayed.
 
     Returns
     -------
@@ -63,4 +70,6 @@ def draw_dag(
         node_colors=node_colors,
         reachable=reachable,
         layout=layout,
+        ghost_dag=ghost_dag,
+        accent_nodes=accent_nodes,
     )
