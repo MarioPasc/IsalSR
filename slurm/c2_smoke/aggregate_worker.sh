@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Campaign C2 pre-flight -- Stage C aggregation job (runs once, after the arrays)
+# =============================================================================
+# Rebuilds, over the whole output root and from files already on disk:
+#   * aggregate.csv per (method, benchmark, problem, arm)          -> C1.17
+#   * paired_stats.json / _hash_vs_baseline / _isalsr_vs_hash      -> C1.16
+#   * the across-problem Holm correction
+#   * status_ledger.csv                                            -> C2
+#
+# Why this is a separate job and not part of each task: the three arms live in
+# three different SLURM arrays, so no single task can see all of them, and the
+# three seeds of one arm are three concurrent tasks writing one aggregate.csv.
+# Submitted with --dependency=afterany so it also runs when some arrays failed
+# -- a partial ledger naming the gaps is worth more than no ledger.
+#
+# Environment (exported by launcher.sh), BY ROLE:
+#   both roles     : ISALSR_REPO_DIR, C2_RESULTS_DIR
+#   array role only: C2_CONFIG_LIST (space-separated paths)
+#   ledger role    : C2_LEDGER_ONLY=1, C2_EXPECTED_TASKS, C2_MAX_TIME
+#
+# 🔴 C2_CONFIG_LIST is required by the ARRAY role only, and asserting it here
+# killed the ledger job in 2 s (job 1783830, Stage C v5): the launcher does not
+# export it to the dependent ledger job -- correctly, since a full-root walk
+# needs no config -- so `${C2_CONFIG_LIST:?}` under `set -u` aborted before the
+# role was even selected.  The cost was the whole point of the job: no
+# status_ledger.csv and no Stage C verdict, on a wave that was otherwise
+# 1,260/1,260 clean.  Assert each variable inside the role that uses it.
+# =============================================================================
+set -euo pipefail
+
+START_TIME=$(date +%s)
+
+REPO_DIR="${ISALSR_REPO_DIR:?ERROR: ISALSR_REPO_DIR not set}"
+RESULTS_DIR="${C2_RESULTS_DIR:?ERROR: C2_RESULTS_DIR not set}"
+CONFIG_LIST="${C2_CONFIG_LIST:-}"
+
+for mod in openmpi_gcc/5.0.9_gcc7 openmpi_gcc/5.0.9_gcc15 openmpi_gcc/5.0.9_gcc14; do
+    module load "$mod" 2>/dev/null && break
+done
+eval "$(conda shell.bash hook 2>/dev/null)" || true
+conda activate isalsr 2>/dev/null || true
+CONDA_PREFIX="${CONDA_PREFIX:-$(conda info --base)/envs/isalsr}"
+export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+export PYTHONMALLOC=malloc
+
+cd "${REPO_DIR}"
+export PYTHONPATH="${REPO_DIR}/src:${REPO_DIR}:${PYTHONPATH:-}"
+export PYTHONUNBUFFERED=1
+PYTHON="${CONDA_PREFIX}/bin/python"
+[[ -x "${PYTHON}" ]] || PYTHON="$(command -v python3)"
+
+echo "=========================================="
+echo "C2 Stage C aggregation | job ${SLURM_JOB_ID:-local}"
+echo "Node:    $(hostname)"
+echo "Start:   $(date)"
+echo "Root:    ${RESULTS_DIR}"
+echo "Commit:  $(git -C "${REPO_DIR}" describe --tags --always --dirty 2>/dev/null || echo n/a)"
+echo "=========================================="
+
+# ---------------------------------------------------------------------------
+# Two roles, selected by the environment the launcher set.
+#
+#   C2_LEDGER_ONLY=1   -> the single dependent job: one full-root walk that
+#                         rebuilds status_ledger.csv, then certification.
+#   SLURM_ARRAY_TASK_ID -> one config of the aggregation array.
+#
+# Splitting the old fourteen-configs-in-one-loop job into an array is safe
+# because each --postprocess only call touches only its own (method, suite)
+# subtree.  The one exception was the status ledger, a full recursive walk
+# writing one shared path that ran once per config -- fourteen identical walks,
+# and a race the moment they run concurrently.  --no-status-ledger removes it
+# from the per-config path; the ledger job below runs it exactly once.
+# ---------------------------------------------------------------------------
+FAILED=0
+
+if [[ "${C2_LEDGER_ONLY:-0}" != "1" ]]; then
+    IDX="${SLURM_ARRAY_TASK_ID:?ERROR: aggregate_worker needs SLURM_ARRAY_TASK_ID or C2_LEDGER_ONLY=1}"
+    # Asserted HERE, in the role that actually consumes it -- see the header.
+    [[ -n "${CONFIG_LIST}" ]] || {
+        echo "[FATAL] the aggregation array role requires C2_CONFIG_LIST" >&2
+        exit 1
+    }
+    # shellcheck disable=SC2206
+    CFG_ARRAY=(${CONFIG_LIST})
+    N_CFG=${#CFG_ARRAY[@]}
+    if (( IDX < 1 || IDX > N_CFG )); then
+        echo "[FATAL] array index ${IDX} outside [1, ${N_CFG}]" >&2
+        exit 1
+    fi
+    CFG="${CFG_ARRAY[$((IDX - 1))]}"
+
+    echo ""
+    echo "--- postprocess ${IDX}/${N_CFG}: $(basename "${CFG}") ---"
+    if ! "${PYTHON}" -m experiments.models.orchestrator \
+            --config "${CFG}" \
+            --output-dir "${RESULTS_DIR}" \
+            --postprocess only \
+            --no-status-ledger; then
+        echo "[WARN] postprocess failed for ${CFG}"
+        FAILED=1
+    fi
+
+    END_TIME=$(date +%s)
+    ELAPSED=$((END_TIME - START_TIME))
+    echo ""
+    echo "Finished:  $(date)"
+    echo "Duration:  $((ELAPSED / 60))m $((ELAPSED % 60))s"
+    exit "${FAILED}"
+fi
+
+# ---- Ledger + certification (runs once, after the aggregation array) --------
+echo ""
+echo "--- status ledger: one full-root walk ---"
+if ! "${PYTHON}" -m experiments.models.orchestrator \
+        --output-dir "${RESULTS_DIR}" \
+        --postprocess ledger; then
+    echo "[WARN] status ledger failed"
+    FAILED=$((FAILED + 1))
+fi
+
+# Certification: every C1.x criterion, computed from the files on disk.  Exits
+# non-zero on any blocking failure, so the job's own state carries the verdict.
+CERT_DIR="${RESULTS_DIR}/c2_preflight"
+mkdir -p "${CERT_DIR}"
+echo ""
+echo "--- Stage C certification ---"
+set +e
+"${PYTHON}" -m experiments.scripts.c2_certify \
+    --root "${RESULTS_DIR}" \
+    --out-json "${CERT_DIR}/stage_c_certification.json" \
+    --out-md "${CERT_DIR}/stage_c_certification.md" \
+    --expected-tasks "${C2_EXPECTED_TASKS:-1260}" \
+    --max-time "${C2_MAX_TIME:-900}"
+CERT_RC=$?
+set -e
+
+END_TIME=$(date +%s)
+ELAPSED=$((END_TIME - START_TIME))
+echo ""
+echo "Finished:  $(date)"
+echo "Duration:  $((ELAPSED / 60))m $((ELAPSED % 60))s"
+echo "Ledger failures:    ${FAILED}"
+echo "Certification exit: ${CERT_RC}"
+echo "Report: ${CERT_DIR}/stage_c_certification.md"
+exit $(( FAILED > 0 ? 1 : CERT_RC ))

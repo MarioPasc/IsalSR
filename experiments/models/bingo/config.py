@@ -38,6 +38,22 @@ class BingoConfig:
     # Trajectory logging
     snapshot_frequency: int = 10  # snapshot every N generations
 
+    def __post_init__(self) -> None:
+        """Enforce the containment invariant before any search can start.
+
+        Every configured operator must have an image in the encoding alphabet of
+        Definition 3.2. An operator without one is refused by the adapter at
+        conversion time, which the runner catches and counts as a conversion
+        failure before evaluating the candidate undeduplicated, so the reported
+        reduction factor would understate the redundancy with nothing marking it.
+
+        Raises:
+            AlphabetCoverageError: If any operator has no image in the alphabet.
+        """
+        from experiments.models.alphabet_guard import validate_bingo_operators
+
+        validate_bingo_operators(self.operators)
+
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> BingoConfig:
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}

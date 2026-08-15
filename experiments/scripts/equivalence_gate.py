@@ -62,6 +62,7 @@ from experiments.scripts._dag_generators import make_random_sr_dag
 from isalsr.core.backends import build_info, engine
 from isalsr.core.canonical import fast_canonical_string
 from isalsr.core.labeled_dag import LabeledDAG
+from isalsr.core.node_types import BINARY_OPS
 from isalsr.core.permutations import permute_internal_nodes
 from isalsr.core.string_to_dag import StringToDAG
 from isalsr.errors import InvalidTokenError
@@ -577,6 +578,24 @@ def _run_gate2(
 # ---------------------------------------------------------------------------
 
 
+def _max_binary_indegree(dag: LabeledDAG) -> int:
+    """Largest in-degree over the DAG's non-commutative binary nodes.
+
+    T18 diagnostic. The canonical string pins ``ordered_inputs(v)[0]`` for a
+    binary node (``V``/``v`` admissibility, B9) and emits every further in-edge
+    by ``C``/``c`` in traversal order. A label- and edge-preserving bijection
+    that agrees at position 0 therefore agrees on the whole list whenever the
+    in-degree is at most 2 -- one edge remains and injectivity forces it. So a
+    corpus whose binary nodes all have in-degree <= 2 cannot exhibit a
+    round-trip mismatch of the T18 kind, and this number is the cheap standing
+    check for that. Returns 0 when the DAG has no binary node.
+    """
+    return max(
+        (dag.in_degree(v) for v in range(dag.node_count) if dag.node_label(v) in BINARY_OPS),
+        default=0,
+    )
+
+
 def _run_gate3(
     *,
     backend_a: str,
@@ -603,9 +622,18 @@ def _run_gate3(
     mismatches_b: int = 0
     errors: int = 0
     mismatch_cases: list[dict[str, Any]] = []
+    # T18 standing check: see _max_binary_indegree. Zero here is a sufficient
+    # condition for the corpus to be free of first-operand-designation
+    # mismatches, whatever the round-trip result turns out to be.
+    dags_with_oversaturated_binary: int = 0
+    max_binary_indegree_seen: int = 0
 
     for source_str, n_vars, dag in corpus:
         dags_tested += 1
+        mbi = _max_binary_indegree(dag)
+        max_binary_indegree_seen = max(max_binary_indegree_seen, mbi)
+        if mbi >= 3:
+            dags_with_oversaturated_binary += 1
 
         for backend, label in ((backend_a, "a"), (backend_b, "b")):
             try:
@@ -635,6 +663,7 @@ def _run_gate3(
                             "num_vars": n_vars,
                             "k": k,
                             "canonical_string": canon,
+                            "max_binary_indegree": mbi,
                         }
                     )
 
@@ -647,15 +676,20 @@ def _run_gate3(
         "mismatches_engine_b": mismatches_b,
         "errors": errors,
         "pass": passed,
+        "dags_with_oversaturated_binary": dags_with_oversaturated_binary,
+        "max_binary_indegree_seen": max_binary_indegree_seen,
         "mismatch_cases": mismatch_cases,
     }
     log.info(
-        "Gate3: %d DAGs, %d comparisons, %d mismatches_a, %d mismatches_b, %d errors",
+        "Gate3: %d DAGs, %d comparisons, %d mismatches_a, %d mismatches_b, %d errors, "
+        "%d DAGs with an over-saturated binary node (max binary in-degree %d)",
         dags_tested,
         comparisons_made,
         mismatches_a,
         mismatches_b,
         errors,
+        dags_with_oversaturated_binary,
+        max_binary_indegree_seen,
     )
     return result
 

@@ -4,21 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Math Foundations — IsalSR</title>
-  <meta name="description" content="Mathematical foundations of IsalSR: labeled-DAG isomorphism, canonical strings, completeness theorems, and DAG distance.">
+  <meta name="description" content="Mathematical foundations of IsalSR: the instruction set, S2D and D2S, the fast canonical string, labeled-DAG isomorphism, the completeness theorem, and the host-solver interface.">
 
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
 
-  <link rel="stylesheet" href="css/variables.css?v=1">
-  <link rel="stylesheet" href="css/reset.css?v=1">
-  <link rel="stylesheet" href="css/typography.css?v=1">
-  <link rel="stylesheet" href="css/layout.css?v=1">
-  <link rel="stylesheet" href="css/components.css?v=1">
-  <link rel="stylesheet" href="css/nav.css?v=1">
-  <link rel="stylesheet" href="css/footer.css?v=1">
-  <link rel="stylesheet" href="css/math.css?v=1">
+  <link rel="stylesheet" href="css/variables.css?v=2">
+  <link rel="stylesheet" href="css/reset.css?v=2">
+  <link rel="stylesheet" href="css/typography.css?v=2">
+  <link rel="stylesheet" href="css/layout.css?v=2">
+  <link rel="stylesheet" href="css/components.css?v=2">
+  <link rel="stylesheet" href="css/nav.css?v=2">
+  <link rel="stylesheet" href="css/footer.css?v=2">
+  <link rel="stylesheet" href="css/math.css?v=2">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 </head>
@@ -30,8 +30,11 @@
     <header class="math-header">
       <h1>Mathematical Foundations</h1>
       <p>
-        Formal definitions, theorems, and proofs underlying the IsalSR canonical string representation
-        for symbolic regression expression DAGs.
+        The definitions, theorems and proofs of Section&nbsp;3 of
+        <em>Representation of Directed Acyclic Graphs by Sequences of Instructions for
+        Symbolic Regression</em>. Numbering follows the paper, so Definition&nbsp;3.8 here is
+        Definition&nbsp;3.8 there. Proofs are given in outline; the full arguments are in
+        Appendix&nbsp;A of the paper.
       </p>
     </header>
 
@@ -39,286 +42,234 @@
     <nav class="math-toc" aria-label="Table of contents">
       <h2 class="math-toc__title">Contents</h2>
       <ol class="math-toc__list">
-        <li><a href="#sec-dag-iso">1. Labeled-DAG Isomorphism</a></li>
-        <li><a href="#sec-alphabet">2. The IsalSR Alphabet and Machine State</a></li>
+        <li><a href="#sec-ldag">1. Labeled DAGs and Expression DAGs</a></li>
+        <li><a href="#sec-alphabet">2. The Instruction Set &Sigma;<sub>SR</sub></a></li>
         <li><a href="#sec-s2d">3. String-to-DAG (S2D)</a></li>
         <li><a href="#sec-d2s">4. DAG-to-String (D2S)</a></li>
-        <li><a href="#sec-commutative">5. Commutative Encoding</a></li>
-        <li><a href="#sec-canonical">6. Canonical String</a></li>
-        <li><a href="#sec-completeness">7. Completeness Theorem</a></li>
-        <li><a href="#sec-distance">8. DAG Distance Metric</a></li>
-        <li><a href="#sec-complexity">9. Complexity Analysis</a></li>
+        <li><a href="#sec-canonical">5. The Fast Canonical String</a></li>
+        <li><a href="#sec-invariant">6. Canonical String as a Graph Invariant</a></li>
+        <li><a href="#sec-interface">7. The Host-Solver Interface</a></li>
+        <li><a href="#sec-serialization">8. A Fixed-Order Serialization Key</a></li>
+        <li><a href="#sec-complexity">9. Complexity Summary</a></li>
       </ol>
     </nav>
 
     <!-- ===================== SECTION 1 ===================== -->
-    <section class="math-section" id="sec-dag-iso">
-      <h2>1. Labeled-DAG Isomorphism</h2>
+    <section class="math-section" id="sec-ldag">
+      <h2>1. Labeled DAGs and Expression DAGs</h2>
 
       <div class="def-box">
-        <h4>Definition 1 (Labeled DAG for Symbolic Regression)</h4>
+        <h4>Definition 3.1 (Labeled DAG)</h4>
         <p>
-          A <strong>labeled directed acyclic graph</strong> for symbolic regression is a 4-tuple
-          <span class="math-inline" data-tex="D = (V, E, \ell, \delta)"></span>
-          where:
+          A <strong>labeled DAG</strong> is a tuple
+          <span class="math-inline" data-tex="D = (V, E, \ell, \delta)"></span> where:
         </p>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
+        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);" type="i">
           <li>
-            <span class="math-inline" data-tex="V"></span> is a finite set of nodes, partitioned as
-            <span class="math-inline" data-tex="V = V_{\mathrm{var}} \cup V_{\mathrm{int}}"></span> into
-            <em>variable nodes</em> <span class="math-inline" data-tex="V_{\mathrm{var}} = \{x_1, \ldots, x_m\}"></span>
-            and <em>internal nodes</em> <span class="math-inline" data-tex="V_{\mathrm{int}}"></span>
-            (operation and constant nodes).
+            <span class="math-inline" data-tex="V = \{0, 1, \ldots, n-1\}"></span> is a finite node set
+            with the total order given by the integer indices;
           </li>
           <li>
-            <span class="math-inline" data-tex="E \subseteq V \times V"></span> is a set of directed edges
-            such that <span class="math-inline" data-tex="(V, E)"></span> is acyclic.
-            Edge <span class="math-inline" data-tex="(u, v) \in E"></span> means
-            "node <span class="math-inline" data-tex="u"></span> provides an input to node
-            <span class="math-inline" data-tex="v"></span>" (data flows from <span class="math-inline" data-tex="u"></span>
-            to <span class="math-inline" data-tex="v"></span>).
+            <span class="math-inline" data-tex="E \subseteq V \times V"></span> is a set of directed
+            edges such that <span class="math-inline" data-tex="(V, E)"></span> is acyclic;
           </li>
           <li>
-            <span class="math-inline" data-tex="\ell\colon V \to \mathcal{L}"></span> is a labeling function
-            mapping each node to a label from the operation type set
-            <span class="math-display" data-tex="\mathcal{L} = \{\textsf{VAR}, \textsf{ADD}, \textsf{MUL}, \textsf{SUB}, \textsf{DIV}, \textsf{SIN}, \textsf{COS}, \textsf{EXP}, \textsf{LOG}, \textsf{SQRT}, \textsf{POW}, \textsf{ABS}, \textsf{NEG}, \textsf{INV}, \textsf{CONST}\}."></span>
+            <span class="math-inline" data-tex="\ell: V \to \mathcal{T}"></span> assigns each node an
+            operation type from the type set <span class="math-inline" data-tex="\mathcal{T}"></span>;
           </li>
           <li>
-            <span class="math-inline" data-tex="\delta\colon V \to \mathcal{M}"></span> is a metadata function
-            storing auxiliary information per node. For variable nodes,
-            <span class="math-inline" data-tex="\delta(x_i) = \{\texttt{var\_index}: i\}"></span>;
-            for constant nodes, <span class="math-inline" data-tex="\delta(v) = \{\texttt{const\_value}: c \in \mathbb{R}\}"></span>;
-            for all other nodes, <span class="math-inline" data-tex="\delta(v) = \emptyset"></span>.
-          </li>
-        </ul>
-      </div>
-
-      <div class="def-box">
-        <h4>Definition 2 (Operand Order)</h4>
-        <p>
-          For each node <span class="math-inline" data-tex="v \in V"></span> with in-degree
-          <span class="math-inline" data-tex="\deg^{-}(v) \geq 2"></span>, the
-          <strong>operand-order function</strong>
-          <span class="math-inline" data-tex="\sigma(v) = (s_1, s_2, \ldots, s_{\deg^{-}(v)})"></span>
-          records the in-neighbors of <span class="math-inline" data-tex="v"></span>
-          in the order in which the corresponding edges were inserted during S2D execution.
-        </p>
-        <p style="margin-top: var(--space-sm);">
-          For <strong>commutative</strong> operations (ADD, MUL) and <strong>unary</strong>
-          operations, operand order is semantically irrelevant. For the
-          <strong>non-commutative binary</strong> operation POW, the order is essential:
-          <span class="math-inline" data-tex="\sigma(v) = (s_1, s_2)"></span> means
-          <span class="math-inline" data-tex="s_1^{s_2}"></span>, not
-          <span class="math-inline" data-tex="s_2^{s_1}"></span>.
-          This is also the case for SUB and DIV in the non-commutative encoding
-          (see Section 5).
-        </p>
-      </div>
-
-      <div class="def-box">
-        <h4>Definition 3 (Labeled-DAG Isomorphism)</h4>
-        <p>
-          Two labeled DAGs <span class="math-inline" data-tex="D_1 = (V_1, E_1, \ell_1, \delta_1)"></span> and
-          <span class="math-inline" data-tex="D_2 = (V_2, E_2, \ell_2, \delta_2)"></span> are
-          <strong>isomorphic</strong> (written <span class="math-inline" data-tex="D_1 \cong D_2"></span>)
-          if there exists a bijection
-          <span class="math-inline" data-tex="\varphi\colon V_1 \to V_2"></span> satisfying all
-          of the following conditions:
-        </p>
-        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li style="margin-bottom: var(--space-xs);">
-            <strong>Edge preservation:</strong>
-            <span class="math-inline" data-tex="(u, v) \in E_1 \iff (\varphi(u), \varphi(v)) \in E_2"></span>
-          </li>
-          <li style="margin-bottom: var(--space-xs);">
-            <strong>Label preservation:</strong>
-            <span class="math-inline" data-tex="\ell_1(v) = \ell_2(\varphi(v))"></span> for all
-            <span class="math-inline" data-tex="v \in V_1"></span>
-          </li>
-          <li style="margin-bottom: var(--space-xs);">
-            <strong>Variable anchoring:</strong>
-            <span class="math-inline" data-tex="\varphi(x_i) = x_i"></span> for all
-            <span class="math-inline" data-tex="x_i \in V_{\mathrm{var}}"></span>
-          </li>
-          <li>
-            <strong>Operand-order preservation (for POW):</strong>
-            For every node <span class="math-inline" data-tex="v \in V_1"></span> with
-            <span class="math-inline" data-tex="\ell_1(v) = \textsf{POW}"></span> and
-            <span class="math-inline" data-tex="\sigma_1(v) = (s_1, s_2)"></span>, we have
-            <span class="math-inline" data-tex="\sigma_2(\varphi(v)) = (\varphi(s_1), \varphi(s_2))"></span>
+            <span class="math-inline" data-tex="\delta: V \to \mathbb{Z} \cup \mathbb{R}"></span> stores
+            per-node metadata: the variable index for Var nodes, the constant value for Const nodes,
+            and zero otherwise.
           </li>
         </ol>
+        <p style="margin-top: var(--space-sm);">
+          An edge <span class="math-inline" data-tex="(u,v) \in E"></span> means
+          &ldquo;<span class="math-inline" data-tex="u"></span> provides input to
+          <span class="math-inline" data-tex="v"></span>&rdquo;. Write
+          <span class="math-inline" data-tex="N^{-}(v) = \{u : (u,v) \in E\}"></span> for the
+          in-neighbors and <span class="math-inline" data-tex="N^{+}(v) = \{u : (v,u) \in E\}"></span>
+          for the out-neighbors.
+        </p>
       </div>
 
-      <div class="remark-box">
-        <h4>Remark (Structure of the Automorphism Group)</h4>
+      <div class="def-box">
+        <h4>Ordered input list and operand order</h4>
         <p>
-          The variable anchoring condition (iii) restricts the isomorphism to permute
-          only the <span class="math-inline" data-tex="k = |V_{\mathrm{int}}|"></span> internal nodes,
-          fixing all <span class="math-inline" data-tex="m"></span> variable nodes.
-          Thus <span class="math-inline" data-tex="\varphi \in S_k"></span> (the symmetric group on
-          <span class="math-inline" data-tex="k"></span> elements), and the automorphism group
-          <span class="math-inline" data-tex="\mathrm{Aut}(D) \leq S_k"></span>. For a generic DAG with
-          no non-trivial automorphisms,
-          <span class="math-inline" data-tex="|\mathrm{Aut}(D)| = 1"></span> and there are exactly
-          <span class="math-inline" data-tex="k!"></span> distinct node-numberings that yield distinct
-          D2S strings.
+          Each node <span class="math-inline" data-tex="v"></span> maintains an
+          <strong>ordered input list</strong>
+          <span class="math-inline" data-tex="\sigma(v) = (s_1, s_2, \ldots)"></span>, recording its
+          in-neighbors in the order their connecting edges were added. Pow is the sole binary
+          non-commutative operation: if
+          <span class="math-inline" data-tex="\sigma(v) = (u_1, u_2)"></span>, then
+        </p>
+        <div class="math-display" data-tex="\mathrm{eval}(v) = \mathrm{eval}(u_1)^{\,\mathrm{eval}(u_2)},\qquad (1)"></div>
+        <p>
+          with <span class="math-inline" data-tex="u_1"></span> the base and
+          <span class="math-inline" data-tex="u_2"></span> the exponent. The creation token
+          <span class="math-inline" data-tex="\texttt{V}\ell"></span> /
+          <span class="math-inline" data-tex="\texttt{v}\ell"></span> adds the creation edge first, so
+          the creation-edge source is always <span class="math-inline" data-tex="\sigma(v)[0]"></span>;
+          a subsequent <span class="math-inline" data-tex="\texttt{C}"></span> /
+          <span class="math-inline" data-tex="\texttt{c}"></span> appends the exponent. All other
+          operations are commutative and impose no ordering constraint.
         </p>
       </div>
 
       <div class="remark-box">
-        <h4>Remark (Arity Classification)</h4>
+        <h4>Expression DAGs</h4>
         <p>
-          Each label <span class="math-inline" data-tex="L \in \mathcal{L}"></span> has a fixed
-          <strong>arity type</strong>:
+          Equation&nbsp;(1) presumes <span class="math-inline" data-tex="|\sigma(v)| = 2"></span>, and
+          Definition&nbsp;3.1 does not guarantee it: an arbitrary edge set may give a Pow node three
+          in-neighbors, or one. Call <span class="math-inline" data-tex="D"></span> an
+          <strong>expression DAG</strong> when every operation node carries exactly as many in-edges
+          as its arity, every Var node has in-degree zero, and every Const node has in-degree at
+          most one. Evaluation is defined on expression DAGs and on no others: outside that class a
+          Pow node has no base&ndash;exponent pair to read, so
+          <span class="math-inline" data-tex="D"></span> denotes no function. Every DAG a host solver
+          produces is an expression DAG, because each operation node is wired to exactly its operand
+          slots. Every statement below that mentions
+          <span class="math-inline" data-tex="\sigma"></span> is read over this class.
         </p>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            <strong>Leaf</strong> (arity 0):
-            <span class="math-inline" data-tex="\textsf{VAR}, \textsf{CONST}"></span>.
-            No outgoing edges.
-          </li>
-          <li>
-            <strong>Unary</strong> (arity 1):
-            <span class="math-inline" data-tex="\textsf{SIN}, \textsf{COS}, \textsf{EXP}, \textsf{LOG}, \textsf{SQRT}, \textsf{ABS}, \textsf{NEG}, \textsf{INV}"></span>.
-            Exactly one input.
-          </li>
-          <li>
-            <strong>Binary</strong> (arity 2):
-            <span class="math-inline" data-tex="\textsf{SUB}, \textsf{DIV}, \textsf{POW}"></span>.
-            Exactly two ordered inputs.
-          </li>
-          <li>
-            <strong>Variable-arity</strong> (arity <span class="math-inline" data-tex="\geq 2"></span>):
-            <span class="math-inline" data-tex="\textsf{ADD}, \textsf{MUL}"></span>.
-            Two or more inputs; operand order is irrelevant (commutative + associative).
-          </li>
-        </ul>
       </div>
     </section>
 
     <!-- ===================== SECTION 2 ===================== -->
     <section class="math-section" id="sec-alphabet">
-      <h2>2. The IsalSR Alphabet and Machine State</h2>
+      <h2>2. The Instruction Set &Sigma;<sub>SR</sub></h2>
 
       <div class="def-box">
-        <h4>Definition 4 (Machine State)</h4>
+        <h4>Machine state</h4>
         <p>
-          The IsalSR machine operates on a <strong>state</strong>
-          <span class="math-inline" data-tex="\mathcal{S} = (D, L, p, q)"></span> where:
-        </p>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            <span class="math-inline" data-tex="D = (V, E, \ell, \delta)"></span> is the current labeled DAG
-            under construction
-          </li>
-          <li>
-            <span class="math-inline" data-tex="L"></span> is an array-backed circular doubly linked list (CDLL)
-            whose elements are references to nodes in <span class="math-inline" data-tex="V"></span>
-          </li>
-          <li>
-            <span class="math-inline" data-tex="p"></span> is the <em>primary pointer</em>, a position in
-            <span class="math-inline" data-tex="L"></span>
-          </li>
-          <li>
-            <span class="math-inline" data-tex="q"></span> is the <em>secondary pointer</em>, a position in
-            <span class="math-inline" data-tex="L"></span>
-          </li>
-        </ul>
-        <p style="margin-top: var(--space-sm);">
-          The CDLL positions <span class="math-inline" data-tex="p, q"></span> are <em>not</em> graph node IDs.
-          The graph node at pointer <span class="math-inline" data-tex="p"></span> is accessed via
-          <span class="math-inline" data-tex="L[p]"></span>.
+          The IsalSR machine state is the quadruple
+          <span class="math-inline" data-tex="\mathcal{S} = (D, L, p, q)"></span>: the partially built
+          labeled DAG <span class="math-inline" data-tex="D"></span>, the circular doubly linked list
+          <span class="math-inline" data-tex="L"></span> whose elements are node identifiers from
+          <span class="math-inline" data-tex="V"></span>, and the positions
+          <span class="math-inline" data-tex="p"></span> and
+          <span class="math-inline" data-tex="q"></span> of the primary and secondary pointers.
+          The graph node at list position <span class="math-inline" data-tex="r"></span> is
+          <span class="math-inline" data-tex="\mathtt{val}(r) \in V"></span>; conversely the list
+          position of graph node <span class="math-inline" data-tex="v"></span> is
+          <span class="math-inline" data-tex="\mathtt{ptr}(v)"></span>.
         </p>
       </div>
 
       <div class="def-box">
-        <h4>Definition 5 (Initial State)</h4>
+        <h4>Definition 3.2 (IsalSR Instruction Set &Sigma;<sub>SR</sub>)</h4>
         <p>
-          For <span class="math-inline" data-tex="m \geq 1"></span> input variables, the initial state is:
+          Let
+          <span class="math-display" data-tex="\mathcal{L} = \{\texttt{+}, \texttt{*}, \texttt{g}, \texttt{i}, \texttt{s}, \texttt{c}, \texttt{e}, \texttt{l}, \texttt{r}, \texttt{\^{}}, \texttt{a}, \texttt{k}\}"></span>
+          be the set of label characters. The alphabet
+          <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}"></span> consists of four
+          categories of tokens:
         </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathcal{S}_0 = (D_0, L_0, p_0, q_0)"></span>
-        </div>
-        <p>where:</p>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
+        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
           <li>
-            <span class="math-inline" data-tex="D_0 = (V_0, E_0, \ell_0, \delta_0)"></span> with
-            <span class="math-inline" data-tex="V_0 = \{x_1, \ldots, x_m\}"></span>,
-            <span class="math-inline" data-tex="E_0 = \emptyset"></span>,
-            <span class="math-inline" data-tex="\ell_0(x_i) = \textsf{VAR}"></span>, and
-            <span class="math-inline" data-tex="\delta_0(x_i) = \{\texttt{var\_index}: i\}"></span>
+            <strong>Primary pointer movement</strong> (single character):
+            <span class="math-inline" data-tex="\texttt{N}"></span> advance,
+            <span class="math-inline" data-tex="\texttt{P}"></span> retreat.
           </li>
           <li>
-            <span class="math-inline" data-tex="L_0 = [x_1, x_2, \ldots, x_m]"></span> in natural index order
+            <strong>Secondary pointer movement</strong> (single character):
+            <span class="math-inline" data-tex="\texttt{n}"></span> advance,
+            <span class="math-inline" data-tex="\texttt{p}"></span> retreat.
           </li>
           <li>
-            <span class="math-inline" data-tex="p_0 = q_0 = \mathrm{ptr}(x_1)"></span>, both pointers on the CDLL
-            position of <span class="math-inline" data-tex="x_1"></span>
+            <strong>Edge creation</strong> (single character):
+            <span class="math-inline" data-tex="\texttt{C}"></span> creates
+            <span class="math-inline" data-tex="\mathtt{val}(p) \to \mathtt{val}(q)"></span>;
+            <span class="math-inline" data-tex="\texttt{c}"></span> creates
+            <span class="math-inline" data-tex="\mathtt{val}(q) \to \mathtt{val}(p)"></span>.
+            If the edge would create a cycle it is silently skipped.
           </li>
-        </ul>
+          <li>
+            <strong>No-operation</strong> (single character):
+            <span class="math-inline" data-tex="\texttt{W}"></span>.
+          </li>
+          <li>
+            <strong>Labeled node insertion</strong> (two-character token):
+            <span class="math-inline" data-tex="\texttt{V}\ell"></span> creates a new node
+            <span class="math-inline" data-tex="v_{\mathrm{new}}"></span> of type
+            <span class="math-inline" data-tex="\ell"></span>, adds the edge
+            <span class="math-inline" data-tex="\mathtt{val}(p) \to v_{\mathrm{new}}"></span>, and
+            inserts <span class="math-inline" data-tex="v_{\mathrm{new}}"></span> into
+            <span class="math-inline" data-tex="L"></span> immediately after the primary-pointer
+            position &mdash; the pointer does not move.
+            <span class="math-inline" data-tex="\texttt{v}\ell"></span> does the same using
+            <span class="math-inline" data-tex="q"></span>.
+          </li>
+        </ol>
         <p style="margin-top: var(--space-sm);">
-          Variables are pre-inserted and distinguished. They are
-          <em>not</em> created by any instruction; they exist before
-          string execution begins.
-        </p>
-      </div>
-
-      <div class="def-box">
-        <h4>Definition 6 (IsalSR Alphabet)</h4>
-        <p>
-          The alphabet <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}"></span> consists of:
-        </p>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            <strong>Movement tokens</strong> (single-character):
-            <span class="math-inline" data-tex="\{N, P, n, p\}"></span>.
-            <span class="math-inline" data-tex="N"></span>/<span class="math-inline" data-tex="P"></span>
-            advance/retreat the primary pointer;
-            <span class="math-inline" data-tex="n"></span>/<span class="math-inline" data-tex="p"></span>
-            advance/retreat the secondary pointer.
-          </li>
-          <li>
-            <strong>Edge creation tokens</strong> (single-character):
-            <span class="math-inline" data-tex="\{C, c\}"></span>.
-            <span class="math-inline" data-tex="C"></span> adds edge
-            <span class="math-inline" data-tex="L[p] \to L[q]"></span>;
-            <span class="math-inline" data-tex="c"></span> adds edge
-            <span class="math-inline" data-tex="L[q] \to L[p]"></span>.
-            Both include a DAG acyclicity check; the instruction is a no-op if
-            the edge would create a cycle.
-          </li>
-          <li>
-            <strong>No-op token</strong> (single-character):
-            <span class="math-inline" data-tex="\{W\}"></span>
-          </li>
-          <li>
-            <strong>Node insertion tokens</strong> (two-character compound):
-            <span class="math-inline" data-tex="V\!\lambda"></span> or
-            <span class="math-inline" data-tex="v\!\lambda"></span> where
-            <span class="math-inline" data-tex="\lambda \in \Lambda = \{+, *, -, /, s, c, e, l, r, \hat{\ }, a, g, i, k\}"></span>
-            is a label character drawn from the 14-element label alphabet.
-          </li>
-        </ul>
-        <p style="margin-top: var(--space-sm);">
-          Total vocabulary: 7 single-character tokens +
-          <span class="math-inline" data-tex="2 \times |\Lambda| = 28"></span> compound tokens
-          = <strong>35 tokens</strong> (full alphabet).
-          Experiments may use configurable subsets.
+          The vocabulary contains 7 single-character tokens and
+          <span class="math-inline" data-tex="2 \times |\mathcal{L}| = 24"></span> compound tokens,
+          <strong>31 in total</strong>. Table&nbsp;1 of the paper, reproduced on the
+          <a href="how-it-works.html" style="color: var(--accent-primary);">How It Works</a> page,
+          gives each label's arity and evaluation semantics.
         </p>
       </div>
 
       <div class="remark-box">
-        <h4>Remark (Tokenizer Disambiguation)</h4>
+        <h4>Tokenizer disambiguation</h4>
         <p>
-          The tokenizer is deterministic and context-free at the character level:
-          bare <code>c</code> is always the edge instruction
-          <span class="math-inline" data-tex="L[q] \to L[p]"></span>;
-          <code>c</code> appearing as the second character after <code>V</code> or <code>v</code>
-          is always the COS label. The two-character tokens
-          <span class="math-inline" data-tex="V\!\lambda"></span>,
-          <span class="math-inline" data-tex="v\!\lambda"></span> are atomic and cannot be split
-          into independent instructions.
+          The scanner is two-tier and deterministic: <code>V</code> and <code>v</code> consume the
+          following character as a label, every other character is a token on its own. A bare
+          <code>c</code> is therefore always the edge instruction, and a <code>c</code> in second
+          position after <code>V</code>/<code>v</code> is always the Cos label. Compound tokens are
+          atomic and cannot be split.
+        </p>
+      </div>
+
+      <div class="def-box">
+        <h4>Commutative encoding of subtraction and division</h4>
+        <p>
+          The two unary operators Neg (label <code>g</code>) and Inv (label <code>i</code>) carry
+          subtraction and division through the identities
+        </p>
+        <div class="math-display" data-tex="x - y = \mathrm{Add}\bigl(x,\; \mathrm{Neg}(y)\bigr), \qquad x / y = \mathrm{Mul}\bigl(x,\; \mathrm{Inv}(y)\bigr)."></div>
+        <p>
+          Add and Mul are commutative, so their inputs are interchangeable and no operand-order
+          tracking is required. The protected inverse is
+          <span class="math-inline" data-tex="\mathrm{Inv}(x) = 1/x"></span> when
+          <span class="math-inline" data-tex="|x| > \varepsilon"></span> and
+          <span class="math-inline" data-tex="1"></span> otherwise. Because these are identities and
+          not approximations, the class of expressible functions is unchanged, and Pow is left as
+          the only operation whose operands must be ordered. The construction is inspired by
+          GraphSR.
+        </p>
+      </div>
+
+      <div class="def-box">
+        <h4>Initial state</h4>
+        <p>Given <span class="math-inline" data-tex="m \geq 1"></span> input variables:</p>
+        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
+          <li>
+            <span class="math-inline" data-tex="V_0 = \{x_1, \ldots, x_m\}"></span> with identifiers
+            <span class="math-inline" data-tex="0, \ldots, m-1"></span> in variable-index order,
+            <span class="math-inline" data-tex="\ell(x_i) = \textsf{Var}"></span>,
+            <span class="math-inline" data-tex="\delta(x_i) = i"></span>;
+          </li>
+          <li><span class="math-inline" data-tex="E_0 = \emptyset"></span>;</li>
+          <li><span class="math-inline" data-tex="L_0 = [x_1, \ldots, x_m]"></span>, circular;</li>
+          <li><span class="math-inline" data-tex="p_0 = q_0 = \mathtt{ptr}(x_1)"></span>.</li>
+        </ul>
+        <p style="margin-top: var(--space-sm);">
+          Identifiers are assigned in insertion order, so any node inserted later receives a
+          strictly higher identifier. This makes the operand-order semantics of&nbsp;(1)
+          well defined and deterministic for every DAG that S2D produces.
+        </p>
+      </div>
+
+      <div class="thm-box">
+        <h4>Acyclicity invariant</h4>
+        <p>
+          After every token, <span class="math-inline" data-tex="(V, E)"></span> remains acyclic.
+          For <span class="math-inline" data-tex="\texttt{V}\ell"></span> /
+          <span class="math-inline" data-tex="\texttt{v}\ell"></span>, new nodes have no outgoing edges
+          at creation, so adding an edge <em>to</em> them cannot create a cycle. For
+          <span class="math-inline" data-tex="\texttt{C}"></span> /
+          <span class="math-inline" data-tex="\texttt{c}"></span>, a BFS reachability test runs before
+          insertion and the instruction is skipped if a cycle would result.
         </p>
       </div>
     </section>
@@ -328,148 +279,34 @@
       <h2>3. String-to-DAG (S2D)</h2>
 
       <div class="def-box">
-        <h4>Definition 7 (S2D Execution)</h4>
+        <h4>Definition 3.3 (S2D Execution)</h4>
         <p>
-          Given <span class="math-inline" data-tex="m"></span> input variables and an instruction string
-          <span class="math-inline" data-tex="w = t_1 t_2 \cdots t_n \in \Sigma_{\mathrm{SR}}^*"></span>,
-          the S2D algorithm produces a labeled DAG by initializing state
-          <span class="math-inline" data-tex="\mathcal{S}_0"></span> (Definition 5) and then executing
-          each token <span class="math-inline" data-tex="t_i"></span> sequentially, applying the
-          corresponding state transition
-          <span class="math-inline" data-tex="\mathcal{S}_{i} = T(t_i, \mathcal{S}_{i-1})"></span>.
-          The output is the DAG component of the final state
-          <span class="math-inline" data-tex="\mathcal{S}_n"></span>.
+          Given <span class="math-inline" data-tex="w \in \Sigma_{\mathrm{SR}}^*"></span> and
+          <span class="math-inline" data-tex="m \geq 1"></span>, let
+          <span class="math-inline" data-tex="(t_1, \ldots, t_k) = \mathtt{Tokenize}(w)"></span> be the
+          token sequence produced by the two-tier scanner. Starting from
+          <span class="math-inline" data-tex="\mathcal{S}_0"></span>, token
+          <span class="math-inline" data-tex="t_j"></span> induces the transition
+          <span class="math-inline" data-tex="\mathcal{S}_{j-1} \to \mathcal{S}_j"></span>, and the
+          output is <span class="math-inline" data-tex="\mathrm{S2D}(w, m) = D_k"></span>.
         </p>
-      </div>
-
-      <h3 style="margin-top: var(--space-xl);">State Transitions</h3>
-
-      <p>
-        Each token induces a deterministic state transition
-        <span class="math-inline" data-tex="T\colon \Sigma_{\mathrm{SR}} \times \mathcal{S} \to \mathcal{S}"></span>.
-        Let the current state be
-        <span class="math-inline" data-tex="(D, L, p, q)"></span>
-        with <span class="math-inline" data-tex="D = (V, E, \ell, \delta)"></span>.
-        We write <span class="math-inline" data-tex="u_p = L[p]"></span> and
-        <span class="math-inline" data-tex="u_q = L[q]"></span> for the graph nodes at the two pointers.
-      </p>
-
-      <div class="def-box">
-        <h4>Movement Transitions</h4>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            <span class="math-inline" data-tex="T(N, \mathcal{S})"></span>: Set
-            <span class="math-inline" data-tex="p \leftarrow \mathrm{next}_L(p)"></span>.
-            All other components unchanged.
-          </li>
-          <li>
-            <span class="math-inline" data-tex="T(P, \mathcal{S})"></span>: Set
-            <span class="math-inline" data-tex="p \leftarrow \mathrm{prev}_L(p)"></span>.
-          </li>
-          <li>
-            <span class="math-inline" data-tex="T(n, \mathcal{S})"></span>: Set
-            <span class="math-inline" data-tex="q \leftarrow \mathrm{next}_L(q)"></span>.
-          </li>
-          <li>
-            <span class="math-inline" data-tex="T(p, \mathcal{S})"></span>: Set
-            <span class="math-inline" data-tex="q \leftarrow \mathrm{prev}_L(q)"></span>.
-          </li>
-        </ul>
-      </div>
-
-      <div class="def-box">
-        <h4>Edge Creation Transitions</h4>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            <span class="math-inline" data-tex="T(C, \mathcal{S})"></span>: If there is no directed path
-            <span class="math-inline" data-tex="u_q \rightsquigarrow u_p"></span> in
-            <span class="math-inline" data-tex="D"></span>, then set
-            <span class="math-inline" data-tex="E \leftarrow E \cup \{(u_p, u_q)\}"></span>
-            and append <span class="math-inline" data-tex="u_p"></span> to
-            <span class="math-inline" data-tex="\sigma(u_q)"></span>.
-            Otherwise, the instruction is a <strong>no-op</strong>
-            (the edge would create a cycle).
-          </li>
-          <li>
-            <span class="math-inline" data-tex="T(c, \mathcal{S})"></span>: If there is no directed path
-            <span class="math-inline" data-tex="u_p \rightsquigarrow u_q"></span> in
-            <span class="math-inline" data-tex="D"></span>, then set
-            <span class="math-inline" data-tex="E \leftarrow E \cup \{(u_q, u_p)\}"></span>
-            and append <span class="math-inline" data-tex="u_q"></span> to
-            <span class="math-inline" data-tex="\sigma(u_p)"></span>.
-            Otherwise, <strong>no-op</strong>.
-          </li>
-        </ul>
-      </div>
-
-      <div class="def-box">
-        <h4>Node Insertion Transitions</h4>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            <span class="math-inline" data-tex="T(V\!\lambda, \mathcal{S})"></span>:
-            Create a fresh node <span class="math-inline" data-tex="v_{\mathrm{new}}"></span> with
-            <span class="math-inline" data-tex="\ell(v_{\mathrm{new}}) = \Lambda(\lambda)"></span>.
-            Set <span class="math-inline" data-tex="V \leftarrow V \cup \{v_{\mathrm{new}}\}"></span>,
-            <span class="math-inline" data-tex="E \leftarrow E \cup \{(u_p, v_{\mathrm{new}})\}"></span>,
-            <span class="math-inline" data-tex="\sigma(v_{\mathrm{new}}) \leftarrow (u_p)"></span>.
-            Insert <span class="math-inline" data-tex="v_{\mathrm{new}}"></span> into
-            <span class="math-inline" data-tex="L"></span> immediately after position
-            <span class="math-inline" data-tex="p"></span>.
-            The pointer <span class="math-inline" data-tex="p"></span>
-            does <em>not</em> advance (pointer immobility).
-          </li>
-          <li>
-            <span class="math-inline" data-tex="T(v\!\lambda, \mathcal{S})"></span>:
-            Same as <span class="math-inline" data-tex="V\!\lambda"></span> but using the secondary pointer:
-            create <span class="math-inline" data-tex="v_{\mathrm{new}}"></span>,
-            set <span class="math-inline" data-tex="E \leftarrow E \cup \{(u_q, v_{\mathrm{new}})\}"></span>,
-            <span class="math-inline" data-tex="\sigma(v_{\mathrm{new}}) \leftarrow (u_q)"></span>,
-            and insert into <span class="math-inline" data-tex="L"></span> after position
-            <span class="math-inline" data-tex="q"></span>.
-            Pointer <span class="math-inline" data-tex="q"></span> does not advance.
-          </li>
-          <li>
-            <span class="math-inline" data-tex="T(W, \mathcal{S})"></span>: No-op.
-            <span class="math-inline" data-tex="\mathcal{S}"></span> is unchanged.
-          </li>
-        </ul>
+        <p style="margin-top: var(--space-sm);">
+          S2D appends to the ordered input list
+          <span class="math-inline" data-tex="\sigma(v)"></span> in edge-insertion order, so any string
+          it decodes carries the operand convention of&nbsp;(1) at its Pow nodes.
+        </p>
       </div>
 
       <div class="remark-box">
-        <h4>Remark (V/v Never Create Cycles)</h4>
+        <h4>Complexity</h4>
         <p>
-          A <span class="math-inline" data-tex="V\!\lambda"></span> or
-          <span class="math-inline" data-tex="v\!\lambda"></span> insertion always adds an edge from
-          an existing node to a freshly created node. Since
-          <span class="math-inline" data-tex="v_{\mathrm{new}}"></span> has no outgoing edges at the
-          moment of creation, no cycle can be formed. Therefore no acyclicity check is
-          needed for insertion tokens, unlike
-          <span class="math-inline" data-tex="C"></span>/<span class="math-inline" data-tex="c"></span>.
+          Tokenization costs <span class="math-inline" data-tex="O(|w|)"></span>. Each
+          <span class="math-inline" data-tex="\texttt{C}"></span> /
+          <span class="math-inline" data-tex="\texttt{c}"></span> invokes a BFS cycle check costing
+          <span class="math-inline" data-tex="O(|V| + |E|)"></span>; every other token costs
+          <span class="math-inline" data-tex="O(1)"></span>. In total
+          <span class="math-inline" data-tex="O\bigl(|w| \cdot (|V| + |E|)\bigr)"></span>.
         </p>
-      </div>
-
-      <div class="thm-box">
-        <h4>Property P2 (DAG Acyclicity Invariant)</h4>
-        <p>
-          For any string <span class="math-inline" data-tex="w \in \Sigma_{\mathrm{SR}}^*"></span>,
-          the output of <span class="math-inline" data-tex="\mathrm{S2D}(w)"></span> is always a valid
-          directed acyclic graph.
-        </p>
-      </div>
-
-      <div class="proof-box">
-        <h4>Proof</h4>
-        <p>
-          By induction on the number of executed tokens. The base case
-          <span class="math-inline" data-tex="D_0"></span> has no edges, hence no cycles.
-          For the inductive step, movement tokens and W do not modify edges.
-          <span class="math-inline" data-tex="V\!\lambda"></span>/<span class="math-inline" data-tex="v\!\lambda"></span>
-          add edges to a fresh node with out-degree 0, which cannot close a cycle.
-          <span class="math-inline" data-tex="C"></span>/<span class="math-inline" data-tex="c"></span>
-          explicitly check for a directed path before adding; if one exists, the edge
-          is not added.
-        </p>
-        <p class="proof-box__qed">&#9632;</p>
       </div>
     </section>
 
@@ -478,783 +315,733 @@
       <h2>4. DAG-to-String (D2S)</h2>
 
       <p>
-        The D2S algorithm is the inverse of S2D: given a labeled DAG
-        <span class="math-inline" data-tex="D"></span> and a starting variable node
-        <span class="math-inline" data-tex="x_j"></span>, it produces an instruction string
-        <span class="math-inline" data-tex="w"></span> such that
-        <span class="math-inline" data-tex="\mathrm{S2D}(w) \cong D"></span>.
-        The algorithm greedily selects pointer displacements to minimize the total
-        number of movement tokens emitted.
+        D2S is a greedy encoder: given a labeled DAG <span class="math-inline" data-tex="D"></span> it
+        produces a string <span class="math-inline" data-tex="w"></span> with
+        <span class="math-inline" data-tex="\mathrm{S2D}(w, m) \cong D"></span>. It maintains a parallel
+        <em>output DAG</em> <span class="math-inline" data-tex="D'"></span> alongside the bidirectional
+        index maps <span class="math-inline" data-tex="\mathtt{i2o}"></span> and
+        <span class="math-inline" data-tex="\mathtt{o2i}"></span>, initialized by mapping the
+        <span class="math-inline" data-tex="m"></span> Var nodes in variable-index order. Identifiers
+        in <span class="math-inline" data-tex="D'"></span> are assigned in insertion order, so the
+        relative ordering of any two non-variable nodes &mdash; and hence the operand semantics for
+        non-commutative binary operations &mdash; is fixed by the sequence in which D2S inserts them.
       </p>
 
       <div class="def-box">
-        <h4>Definition 8 (Spiral Displacement Set)</h4>
+        <h4>Definition 3.4 (Spiral Displacement Set)</h4>
         <p>
-          For a bound <span class="math-inline" data-tex="n \in \mathbb{N}"></span>, the
-          <strong>spiral displacement set</strong> is:
+          For an output DAG of current size <span class="math-inline" data-tex="n"></span>, the
+          candidate displacement set is
         </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathcal{P}_n = \{(a, b) \in \mathbb{Z}^2 : -n \leq a, b \leq n\}"></span>
-        </div>
+        <div class="math-display" data-tex="\mathcal{P}_n = \bigl\{(a,b) \in \mathbb{Z}^2 : -n \le a, b \le n\bigr\},"></div>
         <p>
-          ordered by the <strong>total displacement cost</strong>:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="(a_1, b_1) \prec (a_2, b_2) \iff (|a_1| + |b_1|,\; |a_1|,\; (a_1, b_1)) <_{\mathrm{lex}} (|a_2| + |b_2|,\; |a_2|,\; (a_2, b_2))."></span>
-        </div>
-        <p>
-          The pair <span class="math-inline" data-tex="(a, b)"></span> encodes moving the primary pointer
-          <span class="math-inline" data-tex="|a|"></span> steps (forward if
-          <span class="math-inline" data-tex="a > 0"></span>, backward if
-          <span class="math-inline" data-tex="a < 0"></span>) and the secondary pointer
-          <span class="math-inline" data-tex="|b|"></span> steps. The number of movement tokens emitted
-          for a pair <span class="math-inline" data-tex="(a, b)"></span> is exactly
-          <span class="math-inline" data-tex="|a| + |b|"></span>.
+          sorted by the key
+          <span class="math-inline" data-tex="\bigl(|a|+|b|,\; |a|,\; (a,b)\bigr)"></span>: total cost,
+          then lexicographic tie-breaking. This <strong>spiral enumeration</strong> guarantees that
+          lower-cost displacements are tried first, the pair
+          <span class="math-inline" data-tex="(a,b)"></span> costing exactly
+          <span class="math-inline" data-tex="|a| + |b|"></span> movement tokens.
         </p>
       </div>
 
       <div class="def-box">
-        <h4>Definition 9 (D2S Algorithm)</h4>
+        <h4>The greedy loop</h4>
         <p>
-          Given a labeled DAG <span class="math-inline" data-tex="D = (V, E, \ell, \delta)"></span>
-          with <span class="math-inline" data-tex="|V| = m + k"></span>
-          (<span class="math-inline" data-tex="m"></span> variables,
-          <span class="math-inline" data-tex="k"></span> internal nodes) and
-          starting variable <span class="math-inline" data-tex="x_j"></span>:
-        </p>
-        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            Initialize the machine state <span class="math-inline" data-tex="\mathcal{S}_0"></span>
-            with all <span class="math-inline" data-tex="m"></span> variable nodes mapped.
-            Maintain sets of remaining nodes
-            <span class="math-inline" data-tex="V_{\mathrm{rem}}"></span> and edges
-            <span class="math-inline" data-tex="E_{\mathrm{rem}}"></span>.
-          </li>
-          <li>
-            <strong>Main loop</strong>: While
-            <span class="math-inline" data-tex="V_{\mathrm{rem}} \neq \emptyset"></span> or
-            <span class="math-inline" data-tex="E_{\mathrm{rem}} \neq \emptyset"></span>, iterate
-            through <span class="math-inline" data-tex="\mathcal{P}_n"></span> in order. For each
-            <span class="math-inline" data-tex="(a, b)"></span>, check if at displacement
-            <span class="math-inline" data-tex="(a, b)"></span> from the current pointer positions
-            there exists a valid <span class="math-inline" data-tex="V\!\lambda"></span>
-            (or <span class="math-inline" data-tex="v\!\lambda"></span>) insertion or
-            <span class="math-inline" data-tex="C"></span>/<span class="math-inline" data-tex="c"></span>
-            edge that encodes a remaining element of
-            <span class="math-inline" data-tex="D"></span>.
-          </li>
-          <li>
-            Select the first valid instruction found (greedy: minimum-cost displacement).
-            Emit the corresponding movement tokens followed by the instruction token.
-            Update <span class="math-inline" data-tex="V_{\mathrm{rem}}, E_{\mathrm{rem}}"></span>
-            accordingly.
-          </li>
-          <li>
-            <strong>Node insertion priority</strong>: At each step,
-            <span class="math-inline" data-tex="V\!\lambda"></span>/<span class="math-inline" data-tex="v\!\lambda"></span>
-            is preferred over
-            <span class="math-inline" data-tex="C"></span>/<span class="math-inline" data-tex="c"></span>
-            when both are available at the same displacement cost, because node insertion
-            simultaneously creates a node <em>and</em> an edge.
-          </li>
-          <li>
-            <strong>Binary operand order</strong>: For non-commutative binary operations
-            (SUB, DIV, POW), D2S always emits the
-            <span class="math-inline" data-tex="V\!\lambda"></span>/<span class="math-inline" data-tex="v\!\lambda"></span>
-            token from the <em>first</em> operand
-            <span class="math-inline" data-tex="s_1"></span> of
-            <span class="math-inline" data-tex="\sigma(v) = (s_1, s_2)"></span>.
-            The second operand <span class="math-inline" data-tex="s_2"></span> is connected via
-            a subsequent <span class="math-inline" data-tex="C"></span>/<span class="math-inline" data-tex="c"></span>
-            edge. This preserves operand order through the round trip.
-          </li>
-        </ol>
-      </div>
-
-      <div class="thm-box">
-        <h4>Property P1 (Round-Trip Fidelity)</h4>
-        <p>
-          For any valid IsalSR string <span class="math-inline" data-tex="w"></span>:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathrm{S2D}(w) \cong \mathrm{S2D}\!\big(\mathrm{D2S}(\mathrm{S2D}(w),\, x_1)\big)."></span>
-        </div>
-        <p>
-          That is, encoding and decoding preserves labeled-DAG isomorphism,
-          including operand order for non-commutative operations.
+          The loop iterates over <span class="math-inline" data-tex="\mathcal{P}_n"></span> and, for
+          each pair <span class="math-inline" data-tex="(a,b)"></span>, evaluates four candidate
+          operations in strict priority order:
+          <span class="math-inline" data-tex="\texttt{V}\ell"></span> (insert via primary),
+          <span class="math-inline" data-tex="\texttt{v}\ell"></span> (insert via secondary),
+          <span class="math-inline" data-tex="\texttt{C}"></span>,
+          <span class="math-inline" data-tex="\texttt{c}"></span>. The first valid operation is
+          emitted, the pointers are updated, and the loop continues until all nodes and edges of
+          <span class="math-inline" data-tex="D"></span> are placed.
         </p>
       </div>
 
-      <div class="thm-box">
-        <h4>Property P4 (Evaluation Preservation)</h4>
+      <div class="remark-box">
+        <h4>Complexity</h4>
         <p>
-          Round-tripped DAGs evaluate identically. For any input vector
-          <span class="math-inline" data-tex="\mathbf{x} \in \mathbb{R}^m"></span>:
+          The outer loop runs at most <span class="math-inline" data-tex="|V| + |E|"></span> times.
+          Each iteration searches <span class="math-inline" data-tex="|\mathcal{P}_n| = (2n+1)^2"></span>
+          displacement pairs, and finding an uninserted neighbor costs
+          <span class="math-inline" data-tex="O(d_{\mathrm{out}})"></span>. In total
+          <span class="math-inline" data-tex="O\bigl((|V| + |E|) \cdot |V|^2\bigr)"></span>.
         </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathrm{eval}(D, \mathbf{x}) = \mathrm{eval}\!\big(\mathrm{S2D}(\mathrm{D2S}(D, x_1)),\, \mathbf{x}\big)"></span>
-        </div>
+      </div>
+
+      <div class="remark-box">
+        <h4>Why a canonical string is needed at all</h4>
         <p>
-          wherever both sides are defined (i.e., no division by zero, no log of non-positive, etc.).
-          Numerical agreement holds within floating-point tolerance
-          <span class="math-inline" data-tex="\epsilon \leq 10^{-8}"></span>.
+          The greedy D2S string depends on the internal node numbering of its input: two structurally
+          equivalent DAGs with different numberings may yield different strings, and different
+          numberings may even reverse the operand order of a non-commutative binary operation. The
+          next section removes that dependency.
         </p>
       </div>
     </section>
 
     <!-- ===================== SECTION 5 ===================== -->
-    <section class="math-section" id="sec-commutative">
-      <h2>5. Commutative Encoding</h2>
-
-      <p>
-        The non-commutative binary operations SUB and DIV introduce
-        operand-order ambiguity: the expressions
-        <span class="math-inline" data-tex="x - y"></span> and
-        <span class="math-inline" data-tex="y - x"></span> have the same DAG topology
-        and labels but differ in operand order. This complicates isomorphism checking.
-        The <strong>commutative encoding</strong> eliminates this ambiguity by decomposing
-        non-commutative binary ops into commutative variadic + unary pairs.
-      </p>
+    <section class="math-section" id="sec-canonical">
+      <h2>5. The Fast Canonical String</h2>
 
       <div class="def-box">
-        <h4>Definition 10 (Commutative Decomposition)</h4>
+        <h4>Definition 3.5 (Valid String Set)</h4>
         <p>
-          The commutative encoding replaces non-commutative binary operations
-          with equivalent compositions:
+          <span class="math-inline" data-tex="\mathcal{W}(D)"></span> is the set of all strings
+          producible by the D2S procedure on <span class="math-inline" data-tex="D"></span> when, at
+          each <span class="math-inline" data-tex="\texttt{V}\ell"></span> /
+          <span class="math-inline" data-tex="\texttt{v}\ell"></span> branch point with
+          <span class="math-inline" data-tex="k \ge 2"></span> uninserted out-neighbors of the
+          tentative pointer position, any one of those neighbors may be chosen next.
         </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathrm{SUB}(x, y) \;=\; \mathrm{ADD}(x,\, \mathrm{NEG}(y)) \quad\text{where } \mathrm{NEG}(y) = -y"></span>
-        </div>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathrm{DIV}(x, y) \;=\; \mathrm{MUL}(x,\, \mathrm{INV}(y)) \quad\text{where } \mathrm{INV}(y) = 1/y"></span>
-        </div>
-        <p>
-          The unary operations <span class="math-inline" data-tex="\mathrm{NEG}"></span>
-          (label <code>g</code>) and <span class="math-inline" data-tex="\mathrm{INV}"></span>
-          (label <code>i</code>) are single-input, so they have no operand-order ambiguity.
-          The resulting <span class="math-inline" data-tex="\mathrm{ADD}"></span> and
-          <span class="math-inline" data-tex="\mathrm{MUL}"></span> are commutative and variable-arity.
-        </p>
-      </div>
-
-      <div class="thm-box">
-        <h4>Theorem (Semantic Equivalence of Commutative Encoding)</h4>
-        <p>
-          For any expression DAG <span class="math-inline" data-tex="D"></span> and input vector
-          <span class="math-inline" data-tex="\mathbf{x}"></span>:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathrm{eval}(D, \mathbf{x}) = \mathrm{eval}(\mathrm{toComm}(D), \mathbf{x}) = \mathrm{eval}(\mathrm{fromComm}(\mathrm{toComm}(D)), \mathbf{x})"></span>
-        </div>
-        <p>
-          where <span class="math-inline" data-tex="\mathrm{toComm}"></span> replaces every SUB
-          with ADD+NEG and every DIV with MUL+INV, and
-          <span class="math-inline" data-tex="\mathrm{fromComm}"></span> is its inverse.
+        <p style="margin-top: var(--space-sm);">
+          <em>Producible by the D2S procedure</em> carries that procedure's first-operand
+          restriction: a candidate <span class="math-inline" data-tex="c"></span> whose ordered input
+          list is already non-empty may be created from the acting pointer node
+          <span class="math-inline" data-tex="u"></span> only when
+          <span class="math-inline" data-tex="u = \sigma(c)[0]"></span>, the remaining in-edges being
+          supplied by later <span class="math-inline" data-tex="\texttt{C}"></span> /
+          <span class="math-inline" data-tex="\texttt{c}"></span> tokens. Without it, a run could create
+          a Pow node from its exponent and
+          <span class="math-inline" data-tex="\mathcal{W}(D)"></span> would contain strings that place
+          every node and every edge of <span class="math-inline" data-tex="D"></span> and yet do not
+          decode to it: for <span class="math-inline" data-tex="D = x_1^{x_2}"></span> over
+          <span class="math-inline" data-tex="m = 2"></span>, the string
+          <code>NV^Nc</code> places both edges but decodes to
+          <span class="math-inline" data-tex="x_2^{x_1}"></span>, which is not isomorphic to
+          <span class="math-inline" data-tex="D"></span> by condition&nbsp;(iv) of
+          Definition&nbsp;3.9.
         </p>
       </div>
 
-      <div class="cor-box">
-        <h4>Corollary (Operand-Order Elimination)</h4>
+      <div class="def-box">
+        <h4>Definition 3.6 (Exhaustive Canonical String)</h4>
+        <div class="math-display" data-tex="w^*_D = \mathrm{lexmin}\Bigl\{w \in \arg\min_{w' \in \mathcal{W}(D)} |w'|\Bigr\}"></div>
         <p>
-          Under the commutative encoding, the operand-order condition (iv) in
-          Definition 3 applies <em>only</em> to POW nodes. For all other
-          operations, the isomorphism
-          <span class="math-inline" data-tex="\varphi"></span> need only preserve
-          edges and labels. This simplifies isomorphism checking to standard
-          labeled graph isomorphism (with variable anchoring) plus a single
-          per-node check for POW operand order.
+          the lexicographically smallest element among all shortest strings in
+          <span class="math-inline" data-tex="\mathcal{W}(D)"></span>, under a fixed total order on
+          <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}"></span>. Computing it requires
+          exhaustive backtracking with <span class="math-inline" data-tex="O(k!)"></span> worst-case
+          complexity, which is what the fast construction avoids.
+        </p>
+      </div>
+
+      <div class="def-box">
+        <h4>Definition 3.7 (1-WL Subtree Hash)</h4>
+        <p>
+          For a labeled DAG <span class="math-inline" data-tex="D"></span>, the
+          <strong>1-WL subtree hash</strong>
+          <span class="math-inline" data-tex="h: V \to \mathbb{Z}"></span> is defined bottom-up in
+          reverse topological order:
+        </p>
+        <div class="math-display" data-tex="h(v) = \mathrm{hash}\bigl(\ell(v),\; \mathrm{sort}(\{h(u) : u \in N^{+}(v)\})\bigr), \qquad (2)"></div>
+        <p>
+          where <span class="math-inline" data-tex="\mathrm{hash}"></span> is a deterministic 64-bit
+          hash on tuples of integers and <span class="math-inline" data-tex="\mathrm{sort}"></span>
+          returns the multiset of child hashes in ascending order. Leaves satisfy
+          <span class="math-inline" data-tex="h(v) = \mathrm{hash}(\ell(v), ())"></span>. Processing
+          every node once in reverse topological order computes the hash of all
+          <span class="math-inline" data-tex="k = |V| - m"></span> internal nodes in
+          <span class="math-inline" data-tex="O(k)"></span> time.
+        </p>
+        <p style="margin-top: var(--space-sm);">
+          <span class="math-inline" data-tex="h"></span> is an isomorphism invariant: any isomorphism
+          preserves labels and edges, so it maps the rooted subtree at
+          <span class="math-inline" data-tex="v"></span> isomorphically onto the rooted subtree at
+          <span class="math-inline" data-tex="\phi(v)"></span>, giving
+          <span class="math-inline" data-tex="h(v) = h(\phi(v))"></span>. The invariant captures the
+          full rooted subtree isomorphism type and is strictly finer than descriptors based on
+          fixed-depth neighborhood counts.
+        </p>
+        <p style="margin-top: var(--space-sm);">
+          Collisions are possible but negligible at typical expression sizes
+          (<span class="math-inline" data-tex="k \le 32"></span>), and they cannot cause
+          incorrectness: a collision produces a false tie in
+          <span class="math-inline" data-tex="\kappa"></span>, and Rule&nbsp;2 explores all tied
+          candidates and returns the lexicographically minimal result whether the tie comes from a
+          genuine automorphism or from a collision.
+        </p>
+      </div>
+
+      <div class="def-box">
+        <h4>Definition 3.8 (Fast Canonical String)</h4>
+        <p>
+          The <strong>fast canonical string</strong>
+          <span class="math-inline" data-tex="\hat{w}_D"></span> is computed by a greedy variant of the
+          D2S backtracking search that selects candidates using an isomorphism-invariant sort key,
+          under two rules. The construction takes as a precondition the reachability condition of
+          Theorem&nbsp;3.13: every non-variable node of
+          <span class="math-inline" data-tex="D"></span> is reachable from some variable. Under that
+          hypothesis <span class="math-inline" data-tex="\hat{w}_D"></span> is a function of
+          <span class="math-inline" data-tex="D"></span> alone. A DAG violating it has no encoding
+          over <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}"></span> at all, and the
+          procedure reports failure rather than returning a string.
+        </p>
+
+        <div class="proof-step">
+          <p class="proof-step__label">Rule 1 (first-operand eligibility).</p>
+          <p>
+            When the acting pointer node is <span class="math-inline" data-tex="u"></span> and the
+            candidate is a Pow node <span class="math-inline" data-tex="c"></span> that already has at
+            least one in-neighbor recorded in
+            <span class="math-inline" data-tex="\sigma(c)"></span>, then
+            <span class="math-inline" data-tex="c"></span> is eligible for insertion via
+            <span class="math-inline" data-tex="u"></span> only if
+            <span class="math-inline" data-tex="u"></span> would become
+            <span class="math-inline" data-tex="\sigma(c)[0]"></span>, the base. Formally,
+            <span class="math-inline" data-tex="c"></span> is excluded if
+            <span class="math-inline" data-tex="\sigma(c)"></span> is non-empty and
+            <span class="math-inline" data-tex="\sigma(c)[0] \neq u"></span>.
+          </p>
+          <p style="margin-top: var(--space-sm);">
+            Rule&nbsp;1 restates, inside the greedy search, the restriction the D2S procedure itself
+            applies, so it removes no string from
+            <span class="math-inline" data-tex="\mathcal{W}(D)"></span>. What requires an argument is
+            that it strands no node, and this is where the reachability precondition is consumed:
+            the base <span class="math-inline" data-tex="\sigma(c)[0]"></span> is an in-neighbor of
+            <span class="math-inline" data-tex="c"></span>, hence strictly earlier in every
+            topological order, and by the precondition it is a variable or is reachable from one. An
+            induction along a topological order gives that it is eventually inserted, after which the
+            list retains it and some displacement in
+            <span class="math-inline" data-tex="\mathcal{P}_n"></span> places the acting pointer on it.
+            Rule&nbsp;1 therefore <em>defers</em> a candidate; it never discards one.
+          </p>
+        </div>
+
+        <div class="proof-step">
+          <p class="proof-step__label">Rule 2 (invariant-key greedy selection).</p>
+          <p>
+            Given the eligible candidate set
+            <span class="math-inline" data-tex="\mathcal{C}"></span> after Rule&nbsp;1, each candidate
+            is assigned the isomorphism-invariant sort key
+          </p>
+          <div class="math-display" data-tex="\kappa(c) = \bigl(\ell(c),\; h(c)\bigr), \qquad (3)"></div>
+          <p>
+            the operation label character and the 1-WL subtree hash. Define the
+            <strong>best-key group</strong>
+            <span class="math-inline" data-tex="\mathcal{C}^{\dagger} = \{c \in \mathcal{C} : \kappa(c) = \min_{c' \in \mathcal{C}} \kappa(c')\}"></span>.
+            If <span class="math-inline" data-tex="|\mathcal{C}^{\dagger}| = 1"></span> the unique best
+            candidate is selected greedily: no backtracking, and the choice is deterministic and
+            isomorphism-invariant. If
+            <span class="math-inline" data-tex="|\mathcal{C}^{\dagger}| > 1"></span> &mdash; several
+            candidates share both the label and the subtree hash &mdash; the algorithm backtracks over
+            the tied candidates only and returns the lexicographically minimal result.
+          </p>
+        </div>
+      </div>
+
+      <div class="remark-box">
+        <h4>Why the key is safe</h4>
+        <p>
+          <span class="math-inline" data-tex="\kappa"></span> is invariant under any isomorphism
+          <span class="math-inline" data-tex="\phi"></span>: label preservation gives
+          <span class="math-inline" data-tex="\ell(c) = \ell(\phi(c))"></span>, and label plus edge
+          preservation jointly give
+          <span class="math-inline" data-tex="h(c) = h(\phi(c))"></span>. So if
+          <span class="math-inline" data-tex="c"></span> is the unique minimum-key element of
+          <span class="math-inline" data-tex="\mathcal{C}"></span>, then
+          <span class="math-inline" data-tex="\phi(c)"></span> is necessarily the unique minimum-key
+          element in the corresponding candidate set of an isomorphic DAG.
+        </p>
+        <p style="margin-top: var(--space-sm);">
+          Ties in <span class="math-inline" data-tex="\kappa"></span> are a necessary condition for
+          automorphic equivalence: two candidates can be automorphism-equivalent only if they root
+          isomorphic labeled subtrees, which forces equal
+          <span class="math-inline" data-tex="\kappa"></span>. The converse does not hold in general,
+          since 1-WL cannot distinguish all non-isomorphic graphs, but for SR expression DAGs with
+          heterogeneous operation types false ties are rare, and correctness is unaffected either way.
+          Empirically, fewer than 4% of random expression DAGs exhibit any tie.
         </p>
       </div>
 
       <div class="remark-box">
-        <h4>Remark (Inspiration)</h4>
+        <h4>Worked example</h4>
         <p>
-          The commutative decomposition is inspired by the term-rewriting approach of
-          GraphSR (Xiang et al.), which uses
-          <span class="math-inline" data-tex="x - y \mapsto x + (-1) \cdot y"></span> to normalize
-          subtraction. Our unary NEG/INV formulation avoids introducing additional
-          constant nodes.
+          Let <span class="math-inline" data-tex="D = \sin(x_1) + \cos(x_1)"></span>, an expression DAG
+          with <span class="math-inline" data-tex="m = 1"></span> variable and
+          <span class="math-inline" data-tex="k = 3"></span> internal nodes. Number its internal nodes
+          so that Sin receives the lower identifier: greedy D2S from
+          <span class="math-inline" data-tex="x_1"></span> then emits <code>VsVcpv+Ppc</code>. Number
+          them the other way round and the same procedure emits <code>VcVspv+Ppc</code>. The two
+          strings encode one expression and differ only in the identifiers, which is precisely the
+          dependency the fast canonical string removes.
+        </p>
+        <p style="margin-top: var(--space-sm);">
+          Applying Definition&nbsp;3.8 to either numbering, the first branch point has both Sin and
+          Cos as uninserted out-neighbors of <span class="math-inline" data-tex="x_1"></span>, so
+          <span class="math-inline" data-tex="\mathcal{C} = \{\mathrm{Sin}, \mathrm{Cos}\}"></span>.
+          Their 1-WL hashes differ, but the tuple comparison in&nbsp;(3) never reaches them: the label
+          component already orders <code>c</code> before <code>s</code>, so
+          <span class="math-inline" data-tex="\mathcal{C}^{\dagger}"></span> is the singleton
+          <span class="math-inline" data-tex="\{\mathrm{Cos}\}"></span>, the candidate is taken greedily,
+          and no backtracking occurs. Both numberings therefore return
+          <span class="math-inline" data-tex="\hat{w}_D = "></span><code>VcVspv+Ppc</code>.
+        </p>
+      </div>
+
+      <div class="remark-box">
+        <h4>Complexity</h4>
+        <p>
+          Let <span class="math-inline" data-tex="k = |V| - m"></span>. Precomputing the 1-WL hash costs
+          <span class="math-inline" data-tex="O(k)"></span> via a single reverse topological pass. When
+          the best-key candidate is unique at every insertion step, the algorithm follows a single
+          greedy path with <span class="math-inline" data-tex="O(k)"></span> insertion steps, each
+          evaluating <span class="math-inline" data-tex="O(k)"></span> candidates, giving
+          <span class="math-inline" data-tex="O(k^2)"></span>. When ties occur, backtracking over a tied
+          set of size <span class="math-inline" data-tex="t"></span> at each of
+          <span class="math-inline" data-tex="d"></span> tied decision points gives
+          <span class="math-inline" data-tex="O(t^d \cdot k^2)"></span> in the worst case.
+        </p>
+        <p style="margin-top: var(--space-sm);">
+          <span class="math-inline" data-tex="\hat{w}_D"></span> is not necessarily the shortest element
+          of <span class="math-inline" data-tex="\mathcal{W}(D)"></span>. It does not need to be:
+          Theorem&nbsp;3.15 gives that it is a complete labeled-DAG invariant, which is the only
+          property deduplication requires.
         </p>
       </div>
     </section>
 
     <!-- ===================== SECTION 6 ===================== -->
-    <section class="math-section" id="sec-canonical">
-      <h2>6. Canonical String</h2>
+    <section class="math-section" id="sec-invariant">
+      <h2>6. Canonical String as a Graph Invariant</h2>
 
       <div class="def-box">
-        <h4>Definition 11 (Valid String Set)</h4>
+        <h4>Definition 3.9 (Labeled-DAG Isomorphism)</h4>
         <p>
-          For a labeled DAG <span class="math-inline" data-tex="D"></span>, the
-          <strong>valid string set</strong> is:
+          Two labeled DAGs <span class="math-inline" data-tex="D_1"></span> and
+          <span class="math-inline" data-tex="D_2"></span> are <strong>isomorphic</strong>, written
+          <span class="math-inline" data-tex="D_1 \cong D_2"></span>, if there is a bijection
+          <span class="math-inline" data-tex="\phi: V_1 \to V_2"></span> satisfying:
         </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="W(D) = \{w \in \Sigma_{\mathrm{SR}}^* : \mathrm{S2D}(w) \cong D\}"></span>
-        </div>
+        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);" type="i">
+          <li style="margin-bottom: var(--space-xs);">
+            <strong>Edge preservation:</strong>
+            <span class="math-inline" data-tex="(u,v) \in E_1 \Leftrightarrow (\phi(u), \phi(v)) \in E_2"></span>;
+          </li>
+          <li style="margin-bottom: var(--space-xs);">
+            <strong>Label preservation:</strong>
+            <span class="math-inline" data-tex="\ell_1(u) = \ell_2(\phi(u))"></span> for all
+            <span class="math-inline" data-tex="u \in V_1"></span>;
+          </li>
+          <li style="margin-bottom: var(--space-xs);">
+            <strong>Variable anchoring:</strong>
+            <span class="math-inline" data-tex="\delta_1(u) = \delta_2(\phi(u))"></span> for every Var
+            node, i.e. <span class="math-inline" data-tex="\phi(x_i^{(1)}) = x_i^{(2)}"></span>;
+          </li>
+          <li>
+            <strong>Operand-order preservation:</strong> for every Pow node
+            <span class="math-inline" data-tex="v \in V_1"></span> with
+            <span class="math-inline" data-tex="\sigma_1(v) = (u_1, u_2)"></span>,
+            <span class="math-inline" data-tex="\sigma_2(\phi(v)) = (\phi(u_1), \phi(u_2))"></span>.
+            All other operation nodes are commutative and impose no ordering constraint. Both lists
+            have length two because <span class="math-inline" data-tex="D_1"></span> and
+            <span class="math-inline" data-tex="D_2"></span> are expression DAGs; condition&nbsp;(iv)
+            is stated on that class and on no larger one.
+          </li>
+        </ol>
+      </div>
+
+      <div class="remark-box">
+        <h4>Variable anchoring as a domain-specific simplification</h4>
         <p>
-          This is the set of all instruction strings whose S2D execution produces a
-          DAG isomorphic to <span class="math-inline" data-tex="D"></span>.
-          Different node numberings of the same DAG yield different strings;
-          <span class="math-inline" data-tex="|W(D)| \geq k! / |\mathrm{Aut}(D)|"></span>.
+          Condition&nbsp;(iii) is specific to symbolic regression, where input variables carry distinct
+          semantics. In general labeled-graph isomorphism no node is pre-fixed and the automorphism
+          group may act on all <span class="math-inline" data-tex="|V|"></span> nodes. Anchoring reduces
+          the candidate bijections from <span class="math-inline" data-tex="|V|!"></span> to
+          <span class="math-inline" data-tex="(|V| - m)! = k!"></span>. It is both correct and
+          necessary: renaming <span class="math-inline" data-tex="x_1 \leftrightarrow x_2"></span> would
+          change the mathematical meaning of the expression, so such maps must not qualify.
         </p>
       </div>
 
-      <div class="def-box">
-        <h4>Definition 12 (Canonical String)</h4>
+      <div class="remark-box">
+        <h4>Necessity of condition (iv)</h4>
         <p>
-          The <strong>canonical string</strong> of a labeled DAG
-          <span class="math-inline" data-tex="D"></span> is:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="w^*_D = \mathrm{lexmin} \big\{ w \in \arg\min_{w' \in W(D)} |w'| \big\}"></span>
-        </div>
-        <p>
-          That is, the <em>lexicographically smallest among the shortest</em>
-          strings in <span class="math-inline" data-tex="W(D)"></span>. Since
-          <span class="math-inline" data-tex="W(D)"></span> is finite and the total order on
-          <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}^*"></span> is well-defined,
-          <span class="math-inline" data-tex="w^*_D"></span> exists and is unique.
-        </p>
-      </div>
-
-      <h3 style="margin-top: var(--space-xl);">6.1 Structural Pruning: the 6-Component Tuple</h3>
-
-      <div class="def-box">
-        <h4>Definition 13 (Directed Hop Neighborhoods)</h4>
-        <p>
-          For a node <span class="math-inline" data-tex="v \in V"></span> and hop distance
-          <span class="math-inline" data-tex="r \in \{1, 2, 3\}"></span>, define the
-          <strong>directed hop neighborhoods</strong>:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathrm{in}\text{-}N_r(v) = \{u \in V : \text{shortest directed path } u \to \cdots \to v \text{ has length } r\}"></span>
-        </div>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathrm{out}\text{-}N_r(v) = \{u \in V : \text{shortest directed path } v \to \cdots \to u \text{ has length } r\}"></span>
-        </div>
-        <p>
-          where paths follow the directed edges of
-          <span class="math-inline" data-tex="D"></span>.
+          Without it, a bijection swapping the base and exponent of a Pow node would qualify, making
+          <span class="math-inline" data-tex="x^y"></span> and
+          <span class="math-inline" data-tex="y^x"></span> indistinguishable for internal nodes
+          <span class="math-inline" data-tex="x, y"></span>. On expression DAGs, matching the whole
+          list is equivalent to matching the base alone, and that equivalence reconciles
+          condition&nbsp;(iv) with Rule&nbsp;1 of Definition&nbsp;3.8, which constrains
+          <span class="math-inline" data-tex="\sigma(c)[0]"></span> and nothing further. Because S2D
+          records <span class="math-inline" data-tex="\sigma"></span> by edge-insertion order, with the
+          creation edge always becoming
+          <span class="math-inline" data-tex="\sigma(v)[0]"></span>, the condition is automatically
+          satisfied by any string decoded via S2D.
         </p>
       </div>
 
-      <div class="def-box">
-        <h4>Definition 14 (6-Component Structural Tuple)</h4>
+      <div class="remark-box">
+        <h4>Tightened automorphism bound</h4>
         <p>
-          For each node <span class="math-inline" data-tex="v \in V"></span>, the
-          <strong>structural tuple</strong> is:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\tau(v) = \big(|\mathrm{in}\text{-}N_1(v)|,\; |\mathrm{out}\text{-}N_1(v)|,\; |\mathrm{in}\text{-}N_2(v)|,\; |\mathrm{out}\text{-}N_2(v)|,\; |\mathrm{in}\text{-}N_3(v)|,\; |\mathrm{out}\text{-}N_3(v)|\big) \in \mathbb{N}_0^6."></span>
-        </div>
-        <p>
-          This tuple captures local neighborhood density at hops 1-3 in both
-          edge directions. It is an <strong>automorphism invariant</strong>: if
-          <span class="math-inline" data-tex="\varphi"></span> is a DAG automorphism, then
-          <span class="math-inline" data-tex="\tau(v) = \tau(\varphi(v))"></span>.
-        </p>
-      </div>
-
-      <div class="def-box">
-        <h4>Definition 15 (Label-Aware Pruning)</h4>
-        <p>
-          At each V/v branch point in the canonical search, the set of candidate
-          nodes <span class="math-inline" data-tex="\mathcal{C}"></span> is <strong>partitioned by label</strong>:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathcal{C} = \bigsqcup_{L \in \mathcal{L}} \mathcal{C}_L \quad\text{where}\quad \mathcal{C}_L = \{v \in \mathcal{C} : \ell(v) = L\}."></span>
-        </div>
-        <p>
-          Within each partition
-          <span class="math-inline" data-tex="\mathcal{C}_L"></span>, only candidates achieving the
-          <strong>maximum</strong> tuple are retained:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\mathcal{C}'_L = \{v \in \mathcal{C}_L : \tau(v) = \max_{u \in \mathcal{C}_L} \tau(u)\}."></span>
-        </div>
-        <p>
-          The pruned candidate set is
-          <span class="math-inline" data-tex="\mathcal{C}' = \bigcup_L \mathcal{C}'_L"></span>.
-          Pruning across different labels is invalid because automorphisms preserve labels;
-          a node with label ADD can never be mapped to a node with label MUL.
-        </p>
-      </div>
-
-      <h3 style="margin-top: var(--space-xl);">6.2 1-WL Subtree Hash</h3>
-
-      <div class="def-box">
-        <h4>Definition 16 (1-Weisfeiler-Leman Subtree Hash)</h4>
-        <p>
-          For a labeled DAG <span class="math-inline" data-tex="D"></span>, the
-          <strong>subtree hash</strong>
-          <span class="math-inline" data-tex="h\colon V \to \mathbb{Z}"></span>
-          is defined bottom-up (leaves first) by:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="h(v) = \mathrm{hash}\!\Big(\ell(v),\; \mathrm{sort}\!\big(\{h(c) : c \in \mathrm{children}(v)\}\big)\Big)"></span>
-        </div>
-        <p>
-          where <span class="math-inline" data-tex="\mathrm{children}(v) = \{u : (v, u) \in E\}"></span>
-          is the set of out-neighbors (the nodes to which
-          <span class="math-inline" data-tex="v"></span> provides input),
-          <span class="math-inline" data-tex="\mathrm{sort}"></span> produces a sorted tuple of child
-          hashes, and <span class="math-inline" data-tex="\mathrm{hash}"></span> is a collision-resistant
-          hash function.
-          Leaf nodes (<span class="math-inline" data-tex="\mathrm{children}(v) = \emptyset"></span>)
-          satisfy
-          <span class="math-inline" data-tex="h(v) = \mathrm{hash}(\ell(v), ())"></span>.
+          Under Definition&nbsp;3.9 the automorphism group acts freely only on non-variable nodes that
+          are not Pow nodes. For <span class="math-inline" data-tex="k"></span> internal nodes of which
+          <span class="math-inline" data-tex="k_{\wedge}"></span> are Pow nodes, the group order is at
+          most <span class="math-inline" data-tex="(k - k_{\wedge})! \le k!"></span>. Where Pow is
+          excluded, <span class="math-inline" data-tex="k_{\wedge} = 0"></span>, the definition
+          simplifies to conditions&nbsp;(i)&ndash;(iii) &mdash; standard labeled-graph isomorphism with
+          variable anchoring &mdash; and the bound is <span class="math-inline" data-tex="k!"></span>.
+          This is the case for every UDFS run, whose operator set has no Pow; Bingo's set includes it
+          on every problem.
         </p>
       </div>
 
       <div class="thm-box">
-        <h4>Theorem (WL Hash is Isomorphism-Invariant)</h4>
+        <h4>Theorem 3.13 (Round-Trip Fidelity)</h4>
         <p>
-          If <span class="math-inline" data-tex="\varphi"></span> is a labeled-DAG isomorphism
-          from <span class="math-inline" data-tex="D_1"></span> to
-          <span class="math-inline" data-tex="D_2"></span>, then
-          <span class="math-inline" data-tex="h_1(v) = h_2(\varphi(v))"></span> for all
-          <span class="math-inline" data-tex="v \in V_1"></span>.
+          Let <span class="math-inline" data-tex="D"></span> be a labeled DAG with
+          <span class="math-inline" data-tex="m \geq 1"></span> variables in which every non-variable
+          node is reachable from some variable via directed paths. Then
+        </p>
+        <div class="math-display" data-tex="D \;\cong\; \mathrm{S2D}(w,\, m) \qquad \text{for every } w \in \mathcal{W}(D),"></div>
+        <p>
+          and in particular
+          <span class="math-inline" data-tex="D \cong \mathrm{S2D}\bigl(\mathrm{D2S}(D, x_1), m\bigr)"></span>.
         </p>
       </div>
 
       <div class="proof-box">
-        <h4>Proof</h4>
+        <h4>Proof (outline)</h4>
         <p>
-          By structural induction on the DAG depth. For leaf nodes,
-          <span class="math-inline" data-tex="\ell_1(v) = \ell_2(\varphi(v))"></span> by label preservation,
-          so
-          <span class="math-inline" data-tex="h_1(v) = \mathrm{hash}(\ell_1(v), ()) = \mathrm{hash}(\ell_2(\varphi(v)), ()) = h_2(\varphi(v))"></span>.
-          For internal nodes, <span class="math-inline" data-tex="\varphi"></span> bijects children of
-          <span class="math-inline" data-tex="v"></span> to children of
-          <span class="math-inline" data-tex="\varphi(v)"></span> by edge preservation. By the
-          inductive hypothesis,
-          <span class="math-inline" data-tex="\{h_1(c) : c \in \mathrm{children}_1(v)\} = \{h_2(\varphi(c)) : c \in \mathrm{children}_1(v)\} = \{h_2(c') : c' \in \mathrm{children}_2(\varphi(v))\}"></span>
-          as multisets. After sorting, the tuples are identical, so the hash values agree.
+          Let <span class="math-inline" data-tex="\phi = \mathtt{i2o}"></span> be the bijection D2S
+          maintains. <em>Edges:</em> D2S terminates only when no node and no edge is left, each
+          <span class="math-inline" data-tex="\texttt{V}\ell"></span> /
+          <span class="math-inline" data-tex="\texttt{v}\ell"></span> token accounting for one node and
+          one edge and each <span class="math-inline" data-tex="\texttt{C}"></span> /
+          <span class="math-inline" data-tex="\texttt{c}"></span> for one edge, so edge membership is
+          preserved in both directions. <em>Labels:</em> the emitted label character is the image of
+          the node type under the label table, which is the inverse of the map the tokenizer uses.
+          <em>Variables:</em> D2S initializes by mapping
+          <span class="math-inline" data-tex="x_i \mapsto x_i"></span> and no later step modifies a Var
+          mapping. <em>Operand order:</em> the creation edge of the
+          <span class="math-inline" data-tex="\texttt{V}\ell"></span> /
+          <span class="math-inline" data-tex="\texttt{v}\ell"></span> token is appended first, making the
+          image of the base <span class="math-inline" data-tex="\sigma(\phi(v))[0]"></span>, and the
+          subsequent <span class="math-inline" data-tex="\texttt{C}"></span> /
+          <span class="math-inline" data-tex="\texttt{c}"></span> appends the exponent. All four
+          conditions of Definition&nbsp;3.9 hold. Full argument in Appendix&nbsp;A of the paper.
         </p>
         <p class="proof-box__qed">&#9632;</p>
       </div>
 
       <div class="thm-box">
-        <h4>Theorem (WL Hash Strictly Subsumes the 6-Tuple)</h4>
+        <h4>Lemma 3.14 (FCS produces valid D2S strings)</h4>
         <p>
-          For any two nodes <span class="math-inline" data-tex="u, v"></span> in the same DAG:
+          Let <span class="math-inline" data-tex="D"></span> satisfy the reachability condition of
+          Theorem&nbsp;3.13. Then
+          <span class="math-inline" data-tex="\hat{w}_D \in \mathcal{W}(D)"></span>, and therefore
+          <span class="math-inline" data-tex="D \cong \mathrm{S2D}(\hat{w}_D, m)"></span>.
         </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="h(u) = h(v) \;\Longrightarrow\; \tau(u) = \tau(v)"></span>
+      </div>
+
+      <div class="proof-box">
+        <h4>Proof (outline)</h4>
+        <p>
+          The fast algorithm uses the same insertion primitives as D2S and, at each branch point,
+          chooses among the uninserted out-neighbors of the current pointer node &mdash; exactly the
+          D2S candidate pool, since Rule&nbsp;1 restates the procedure's own restriction. The
+          resulting string therefore lies in
+          <span class="math-inline" data-tex="\mathcal{W}(D)"></span>, and Theorem&nbsp;3.13 applies.
+        </p>
+        <p class="proof-box__qed">&#9632;</p>
+      </div>
+
+      <div class="thm-box">
+        <h4>Theorem 3.15 (The Fast Canonical String is a Complete Labeled-DAG Invariant)</h4>
+        <p>
+          Let <span class="math-inline" data-tex="D_1"></span> and
+          <span class="math-inline" data-tex="D_2"></span> be labeled DAGs with
+          <span class="math-inline" data-tex="m \geq 1"></span> variables, both satisfying the
+          reachability condition of Theorem&nbsp;3.13. Then
+        </p>
+        <div class="math-display" data-tex="\hat{w}_{D_1} = \hat{w}_{D_2} \quad\Longleftrightarrow\quad D_1 \cong D_2."></div>
+      </div>
+
+      <div class="proof-box">
+        <h4>Proof of soundness (<span class="math-inline" data-tex="\Leftarrow"></span>)</h4>
+        <p>
+          Assume <span class="math-inline" data-tex="D_1 \cong D_2"></span> via
+          <span class="math-inline" data-tex="\phi"></span>, and induct over the insertion steps.
+        </p>
+        <div class="proof-step">
+          <p class="proof-step__label">Step 1 (candidate bijection).</p>
+          <p>
+            Edge preservation carries an edge into the tentative pointer position of the
+            <span class="math-inline" data-tex="D_1"></span>-search onto the corresponding edge in the
+            <span class="math-inline" data-tex="D_2"></span>-search. Because
+            <span class="math-inline" data-tex="\phi"></span> maps all prior choices consistently, the
+            image of a candidate is a candidate.
+          </p>
         </div>
-        <p>
-          but the converse does not hold in general. The 1-WL subtree hash captures
-          the full rooted subtree isomorphism type, whereas the 6-component
-          tuple <span class="math-inline" data-tex="\tau"></span> captures only depth-3
-          neighborhood <em>cardinalities</em>. In particular, two non-isomorphic
-          subtrees of the same size at each depth produce identical tuples but
-          distinct hashes.
+        <div class="proof-step">
+          <p class="proof-step__label">Step 2 (key preservation).</p>
+          <p>
+            <span class="math-inline" data-tex="\phi"></span> preserves labels and edges, so it maps the
+            rooted subtree at <span class="math-inline" data-tex="c"></span> isomorphically onto the one
+            at <span class="math-inline" data-tex="\phi(c)"></span>, giving
+            <span class="math-inline" data-tex="h(c) = h(\phi(c))"></span> and hence
+            <span class="math-inline" data-tex="\kappa(c) = \kappa(\phi(c))"></span>. It therefore
+            restricts to a <span class="math-inline" data-tex="\kappa"></span>-preserving bijection
+            between the two candidate sets, so the minima agree and
+            <span class="math-inline" data-tex="\phi(\mathcal{C}_1^{\dagger}) = \mathcal{C}_2^{\dagger}"></span>.
+            In particular a greedy step in one search is a greedy step in the other.
+          </p>
+        </div>
+        <div class="proof-step">
+          <p class="proof-step__label">Step 3 (identical token emission).</p>
+          <p>
+            The compound token is the same because the labels agree, and the movement tokens depend
+            only on the displacement pair, which is identical since all prior state is in bijection.
+          </p>
+        </div>
+        <div class="proof-step">
+          <p class="proof-step__label">Step 4 (operand order).</p>
+          <p>
+            For an eligible Pow candidate the acting pointer node is its base, and condition&nbsp;(iv)
+            maps the base of <span class="math-inline" data-tex="c"></span> to the base of
+            <span class="math-inline" data-tex="\phi(c)"></span>, so the same pointer passes
+            Rule&nbsp;1 in the second search.
+          </p>
+        </div>
+        <p style="margin-top: var(--space-md);">
+          By induction the same best-key group is selected and the same choice made at every step, so
+          <span class="math-inline" data-tex="\hat{w}_{D_1} = \hat{w}_{D_2}"></span>.
         </p>
+        <p class="proof-box__qed">&#9632;</p>
+      </div>
+
+      <div class="proof-box">
+        <h4>Proof of completeness (<span class="math-inline" data-tex="\Rightarrow"></span>)</h4>
+        <p>
+          Assume <span class="math-inline" data-tex="\hat{w}_{D_1} = \hat{w}_{D_2} =: \hat{w}"></span>.
+          The deterministic execution of
+          <span class="math-inline" data-tex="\mathrm{S2D}(\hat{w}, m)"></span> produces a unique DAG
+          <span class="math-inline" data-tex="D^*"></span>. By Lemma&nbsp;3.14,
+          <span class="math-inline" data-tex="\hat{w} \in \mathcal{W}(D_1)"></span> and
+          <span class="math-inline" data-tex="\hat{w} \in \mathcal{W}(D_2)"></span>, so
+          <span class="math-inline" data-tex="D_1 \cong D^*"></span> and
+          <span class="math-inline" data-tex="D_2 \cong D^*"></span>. Transitivity gives
+          <span class="math-inline" data-tex="D_1 \cong D_2"></span>.
+        </p>
+        <p class="proof-box__qed">&#9632;</p>
       </div>
 
       <div class="remark-box">
-        <h4>Remark (Computational Cost)</h4>
+        <h4>How far this has been checked</h4>
         <p>
-          The subtree hash <span class="math-inline" data-tex="h"></span> is computed in
-          <span class="math-inline" data-tex="O(|V| + |E|)"></span> time via a single bottom-up
-          pass in topological order. By contrast, the 6-tuple requires truncated BFS
-          from each node at cost
-          <span class="math-inline" data-tex="O(|V| \cdot (|V| + |E|))"></span>.
-          The WL hash is therefore both cheaper and more discriminative than the
-          6-tuple.
-        </p>
-      </div>
-
-      <h3 style="margin-top: var(--space-xl);">6.3 Fast Canonical Algorithm</h3>
-
-      <div class="def-box">
-        <h4>Definition 17 (Fast Canonical Sort Key)</h4>
-        <p>
-          For each candidate node <span class="math-inline" data-tex="c \in \mathcal{C}"></span>
-          at a V/v branch point, the <strong>sort key</strong> is:
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\kappa(c) = \big(\ell_{\mathrm{char}}(c),\; h(c)\big)"></span>
-        </div>
-        <p>
-          where <span class="math-inline" data-tex="\ell_{\mathrm{char}}(c)"></span> is the single-character
-          label of node <span class="math-inline" data-tex="c"></span> and
-          <span class="math-inline" data-tex="h(c)"></span> is its 1-WL subtree hash
-          (Definition 16). Alternative modes use
-          <span class="math-inline" data-tex="\kappa(c) = (\ell_{\mathrm{char}}(c),\; \tau(c) \downarrow,\; h(c))"></span>
-          (WL tiebreak, where
-          <span class="math-inline" data-tex="\tau(c) \downarrow"></span> denotes the tuple
-          with descending sort) or
-          <span class="math-inline" data-tex="\kappa(c) = (\ell_{\mathrm{char}}(c),\; \tau(c) \downarrow)"></span>
-          (tuple only, legacy).
-        </p>
-      </div>
-
-      <div class="def-box">
-        <h4>Definition 18 (Greedy-Invariant Canonical Search)</h4>
-        <p>
-          The <strong>fast canonical algorithm</strong> proceeds as follows. At each
-          V/v branch point with candidate set <span class="math-inline" data-tex="\mathcal{C}"></span>:
-        </p>
-        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            Compute
-            <span class="math-inline" data-tex="\kappa(c)"></span> for all
-            <span class="math-inline" data-tex="c \in \mathcal{C}"></span>.
-          </li>
-          <li>
-            Sort <span class="math-inline" data-tex="\mathcal{C}"></span> by
-            <span class="math-inline" data-tex="\kappa"></span> to obtain a
-            total order.
-          </li>
-          <li>
-            Let
-            <span class="math-inline" data-tex="\kappa^* = \min_{c \in \mathcal{C}} \kappa(c)"></span>
-            and
-            <span class="math-inline" data-tex="\mathcal{C}^{\dagger} = \{c \in \mathcal{C} : \kappa(c) = \kappa^*\}"></span>.
-          </li>
-          <li>
-            If <span class="math-inline" data-tex="|\mathcal{C}^{\dagger}| = 1"></span>:
-            <strong>greedy step</strong>. Select the unique best candidate with no backtracking.
-          </li>
-          <li>
-            If <span class="math-inline" data-tex="|\mathcal{C}^{\dagger}| > 1"></span>:
-            <strong>backtracking step</strong>. Explore all candidates in
-            <span class="math-inline" data-tex="\mathcal{C}^{\dagger}"></span> and return the
-            lexicographically smallest result.
-          </li>
-        </ol>
-        <p style="margin-top: var(--space-sm);">
-          Since <span class="math-inline" data-tex="\kappa"></span> is isomorphism-invariant (both
-          <span class="math-inline" data-tex="\ell_{\mathrm{char}}"></span> and
-          <span class="math-inline" data-tex="h"></span> are), the sort order is the same for
-          all isomorphic copies of <span class="math-inline" data-tex="D"></span>. Greedy steps
-          are safe because the unique best candidate maps to itself under any automorphism.
-          Backtracking only occurs when true automorphisms create ties --
-          a rare event in practice.
-        </p>
-      </div>
-
-      <h3 style="margin-top: var(--space-xl);">6.4 CONST Normalization</h3>
-
-      <div class="def-box">
-        <h4>Definition 19 (CONST Creation Edge Normalization)</h4>
-        <p>
-          Constant nodes are leaf nodes whose evaluation is independent of their
-          in-edges. However, for D2S reachability (every node must be reachable from
-          the CDLL traversal), each CONST node requires at least one in-edge
-          (its "creation edge"). Different creation sources produce different but
-          semantically equivalent strings.
-        </p>
-        <p style="margin-top: var(--space-sm);">
-          <strong>Normalization rule</strong>: Before canonical computation, all
-          CONST creation edges are redirected to originate from
-          <span class="math-inline" data-tex="x_1"></span> (node 0). That is, for each
-          CONST node <span class="math-inline" data-tex="v_k"></span>, replace all in-edges
-          <span class="math-inline" data-tex="(u, v_k) \in E"></span> with the single edge
-          <span class="math-inline" data-tex="(x_1, v_k)"></span>. This is
-          evaluation-neutral because CONST nodes ignore their inputs.
-        </p>
-      </div>
-
-      <h3 style="margin-top: var(--space-xl);">6.5 Computation Algorithms Summary</h3>
-
-      <div class="card" style="padding: var(--space-xl); margin: var(--space-lg) 0;">
-        <h4 style="color: var(--accent-primary); margin-bottom: var(--space-sm);">Exhaustive (Reference)</h4>
-        <p style="font-size: var(--text-sm); color: var(--text-secondary);">
-          Explores all <span class="math-inline" data-tex="k!"></span> permutations of internal node IDs,
-          computing D2S for each. Finds the true
-          <span class="math-inline" data-tex="w^*_D"></span> (shortest, then lexmin).
-          Complexity: <span class="math-inline" data-tex="O(k! \cdot k^2)"></span>.
-          Correct but impractical for large <span class="math-inline" data-tex="k"></span>.
-        </p>
-      </div>
-
-      <div class="card" style="padding: var(--space-xl); margin: var(--space-lg) 0;">
-        <h4 style="color: var(--accent-secondary); margin-bottom: var(--space-sm);">Pruned Exhaustive</h4>
-        <p style="font-size: var(--text-sm); color: var(--text-secondary);">
-          Uses the 6-component structural tuple (Definition 14) with
-          label-aware pruning (Definition 15) to reduce the permutation tree.
-          Worst-case <span class="math-inline" data-tex="O(k!)"></span>, but typically
-          orders of magnitude faster due to aggressive pruning.
-          May produce slightly sub-optimal strings in rare cases where
-          local neighborhood density misaligns with global CDLL displacement cost.
-        </p>
-      </div>
-
-      <div class="card" style="padding: var(--space-xl); margin: var(--space-lg) 0; border-color: var(--accent-primary);">
-        <h4 style="color: var(--accent-primary); margin-bottom: var(--space-sm);">Fast Canonical (Preferred)</h4>
-        <p style="font-size: var(--text-sm); color: var(--text-secondary);">
-          Greedy-invariant algorithm (Definition 18) using the 1-WL subtree hash
-          as sort key. Near-<span class="math-inline" data-tex="O(k^2)"></span> for most practical DAGs.
-          Degrades to <span class="math-inline" data-tex="O(t^d \cdot k^2)"></span> only when true
-          automorphisms cause ties at <span class="math-inline" data-tex="d"></span> recursion levels,
-          each with <span class="math-inline" data-tex="t"></span> tied candidates.
-          Produces a <strong>complete labeled-DAG invariant</strong>: the output
-          is deterministic and identical for all isomorphic copies of
-          <span class="math-inline" data-tex="D"></span>.
+          No false collision has been observed across the 14,841 DAGs of the unit-test suite or the
+          millions of candidates generated during the symbolic regression experiments. A synthetic
+          study enumerates all
+          <span class="math-inline" data-tex="\sum_{k=1}^{9} 600 \cdot k! = 245{,}467{,}800"></span>
+          internal-node permutations of 5,400 random expression DAGs with
+          <span class="math-inline" data-tex="k \in \{1, \ldots, 9\}"></span> and returns one canonical
+          string on every one of them, each attaining the maximal
+          <span class="math-inline" data-tex="\rho = k!"></span>. A second run holds the permutation
+          count fixed at 20,000 per expression and sweeps
+          <span class="math-inline" data-tex="k \in \{8, \ldots, 36\}"></span>: across 6,300 expressions
+          the per-permutation cost fits an <span class="math-inline" data-tex="O(k^{1.43})"></span>
+          power law (<span class="math-inline" data-tex="R^2 = 0.90"></span>), far below the
+          <span class="math-inline" data-tex="O(k!)"></span> worst case.
         </p>
       </div>
     </section>
 
     <!-- ===================== SECTION 7 ===================== -->
-    <section class="math-section" id="sec-completeness">
-      <h2>7. Completeness Theorem</h2>
+    <section class="math-section" id="sec-interface">
+      <h2>7. The Host-Solver Interface</h2>
+
+      <p>
+        Theorems&nbsp;3.13&ndash;3.15 quantify over labeled DAGs whose non-variable nodes are all
+        reachable from a variable. Expression DAGs delivered by a host symbolic regression solver need
+        not satisfy that condition, and the reason is structural rather than accidental. Every
+        insertion token of <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}"></span> creates a
+        node together with a creation edge from the acting pointer, so a non-variable node of
+        in-degree <span class="math-inline" data-tex="0"></span> has no encoding: no
+        <span class="math-inline" data-tex="w"></span> satisfies
+        <span class="math-inline" data-tex="\mathrm{S2D}(w, m) \cong D"></span> when
+        <span class="math-inline" data-tex="D"></span> contains such a node, and D2S cannot emit it
+        because no pointer can be placed on one of its in-neighbors. Every operation node consumes
+        operands and therefore carries in-edges; Const is the sole exception, being an
+        evaluation-neutral leaf, so host solvers deliver numeric constants as terminals with nothing
+        pointing into them. One step at the interface supplies the missing edge.
+      </p>
+
+      <div class="def-box">
+        <h4>Definition 3.16 (Constant-creation normalization)</h4>
+        <p>
+          Let <span class="math-inline" data-tex="D"></span> be a labeled DAG with variable nodes
+          <span class="math-inline" data-tex="x_1, \ldots, x_m"></span> and let
+          <span class="math-inline" data-tex="C = \{c \in V : \ell(c) = \textsf{Const}\}"></span>. The
+          <strong>constant-creation normalization</strong>
+          <span class="math-inline" data-tex="\mathcal{N}(D)"></span> processes the nodes of
+          <span class="math-inline" data-tex="C"></span> in increasing index and, for each
+          <span class="math-inline" data-tex="c \in C"></span> with
+          <span class="math-inline" data-tex="|N^{-}(c)| = 0"></span>, adds the single edge
+          <span class="math-inline" data-tex="x_i \to c"></span>, where
+          <span class="math-inline" data-tex="i"></span> is the least index for which the addition keeps
+          the graph acyclic; if no such <span class="math-inline" data-tex="i"></span> exists,
+          <span class="math-inline" data-tex="c"></span> is left unchanged. Every node, label, operand
+          order and pre-existing edge is preserved, and <strong>no edge is ever removed</strong>. The
+          step is a no-op when <span class="math-inline" data-tex="C = \emptyset"></span>.
+        </p>
+      </div>
+
+      <div class="remark-box">
+        <h4>Where the step belongs</h4>
+        <p>
+          The step costs
+          <span class="math-inline" data-tex="O\bigl(|C|\, m\, (|V| + |E|)\bigr)"></span>: at most
+          <span class="math-inline" data-tex="m"></span> anchor attempts per constant, one acyclicity
+          check each. It is the <strong>identity on the hypothesis class</strong>, since a DAG whose
+          non-variable nodes are all reachable from a variable has no Const node of in-degree
+          <span class="math-inline" data-tex="0"></span>; in particular it is the identity on the entire
+          image of S2D, so it perturbs no DAG within the scope of
+          Theorems&nbsp;3.13&ndash;3.15. It is applied where a host expression DAG enters the
+          representation, and <em>not</em> during canonicalization:
+          <span class="math-inline" data-tex="\hat{w}"></span> is a function of
+          <span class="math-inline" data-tex="D"></span> alone.
+        </p>
+      </div>
 
       <div class="thm-box">
-        <h4>Property P3 (Canonical Invariance)</h4>
+        <h4>Lemma 3.17 (The interface step establishes the precondition)</h4>
         <p>
-          The canonical string is a <strong>complete labeled-DAG isomorphism invariant</strong>:
+          Let <span class="math-inline" data-tex="D"></span> be a labeled DAG with
+          <span class="math-inline" data-tex="m \geq 1"></span> variables such that
+          (a) every node of in-degree <span class="math-inline" data-tex="0"></span> is a Var or a Const
+          node, and (b) no Var node is the target of an edge. Then:
         </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="w^*_{D_1} = w^*_{D_2} \;\iff\; D_1 \cong D_2"></span>
-        </div>
+        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);" type="i">
+          <li><span class="math-inline" data-tex="\mathcal{N}(D)"></span> is acyclic, and every anchor is
+            <span class="math-inline" data-tex="x_1"></span>;</li>
+          <li>every non-Var node of <span class="math-inline" data-tex="\mathcal{N}(D)"></span> is
+            reachable from a variable, so it satisfies the hypothesis of Theorem&nbsp;3.13;</li>
+          <li><span class="math-inline" data-tex="\mathcal{N}"></span> is isomorphism-equivariant on this
+            class, and
+            <span class="math-inline" data-tex="\mathcal{N}(D_1) \cong \mathcal{N}(D_2) \iff D_1 \cong D_2"></span>;</li>
+          <li><span class="math-inline" data-tex="\mathrm{eval}(\mathcal{N}(D)) = \mathrm{eval}(D)"></span>
+            and the output node is unchanged.</li>
+        </ol>
       </div>
 
-      <div class="proof-box">
-        <h4>Proof of Soundness (<span class="math-inline" data-tex="\Leftarrow"></span>)</h4>
+      <div class="thm-box">
+        <h4>Corollary 3.18 (Canonical strings deduplicate host output)</h4>
         <p>
-          Assume <span class="math-inline" data-tex="D_1 \cong D_2"></span> via isomorphism
-          <span class="math-inline" data-tex="\varphi"></span>. We show
-          <span class="math-inline" data-tex="w^*_{D_1} = w^*_{D_2}"></span> in four steps.
+          Let <span class="math-inline" data-tex="D_1, D_2"></span> satisfy (a)&ndash;(b) of
+          Lemma&nbsp;3.17. Then
+          <span class="math-inline" data-tex="\hat{w}_{\mathcal{N}(D_1)} = \hat{w}_{\mathcal{N}(D_2)}"></span>
+          if and only if <span class="math-inline" data-tex="D_1 \cong D_2"></span>.
         </p>
-
-        <div class="proof-step">
-          <p class="proof-step__label">Step 1 (Candidate Bijection).</p>
-          <p>
-            At each V/v branch point in the D2S computation starting from
-            <span class="math-inline" data-tex="x_1"></span>, the isomorphism
-            <span class="math-inline" data-tex="\varphi"></span> induces a bijection between
-            the candidate sets:
-            <span class="math-inline" data-tex="\varphi(\mathcal{C}_1) = \mathcal{C}_2"></span>.
-            Since <span class="math-inline" data-tex="\varphi(x_i) = x_i"></span> for all variable nodes,
-            the initial CDLL configuration and pointer positions are identical.
-          </p>
-        </div>
-
-        <div class="proof-step">
-          <p class="proof-step__label">Step 2 (Key Preservation).</p>
-          <p>
-            For any candidate <span class="math-inline" data-tex="c \in \mathcal{C}_1"></span>,
-            the sort key satisfies
-            <span class="math-inline" data-tex="\kappa_1(c) = \kappa_2(\varphi(c))"></span>.
-            This holds because:
-            (a) <span class="math-inline" data-tex="\ell_1(c) = \ell_2(\varphi(c))"></span> by label preservation, and
-            (b) <span class="math-inline" data-tex="h_1(c) = h_2(\varphi(c))"></span> by the
-            WL invariance theorem (or
-            <span class="math-inline" data-tex="\tau_1(c) = \tau_2(\varphi(c))"></span> for
-            tuple-based modes).
-            Therefore the sorted candidate order is the same in both D2S computations.
-          </p>
-        </div>
-
-        <div class="proof-step">
-          <p class="proof-step__label">Step 3 (Identical Token Emission).</p>
-          <p>
-            Since the candidate ordering is preserved and the greedy/backtracking
-            decisions are deterministic functions of the sorted order, both computations
-            select the same candidate at each branch point. The emitted movement
-            tokens are identical because CDLL positions agree (via the shared initial state
-            and identical insertion sequence). Therefore the token sequences are character-by-character
-            identical.
-          </p>
-        </div>
-
-        <div class="proof-step">
-          <p class="proof-step__label">Step 4 (Operand Order Consistency).</p>
-          <p>
-            For POW nodes, the D2S algorithm always emits the
-            <span class="math-inline" data-tex="V\!\lambda"></span> from the first operand
-            <span class="math-inline" data-tex="s_1"></span>. Since
-            <span class="math-inline" data-tex="\sigma_2(\varphi(v)) = (\varphi(s_1), \varphi(s_2))"></span>
-            by isomorphism condition (iv), and
-            <span class="math-inline" data-tex="\varphi"></span> preserves the CDLL-relative position
-            of <span class="math-inline" data-tex="s_1"></span>, the same first-operand selection
-            is made in both computations.
-          </p>
-        </div>
-
-        <p style="margin-top: var(--space-md);">
-          Therefore
-          <span class="math-inline" data-tex="w^*_{D_1} = w^*_{D_2}"></span>.
-        </p>
-        <p class="proof-box__qed">&#9632;</p>
       </div>
 
-      <div class="proof-box">
-        <h4>Proof of Completeness (<span class="math-inline" data-tex="\Rightarrow"></span>)</h4>
+      <div class="remark-box">
+        <h4>What hypothesis (b) buys</h4>
         <p>
-          Assume <span class="math-inline" data-tex="w^*_{D_1} = w^*_{D_2} = w^*"></span>.
-          By the definition of <span class="math-inline" data-tex="W(D)"></span>:
+          It carries two things at once. An anchor at <span class="math-inline" data-tex="x_1"></span>
+          can close a cycle only if some edge already points into
+          <span class="math-inline" data-tex="x_1"></span>, which makes the step well defined; and every
+          constant of in-degree <span class="math-inline" data-tex="0"></span> then anchors to
+          <span class="math-inline" data-tex="x_1"></span> whatever order the constants are processed in,
+          which makes <span class="math-inline" data-tex="\mathcal{N}"></span> order-independent on this
+          class. Corollary&nbsp;3.18 is the statement the deduplication experiments rely on: the
+          canonical string of the normalized DAG is a sound <em>and</em> complete key for the
+          isomorphism classes of the DAGs a host solver produces.
         </p>
-        <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin: var(--space-sm) 0;">
-          <li>
-            <span class="math-inline" data-tex="w^* \in W(D_1)"></span>, so
-            <span class="math-inline" data-tex="\mathrm{S2D}(w^*) \cong D_1"></span>
-          </li>
-          <li>
-            <span class="math-inline" data-tex="w^* \in W(D_2)"></span>, so
-            <span class="math-inline" data-tex="\mathrm{S2D}(w^*) \cong D_2"></span>
-          </li>
-        </ul>
-        <p>
-          Since S2D is a deterministic function,
-          <span class="math-inline" data-tex="\mathrm{S2D}(w^*)"></span> is a single, fixed DAG.
-          By transitivity of isomorphism:
-          <span class="math-inline" data-tex="D_1 \cong \mathrm{S2D}(w^*) \cong D_2"></span>,
-          hence <span class="math-inline" data-tex="D_1 \cong D_2"></span>.
-        </p>
-        <p class="proof-box__qed">&#9632;</p>
-      </div>
-
-      <div class="figure-container" style="margin-top: var(--space-xl);">
-        <figure>
-          <img src="images/P3_canonical_invariance.png" alt="Canonical invariance property validation" loading="lazy">
-          <figcaption>Illustration of canonical invariance: isomorphic DAGs produce identical canonical strings.</figcaption>
-        </figure>
       </div>
     </section>
 
     <!-- ===================== SECTION 8 ===================== -->
-    <section class="math-section" id="sec-distance">
-      <h2>8. DAG Distance Metric</h2>
+    <section class="math-section" id="sec-serialization">
+      <h2>8. A Fixed-Order Serialization Key</h2>
+
+      <p>
+        The cheapest way to recognize a repeated candidate is to serialize the DAG in whatever node
+        order the host already stores it in, and hash the result. That rule is not an approximation of
+        an isomorphism test: it decides a strictly finer relation, and the difference is a quantity the
+        experiments measure rather than assume.
+      </p>
 
       <div class="def-box">
-        <h4>Definition 20 (Canonical String Distance)</h4>
+        <h4>Definition 3.19 (Fixed-order serialization key)</h4>
         <p>
-          The <strong>canonical string distance</strong> between two labeled DAGs
-          <span class="math-inline" data-tex="D_1"></span> and
-          <span class="math-inline" data-tex="D_2"></span> is:
+          Let <span class="math-inline" data-tex="\pi_D"></span> be a total ordering of
+          <span class="math-inline" data-tex="V"></span> computed from the host solver's stored
+          representation of <span class="math-inline" data-tex="D"></span>, and let
+          <span class="math-inline" data-tex="\mathrm{enc}"></span> be an injective encoding of an
+          ordered labeled adjacency structure into a byte string that records, for each node in the
+          order <span class="math-inline" data-tex="\pi_D"></span>, its label, its metadata and the
+          ordered positions of its in-neighbors. Then
         </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="d(D_1, D_2) = \mathrm{Lev}(w^*_{D_1},\, w^*_{D_2})"></span>
-        </div>
-        <p>
-          where <span class="math-inline" data-tex="\mathrm{Lev}"></span> denotes the Levenshtein
-          (edit) distance: the minimum number of single-character insertions,
-          deletions, and substitutions to transform one string into the other.
-        </p>
+        <div class="math-display" data-tex="\mathrm{ser}(D) = \mathrm{enc}\bigl(\pi_D(D)\bigr), \qquad \mathrm{key}(D) = h\bigl(\mathrm{ser}(D)\bigr). \qquad (4)"></div>
       </div>
 
       <div class="thm-box">
-        <h4>Theorem (<span class="math-inline" data-tex="d"></span> is a Metric on Isomorphism Classes)</h4>
+        <h4>Lemma 3.20 (The serialization key is sound but not complete)</h4>
         <p>
-          The function <span class="math-inline" data-tex="d"></span> is a metric on the quotient
-          space
-          <span class="math-inline" data-tex="\mathfrak{D} / {\cong}"></span> of labeled DAGs modulo
-          isomorphism:
-        </p>
-        <ol style="color: var(--text-secondary); padding-left: var(--space-xl); margin-top: var(--space-sm);">
-          <li>
-            <strong>Identity of indiscernibles:</strong>
-            <span class="math-inline" data-tex="d(D_1, D_2) = 0 \iff D_1 \cong D_2"></span>.
-            (Follows from
-            <span class="math-inline" data-tex="\mathrm{Lev}(s,t) = 0 \iff s = t"></span>
-            and the completeness of
-            <span class="math-inline" data-tex="w^*"></span>.)
-          </li>
-          <li>
-            <strong>Symmetry:</strong>
-            <span class="math-inline" data-tex="d(D_1, D_2) = d(D_2, D_1)"></span>.
-            (Inherited from <span class="math-inline" data-tex="\mathrm{Lev}"></span>.)
-          </li>
-          <li>
-            <strong>Triangle inequality:</strong>
-            <span class="math-inline" data-tex="d(D_1, D_3) \leq d(D_1, D_2) + d(D_2, D_3)"></span>.
-            (Inherited from <span class="math-inline" data-tex="\mathrm{Lev}"></span>.)
-          </li>
-        </ol>
-      </div>
-
-      <div class="remark-box">
-        <h4>Remark (Proxy for Graph Edit Distance)</h4>
-        <p>
-          Computing the exact labeled graph edit distance (GED) is NP-hard in general.
-          The canonical string distance
-          <span class="math-inline" data-tex="d"></span> provides a polynomial-time computable proxy.
-          While <span class="math-inline" data-tex="d"></span> is not identical to the GED
-          (string edits do not correspond one-to-one to graph edits), it captures
-          structural similarity: small string differences correlate with small
-          topological differences.
+          If <span class="math-inline" data-tex="\mathrm{enc}"></span> is injective and
+          <span class="math-inline" data-tex="\pi_D"></span> is a function of the stored representation
+          of <span class="math-inline" data-tex="D"></span> alone, then
+          <span class="math-inline" data-tex="\mathrm{ser}(D) = \mathrm{ser}(D')"></span> implies
+          <span class="math-inline" data-tex="D \cong D'"></span>. The converse fails.
         </p>
       </div>
 
       <div class="remark-box">
-        <h4>Remark (Well-Definedness)</h4>
+        <h4>Where the key must be taken</h4>
         <p>
-          The metric <span class="math-inline" data-tex="d"></span> is well-defined on isomorphism classes
-          because the canonical string
-          <span class="math-inline" data-tex="w^*_D"></span> is a complete invariant:
-          <span class="math-inline" data-tex="D_1 \cong D_1'"></span> implies
-          <span class="math-inline" data-tex="w^*_{D_1} = w^*_{D_1'}"></span>, so
-          <span class="math-inline" data-tex="d(D_1, D_2) = d(D_1', D_2)"></span>.
-          The distance depends only on the isomorphism class, not on the representative.
+          Lemma&nbsp;3.20 requires <span class="math-inline" data-tex="\pi_D"></span> to read only the
+          stored representation. An intermediate representation that renumbers nodes has already
+          performed part of the canonicalization, and a key computed after it merges candidates the host
+          itself keeps apart; applied that way the rule ceases to be a baseline and becomes a weaker
+          canonical form.
+        </p>
+      </div>
+
+      <div class="def-box">
+        <h4>The share &phi; of redundancy that needs an isomorphism test</h4>
+        <p>
+          Soundness makes the two rules comparable on one candidate stream. Let
+          <span class="math-inline" data-tex="S = (D_1, \ldots, D_N)"></span> be the candidates a run
+          submits for evaluation, let
+          <span class="math-inline" data-tex="U_{\mathrm{ser}}"></span> be the number of classes the
+          serialization distinguishes, and let
+          <span class="math-inline" data-tex="U_{\cong}"></span> be the number of isomorphism classes
+          obtained from the canonical string through Corollary&nbsp;3.18. Serialization equality refines
+          isomorphism, so every isomorphism class <span class="math-inline" data-tex="C"></span> splits
+          into <span class="math-inline" data-tex="n_C \geq 1"></span> serialization classes and
+        </p>
+        <div class="math-display" data-tex="\Delta = U_{\mathrm{ser}} - U_{\cong} = \sum_C (n_C - 1), \qquad \phi = \frac{\Delta}{N - U_{\cong}} \in [0, 1]. \qquad (5)"></div>
+        <p>
+          Here <span class="math-inline" data-tex="\Delta"></span> counts the redundant candidates that
+          only an isomorphism test removes and
+          <span class="math-inline" data-tex="\phi"></span> is the share of all removable redundancy that
+          requires one. Writing
+          <span class="math-inline" data-tex="\rho_{\mathrm{ser}} = N / U_{\mathrm{ser}}"></span> and
+          <span class="math-inline" data-tex="\rho = N / U_{\cong}"></span> for the two reduction
+          factors,
+        </p>
+        <div class="math-display" data-tex="\phi = \frac{\rho_{\mathrm{ser}}^{-1} - \rho^{-1}}{1 - \rho^{-1}}. \qquad (6)"></div>
+        <p>
+          At <span class="math-inline" data-tex="\phi = 0"></span> the serialization key is as effective
+          as canonicalization on that stream; at <span class="math-inline" data-tex="\phi = 1"></span>
+          every duplicate canonicalization removes is one the serialization key cannot see. The
+          <a href="results.html" style="color: var(--accent-primary);">measured values</a> sit at both
+          ends: <span class="math-inline" data-tex="\phi = 1.00"></span> on UDFS and
+          <span class="math-inline" data-tex="0.047"></span> on Bingo.
         </p>
       </div>
     </section>
 
     <!-- ===================== SECTION 9 ===================== -->
     <section class="math-section" id="sec-complexity">
-      <h2>9. Complexity Analysis</h2>
-
-      <div class="thm-box">
-        <h4>Property P5 (Search Space Reduction)</h4>
-        <p>
-          For a labeled DAG <span class="math-inline" data-tex="D"></span> with
-          <span class="math-inline" data-tex="k = |V_{\mathrm{int}}|"></span> internal nodes,
-          the canonical string representation reduces the effective search space
-          by a factor of
-          <span class="math-inline" data-tex="\Theta(k!)"></span>.
-        </p>
-      </div>
-
-      <div class="proof-box">
-        <h4>Proof</h4>
-        <p>
-          Each isomorphism class <span class="math-inline" data-tex="[D]_\cong"></span> contains
-          exactly
-        </p>
-        <div style="text-align: center; margin: var(--space-md) 0;">
-          <span class="math-display" data-tex="\frac{k!}{|\mathrm{Aut}(D)|}"></span>
-        </div>
-        <p>
-          distinct internal-node numberings (by the orbit-stabilizer theorem applied
-          to the action of <span class="math-inline" data-tex="S_k"></span> on numberings).
-          Each numbering produces a distinct D2S string, since D2S is deterministic
-          and the CDLL traversal order depends on node IDs.
-          The canonical string collapses all
-          <span class="math-inline" data-tex="k! / |\mathrm{Aut}(D)|"></span> strings to a
-          single representative
-          <span class="math-inline" data-tex="w^*_D"></span>.
-        </p>
-        <p style="margin-top: var(--space-sm);">
-          For a <em>generic</em> DAG (no non-trivial automorphisms),
-          <span class="math-inline" data-tex="|\mathrm{Aut}(D)| = 1"></span> and the reduction
-          factor is exactly <span class="math-inline" data-tex="k!"></span>.
-          For DAGs with non-trivial automorphism groups, the reduction is
-          <span class="math-inline" data-tex="k! / |\mathrm{Aut}(D)| < k!"></span>.
-          In both cases the reduction factor is
-          <span class="math-inline" data-tex="\Theta(k!)"></span> since
-          <span class="math-inline" data-tex="|\mathrm{Aut}(D)| \leq k!"></span>.
-        </p>
-        <p class="proof-box__qed">&#9632;</p>
-      </div>
-
-      <div class="figure-container">
-        <figure>
-          <img src="images/P5_search_space_reduction.png" alt="Search space reduction validation" loading="lazy">
-          <figcaption>Search space reduction: distinct representations per isomorphism class equal
-            <span class="math-inline" data-tex="k! / |\mathrm{Aut}(D)|"></span>.</figcaption>
-        </figure>
-      </div>
-
-      <h3 style="margin-top: var(--space-xl);">Algorithm Complexities</h3>
+      <h2>9. Complexity Summary</h2>
 
       <table class="math-instr-table">
         <thead>
           <tr>
             <th>Algorithm</th>
-            <th>Time Complexity</th>
+            <th>Time complexity</th>
             <th>Notes</th>
           </tr>
         </thead>
@@ -1262,57 +1049,62 @@
           <tr>
             <td style="font-weight: 600;">S2D</td>
             <td><span class="math-inline" data-tex="O(|w| \cdot (|V| + |E|))"></span></td>
-            <td>Linear scan; cycle check per C/c via BFS reachability</td>
+            <td>Linear scan; one BFS reachability check per <code>C</code>/<code>c</code></td>
           </tr>
           <tr>
-            <td style="font-weight: 600;">D2S</td>
-            <td><span class="math-inline" data-tex="O(k^2)"></span></td>
-            <td>Greedy spiral search over <span class="math-inline" data-tex="\mathcal{P}_n"></span></td>
+            <td style="font-weight: 600;">D2S (greedy)</td>
+            <td><span class="math-inline" data-tex="O((|V| + |E|) \cdot |V|^2)"></span></td>
+            <td>Spiral search over <span class="math-inline" data-tex="\mathcal{P}_n"></span></td>
           </tr>
           <tr>
-            <td style="font-weight: 600;">Canonical (exhaustive)</td>
-            <td><span class="math-inline" data-tex="O(k! \cdot k^2)"></span></td>
-            <td>Full permutation enumeration; reference only</td>
+            <td style="font-weight: 600;">1-WL hash precomputation</td>
+            <td><span class="math-inline" data-tex="O(k)"></span></td>
+            <td>Single reverse topological pass</td>
           </tr>
           <tr>
-            <td style="font-weight: 600;">Canonical (pruned)</td>
-            <td><span class="math-inline" data-tex="O(k!)"></span> worst-case</td>
-            <td>6-tuple + label-aware pruning; much faster in practice</td>
+            <td style="font-weight: 600;">Canonical string (fast)</td>
+            <td>near-<span class="math-inline" data-tex="O(k^2)"></span></td>
+            <td><span class="math-inline" data-tex="O(t^d \cdot k^2)"></span> with
+              <span class="math-inline" data-tex="d"></span> tied decision points of size
+              <span class="math-inline" data-tex="t"></span>; measured
+              <span class="math-inline" data-tex="O(k^{1.43})"></span> over
+              <span class="math-inline" data-tex="k \in \{8, \ldots, 36\}"></span></td>
           </tr>
           <tr>
-            <td style="font-weight: 600;">Canonical (fast, WL)</td>
-            <td>Near-<span class="math-inline" data-tex="O(k^2)"></span></td>
-            <td>Greedy-invariant; <span class="math-inline" data-tex="O(t^d \cdot k^2)"></span> with <span class="math-inline" data-tex="d"></span> tie levels, <span class="math-inline" data-tex="t"></span> tied candidates each</td>
+            <td style="font-weight: 600;">Canonical string (exhaustive)</td>
+            <td><span class="math-inline" data-tex="O(k!)"></span></td>
+            <td>Reference construction of Definition 3.6</td>
           </tr>
           <tr>
-            <td style="font-weight: 600;">WL hash precomputation</td>
+            <td style="font-weight: 600;">Constant-creation normalization</td>
+            <td><span class="math-inline" data-tex="O(|C| \, m \, (|V| + |E|))"></span></td>
+            <td>Producer-side, at the conversion boundary</td>
+          </tr>
+          <tr>
+            <td style="font-weight: 600;">Serialization key</td>
             <td><span class="math-inline" data-tex="O(|V| + |E|)"></span></td>
-            <td>Single bottom-up pass in topological order</td>
-          </tr>
-          <tr>
-            <td style="font-weight: 600;">6-tuple precomputation</td>
-            <td><span class="math-inline" data-tex="O(|V| \cdot (|V| + |E|))"></span></td>
-            <td>Truncated BFS from each node</td>
-          </tr>
-          <tr>
-            <td style="font-weight: 600;">DAG distance</td>
-            <td><span class="math-inline" data-tex="O(|w^*_{D_1}| \cdot |w^*_{D_2}|)"></span></td>
-            <td>Levenshtein DP on canonical strings</td>
+            <td>Sound but incomplete (Lemma 3.20)</td>
           </tr>
         </tbody>
       </table>
 
       <div class="remark-box">
-        <h4>Remark (Practical Complexity of Fast Canonical)</h4>
+        <h4>What the reduction is, and what it is not</h4>
         <p>
-          The backtracking factor <span class="math-inline" data-tex="t^d"></span> in the fast
-          canonical algorithm is governed by the automorphism structure of the DAG.
-          For DAGs arising in symbolic regression (evolved by genetic programming),
-          non-trivial automorphisms are rare. In practice, the algorithm behaves as
-          <span class="math-inline" data-tex="O(k^2)"></span> for the vast majority of expression DAGs,
-          with ties occurring only for highly symmetric structures such as
-          <span class="math-inline" data-tex="x_1 + x_1"></span> or
-          <span class="math-inline" data-tex="x_1 \cdot x_1 \cdot x_1"></span>.
+          Each isomorphism class contains exactly
+          <span class="math-inline" data-tex="k! / |\mathrm{Aut}(D)|"></span> distinct internal-node
+          numberings, by the orbit-stabilizer theorem applied to the action of
+          <span class="math-inline" data-tex="S_k"></span> on numberings, and the canonical string
+          collapses all of them onto one representative. That is a bound on the redundancy present in
+          the representation. The <em>empirical</em> reduction factor
+          <span class="math-inline" data-tex="\rho = N_{\mathrm{total}} / N_{\mathrm{unique}}"></span>
+          counts only the duplicates a search actually encounters within its time budget, and is
+          therefore a lower bound on what an unbounded search would expose. The two must not be
+          conflated: measured <span class="math-inline" data-tex="\rho"></span> is
+          <span class="math-inline" data-tex="1.66"></span> on UDFS and
+          <span class="math-inline" data-tex="1.79"></span> on Bingo, while
+          <span class="math-inline" data-tex="k!"></span> at those expression sizes is astronomically
+          larger.
         </p>
       </div>
     </section>
@@ -1329,22 +1121,16 @@
         if (window.katex) {
           clearInterval(interval);
 
-          // Render all inline math
           var inlines = document.querySelectorAll('.math-inline');
           for (var i = 0; i < inlines.length; i++) {
             var tex = inlines[i].getAttribute('data-tex');
-            if (tex) {
-              katex.render(tex, inlines[i], { displayMode: false, throwOnError: false });
-            }
+            if (tex) katex.render(tex, inlines[i], { displayMode: false, throwOnError: false });
           }
 
-          // Render all display math
           var displays = document.querySelectorAll('.math-display');
           for (var j = 0; j < displays.length; j++) {
             var dtex = displays[j].getAttribute('data-tex');
-            if (dtex) {
-              katex.render(dtex, displays[j], { displayMode: true, throwOnError: false });
-            }
+            if (dtex) katex.render(dtex, displays[j], { displayMode: true, throwOnError: false });
           }
         }
       }, 100);

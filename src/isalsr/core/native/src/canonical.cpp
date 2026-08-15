@@ -406,13 +406,15 @@ std::string fast_canonical_string(
         static_cast<int32_t>(dag.var_nodes().size());
     if (dag.node_count_ == num_vars && dag.edge_count_ == 0) return {};
 
-    // Repair orphan CONST nodes if any CONST is present (Invariant 9).  This is
-    // the identity whenever every non-VAR node is already reachable from a
-    // variable, so it cannot perturb a precondition-satisfying input.
-    if (dag.has_const_nodes()) {
-        const NativeLabeledDAG norm = dag.normalize_const_creation();
-        return fast_canonical_string_wl_only(norm, timeout_sec);
-    }
+    // CONST normalisation is NOT applied here (removed 2026-07-29, T07).
+    // It made the canonical string a function of normalize(D) rather than of D,
+    // and normalize_const_creation is not isomorphism-equivariant (it anchors
+    // orphan CONST nodes in node-index order, which is exactly what isomorphism
+    // permutes), so two isomorphic DAGs could receive different strings.
+    // Establishing the reachability precondition is the producer's job -- the
+    // host adapters do it -- and the canonicaliser now assumes it, raising on an
+    // unreachable node rather than silently repairing.  Kept byte-equivalent
+    // with the Python reference (T01).
     return fast_canonical_string_wl_only(dag, timeout_sec);
 }
 

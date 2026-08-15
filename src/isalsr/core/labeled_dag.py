@@ -393,12 +393,18 @@ class LabeledDAG:
         For a valid expression DAG, this is the final output node whose
         value is the expression's result.
 
-        CONST-tolerance: After ``normalize_const_creation()`` moves CONST
-        in-edges to x_1, operation nodes whose only child was a CONST
-        become extra non-VAR sinks. Since CONST nodes are evaluation-
-        neutral leaves (they ignore in-edges and return ``const_value``),
-        CONST sinks are not true outputs. This method ignores CONST sinks
-        when a unique non-CONST sink exists.
+        CONST-tolerance: a DAG may carry more than one non-VAR sink when one
+        of them is a CONST node. Since CONST nodes are evaluation-neutral
+        leaves (they ignore in-edges and return ``const_value``), a CONST sink
+        is not a true output. This method ignores CONST sinks when a unique
+        non-CONST sink exists.
+
+        (The previous wording described ``normalize_const_creation()`` as
+        "moving CONST in-edges to x_1". That was the pre-2026-07-27 policy; it
+        relocated edges, dropped them when the replacement closed a cycle, and
+        was not evaluation-preserving. The current repair only *adds* an edge to
+        an in-degree-0 CONST, and it is no longer applied during
+        canonicalisation at all.)
 
         Raises:
             ValueError: If there is no non-VAR sink node, or if there are
@@ -441,22 +447,38 @@ class LabeledDAG:
 
         Two labeled DAGs are isomorphic iff there exists a bijection between
         their node sets that preserves: (a) all directed edges, (b) all node
-        labels, (c) operand order for non-commutative binary ops (SUB, DIV,
-        POW). Variable nodes (VAR) are matched by their var_index, ensuring
-        x_1 maps to x_1, x_2 maps to x_2, etc. (variables are distinguishable).
+        labels, (c) the *first operand* of every non-commutative binary op
+        (SUB, DIV, POW). Variable nodes (VAR) are matched by their var_index,
+        ensuring x_1 maps to x_1, x_2 maps to x_2, etc. (variables are
+        distinguishable).
 
         Condition (c) is necessary because sin(x)-cos(x) and cos(x)-sin(x)
         have the same graph structure but different evaluation semantics.
-        The canonical string encodes operand order (Bug Fix B9), so the
-        isomorphism check must be consistent.
+        The canonical string encodes the first-operand designation (Bug Fix
+        B9), so the isomorphism check must be consistent.
+
+        Condition (c) is stated on the first operand alone, not on the whole
+        ``_input_order`` list (T18, 2026-08-03). On a binary op with in-degree
+        two -- the only shape ``dag_evaluator`` accepts -- the two are
+        equivalent, so nothing is weakened on well-formed DAGs. On an
+        over-saturated binary op they differ, and the surplus positions are
+        neither evaluated nor representable in Sigma_SR; requiring them made
+        this predicate strictly finer than the canonical string, which
+        produced the five spurious round-trip failures of T18.
         """
         if not isinstance(other, LabeledDAG):
             return False
 
-        # Normalize CONST creation edges before comparison so that DAGs
-        # differing only in where CONST was created are considered isomorphic.
-        self_dag = self.normalize_const_creation() if self._has_const_nodes() else self
-        other_dag = other.normalize_const_creation() if other._has_const_nodes() else other
+        # CONST normalisation is NOT applied here (removed 2026-07-29, T07).
+        # Applying it made this predicate inherit the non-equivariance of
+        # `normalize_const_creation`: it returned False on pairs produced by
+        # `permutations.permute_internal_nodes`, i.e. on graphs that are
+        # isomorphic by construction. This is now a straight labeled-DAG
+        # isomorphism test. CONST provenance is ordinary structure: two DAGs
+        # whose CONST nodes hang off different parents are different labeled
+        # DAGs and are correctly reported as non-isomorphic.
+        self_dag = self
+        other_dag = other
 
         if self_dag._node_count != other_dag._node_count:
             return False
@@ -529,7 +551,27 @@ class LabeledDAG:
         )
 
         def _check_operand_order() -> bool:
-            """Verify operand order for non-commutative binary ops."""
+            """Verify the first-operand designation on non-commutative binary ops.
+
+            Only ``_input_order[v][0]`` is compared (T18, 2026-08-03). That is
+            exactly the part of the in-edge ordering that Sigma_SR encodes:
+            ``V``/``v`` may create a binary op only from its first operand
+            (Critical Invariant 8 / B9), enforced identically in
+            ``dag_to_string._find_new_out_neighbor`` and at the four
+            ``ordered_inputs(c)[0] == ptr_in`` sites in ``canonical``. Every
+            further in-edge is emitted by ``C``/``c`` in canonical-traversal
+            order, so its position carries no information the canonical string
+            could recover.
+
+            No strength is lost on well-formed DAGs. When a binary op has
+            in-degree exactly two -- the only case ``dag_evaluator`` will
+            evaluate -- agreement at position 0 forces agreement at position 1,
+            because the mapping already preserves the edge set and one edge
+            remains. Comparing positions >= 1 only bites on *over-saturated*
+            binary nodes (in-degree > 2), which no evaluator accepts and which
+            the previous implementation separated while silently ignoring the
+            same surplus ordering on unary and variadic nodes.
+            """
             from isalsr.core.node_types import BINARY_OPS
 
             for u, v in mapping.items():
@@ -540,9 +582,11 @@ class LabeledDAG:
                 other_inputs = od._input_order[v]
                 if len(self_inputs) != len(other_inputs):
                     return False
-                for si, oi in zip(self_inputs, other_inputs, strict=True):
-                    if si in mapping and mapping[si] != oi:
-                        return False
+                if not self_inputs:
+                    continue
+                first = self_inputs[0]
+                if first in mapping and mapping[first] != other_inputs[0]:
+                    return False
             return True
 
         def _backtrack(idx: int) -> bool:

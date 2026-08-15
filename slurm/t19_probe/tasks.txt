@@ -1,0 +1,43 @@
+# T19 complexity-telemetry probe -- one line per array task (1-based index).
+#
+#   <method> <arm> <problem> <seed>
+#
+# Shape: 2 problems x 2 seeds x 3 arms x 2 methods = 24 tasks.
+#
+# SP-0 compliance (EXECUTION-PLAN §4.0):
+#   * 24 tasks          (cap 60)
+#   * max_time 900 s    (cap 1800)
+#   * seeds 0 and 101   -- NEVER 1..30, so a probe cell can never be mistaken
+#                          for a campaign cell.  Both are in Stage C's disjoint
+#                          set {0, 101, 102}.
+#   * output under ~/execs/isalsr/t19_probe/, never the campaign root.
+#
+# Problems chosen for structural contrast, not difficulty:
+#   Nguyen-1   x^3 + x^2 + x        1 variable,  polynomial, small k
+#   Nguyen-10  2 * sin(x) * cos(y)  2 variables, trigonometric, nonlinear ops
+# The second exercises the multi-variable adapter path and puts a non-zero
+# n_nonlinear into the descriptor, which a single polynomial problem would not.
+udfs baseline Nguyen-1 0
+udfs baseline Nguyen-1 101
+udfs baseline Nguyen-10 0
+udfs baseline Nguyen-10 101
+udfs hash Nguyen-1 0
+udfs hash Nguyen-1 101
+udfs hash Nguyen-10 0
+udfs hash Nguyen-10 101
+udfs isalsr Nguyen-1 0
+udfs isalsr Nguyen-1 101
+udfs isalsr Nguyen-10 0
+udfs isalsr Nguyen-10 101
+bingo baseline Nguyen-1 0
+bingo baseline Nguyen-1 101
+bingo baseline Nguyen-10 0
+bingo baseline Nguyen-10 101
+bingo hash Nguyen-1 0
+bingo hash Nguyen-1 101
+bingo hash Nguyen-10 0
+bingo hash Nguyen-10 101
+bingo isalsr Nguyen-1 0
+bingo isalsr Nguyen-1 101
+bingo isalsr Nguyen-10 0
+bingo isalsr Nguyen-10 101

@@ -23,7 +23,7 @@ CMAKE_BUILD_TYPE = "Release"
 
 [project]
 name = "isalsr"
-version = "0.1.0"
+version = "1.0.0"
 description = "Instruction Set and Language for Symbolic Regression"
 readme = "README.md"
 license = {text = "MIT"}

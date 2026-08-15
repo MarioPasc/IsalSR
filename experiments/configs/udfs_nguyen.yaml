@@ -20,8 +20,21 @@ udfs:
   k: 2
   stop_thresh: 1.0e-10
   use_tan: false
-  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log"]
+  # Informational only: to_dag_regressor_kwargs() does not forward this field and
+  # DAGRegressor has no such parameter. The search always enumerates the vendor's
+  # own table (vendor/DAG_search/config.py, NODE_ARITY): binary {+, *, sub_l,
+  # sub_r, div_l, div_r}, unary {id, inv, neg, sin, cos, exp, log, sqrt}, no pow.
+  # The list below records that fixed set and is identical in every UDFS config.
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log", "sqrt", "neg", "inv"]
   snapshot_frequency: 1000
+  # Shadow sketches OFF for the campaign (audit.md §7.3, Mario 2026-08-04).
+  # They cost 17.6 % of Bingo's wall clock / 0.03 % of UDFS's, are paid by the
+  # isalsr arm alone inside a fixed budget, and would penalise exactly the arm
+  # carrying the headline claim.  The fixed-order numbers come from the Stage D
+  # trace cell and the D3 replay instead.  Read by the isalsr/hash runners via
+  # config.get("shadow_hash"); UDFSConfig.from_dict filters it out of the
+  # dataclass, so it perturbs no host parameter.
+  shadow_hash: false
 
 isalsr:
   canonicalization_timeout: 60.0

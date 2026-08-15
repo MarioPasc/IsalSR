@@ -189,7 +189,16 @@ def canonical_string(dag: LabeledDAG, *, timeout: float | None = None) -> str:
         return ""
     # Normalize CONST creation edges to x_1 before canonical computation.
     # This eliminates redundancy from arbitrary CONST creation sources.
-    normalized = dag.normalize_const_creation() if dag._has_const_nodes() else dag
+    # CONST normalisation is NOT applied here (removed 2026-07-29, T07).
+    # It made the canonical string a function of normalize(D) rather than of D,
+    # and `normalize_const_creation` is not isomorphism-equivariant, so two
+    # isomorphic DAGs could receive different canonical strings.  Establishing
+    # the reachability precondition is the *producer's* responsibility (the host
+    # adapters do it); the canonicaliser now assumes it and raises loudly on an
+    # unreachable node instead of silently repairing.  Verified a no-op on
+    # 10,551,609 real DAGs: per-DAG agreement 1.000000, identical n_unique and
+    # rho, round-trip 100%.
+    normalized = dag
     return _canonical_d2s(normalized, pruned=False, timeout=timeout)
 
 
@@ -240,7 +249,16 @@ def pruned_canonical_string(dag: LabeledDAG, *, timeout: float | None = None) ->
     if dag.node_count == num_vars and dag.edge_count == 0:
         return ""
     # Normalize CONST creation edges to x_1 before canonical computation.
-    normalized = dag.normalize_const_creation() if dag._has_const_nodes() else dag
+    # CONST normalisation is NOT applied here (removed 2026-07-29, T07).
+    # It made the canonical string a function of normalize(D) rather than of D,
+    # and `normalize_const_creation` is not isomorphism-equivariant, so two
+    # isomorphic DAGs could receive different canonical strings.  Establishing
+    # the reachability precondition is the *producer's* responsibility (the host
+    # adapters do it); the canonicaliser now assumes it and raises loudly on an
+    # unreachable node instead of silently repairing.  Verified a no-op on
+    # 10,551,609 real DAGs: per-DAG agreement 1.000000, identical n_unique and
+    # rho, round-trip 100%.
+    normalized = dag
     return _canonical_d2s(normalized, pruned=True, timeout=timeout)
 
 
@@ -322,13 +340,22 @@ def fast_canonical_string(
         )
         mode = "wl_tiebreak" if use_wl_hash else "tuple_only"
 
-    # Resolve backend: None → DEFAULT_BACKEND (cpp if available, python otherwise).
+    # Resolve backend: None → backends.engine(), which applies the documented
+    # resolution order (1. ISALSR_ENGINE env var, 2. DEFAULT_BACKEND).
+    #
+    # Reading DEFAULT_BACKEND directly here was a defect: it bypassed the
+    # ISALSR_ENGINE override, so `ISALSR_ENGINE=python` made engine() and
+    # build_info() report "python" while this function kept dispatching to C++.
+    # That is the exact SP-3 / pre-flight-B2 failure mode -- a negative control
+    # that reports the forced engine while silently running the other one passes
+    # while proving nothing.  Any "check both backends" sweep driven by the env
+    # var rather than an explicit backend= kwarg was testing C++ twice.
     # The C++ path only supports wl_only mode; all other modes fall back to Python.
     from isalsr.core import backends as _backends  # lazy to avoid circular import
 
     resolved_backend: str
     if backend is None:
-        resolved_backend = _backends.DEFAULT_BACKEND
+        resolved_backend = _backends.engine()
     elif backend == "cpp":
         if not _CPP_AVAILABLE:
             raise RuntimeError("backend='cpp' requested but isalsr.core._native is not available.")
@@ -358,7 +385,16 @@ def fast_canonical_string(
     num_vars = len(dag.var_nodes())
     if dag.node_count == num_vars and dag.edge_count == 0:
         return ""
-    normalized = dag.normalize_const_creation() if dag._has_const_nodes() else dag
+    # CONST normalisation is NOT applied here (removed 2026-07-29, T07).
+    # It made the canonical string a function of normalize(D) rather than of D,
+    # and `normalize_const_creation` is not isomorphism-equivariant, so two
+    # isomorphic DAGs could receive different canonical strings.  Establishing
+    # the reachability precondition is the *producer's* responsibility (the host
+    # adapters do it); the canonicaliser now assumes it and raises loudly on an
+    # unreachable node instead of silently repairing.  Verified a no-op on
+    # 10,551,609 real DAGs: per-DAG agreement 1.000000, identical n_unique and
+    # rho, round-trip 100%.
+    normalized = dag
     return _fast_canonical_d2s(normalized, timeout=timeout, mode=mode)
 
 

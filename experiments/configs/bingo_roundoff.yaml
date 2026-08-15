@@ -27,9 +27,23 @@ bingo:
   mutation_prob: 0.4
   max_generations: 100000
   max_time: 43200       # 12h algorithm budget (standard).
+  # F-19 (2026-08-05): this key was ABSENT and the suite silently inherited
+  # BingoConfig.max_evals = 10_000_000 (config.py:29) -- a 10x tighter budget
+  # than nguyen/feynman/hard/cherrypicked, undocumented, and pooled into the
+  # N=70 CPDT. max_evals is the BINDING budget for Bingo (max_time never fires;
+  # Stage D 2026-08-05), so this was a 10x search-budget disparity, not a detail.
+  max_evals: 100000000
   fitness_metric: "lm"
   convergence_check_frequency: 50
   snapshot_frequency: 50
+  # Shadow sketches OFF for the campaign (audit.md §7.3, Mario 2026-08-04).
+  # They cost 17.6 % of Bingo's wall clock / 0.03 % of UDFS's, are paid by the
+  # isalsr arm alone inside a fixed budget, and would penalise exactly the arm
+  # carrying the headline claim.  The fixed-order numbers come from the Stage D
+  # trace cell and the D3 replay instead.  Read by the isalsr/hash runners via
+  # config.get("shadow_hash"); BingoConfig.from_dict filters it out of the
+  # dataclass, so it perturbs no host parameter.
+  shadow_hash: false
 
 isalsr:
   canonicalization_timeout: 60.0

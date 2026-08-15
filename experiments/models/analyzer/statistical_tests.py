@@ -211,18 +211,26 @@ def critical_difference_data(
 
     # Compute ranks per problem (1 = best). For metrics where higher is
     # better, the caller should negate values before passing.
-    ranks = np.zeros_like(data_matrix)
+    # float dtype is mandatory: an integer matrix would truncate the .5
+    # average ranks that ties produce.
+    ranks = np.zeros(data_matrix.shape, dtype=float)
     for i in range(n_problems):
         ranks[i] = stats.rankdata(-data_matrix[i])  # higher value = lower rank
 
     avg_ranks = ranks.mean(axis=0)
 
-    # Critical difference (Nemenyi, 1963)
-    # CD = q_alpha * sqrt(n_methods * (n_methods + 1) / (6 * n_problems))
-    # q_alpha from studentized range distribution
+    # Critical difference (Nemenyi, 1963), in the form Demsar (2006) states:
+    #   CD = q_alpha * sqrt(k (k + 1) / (6 N))
+    # where "the critical values q_alpha are based on the Studentized range
+    # statistic divided by sqrt(2)" (Demsar 2006, Section 3.2.2). Dividing is
+    # not optional: without it the threshold is a factor sqrt(2) too wide and
+    # the diagram declares differences indistinguishable that the test
+    # separates. The divided values reproduce Demsar's Table 5 to three
+    # decimals for every k from 2 to 10 -- 2.343 at k = 3, 2.850 at k = 6 --
+    # which is the check that fixes the convention.
     from scipy.stats import studentized_range
 
-    q_alpha = studentized_range.ppf(1 - alpha, n_methods, np.inf)
+    q_alpha = studentized_range.ppf(1 - alpha, n_methods, np.inf) / np.sqrt(2.0)
     cd = q_alpha * np.sqrt(n_methods * (n_methods + 1) / (6 * n_problems))
 
     # Find cliques: groups where all pairwise rank differences < CD

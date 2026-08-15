@@ -226,3 +226,11 @@
 .demo-input__field:focus {
   border-color: var(--accent-primary);
 }
+
+/* Math display blocks (KaTeX targets rendered by the page script) */
+.hiw-section .math-display {
+  display: block;
+  margin: var(--space-md) 0;
+  text-align: center;
+  overflow-x: auto;
+}

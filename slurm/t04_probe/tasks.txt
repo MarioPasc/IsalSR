@@ -1,0 +1,38 @@
+# T04 hash-arm Picasso probe task list.
+# Fields: method variant problem config shadow
+# One line per array task.  Line N is read by SLURM_ARRAY_TASK_ID=N (1-indexed).
+#
+# Coverage rationale:
+#   * all three arms x both hosts                      -> SP-5, SP-7.1
+#   * one easy + one structural-bottleneck problem     -> exercises small and large k
+#   * isalsr with shadow=off on two cells              -> AC-10 A/B for the OOM check
+#
+# SP-0 caps honoured: seed 0 only, max_time 1500 s, 14 tasks per array (<= 60).
+bingo baseline   Nguyen-1 experiments/configs/bingo_nguyen.yaml on
+bingo hash       Nguyen-1 experiments/configs/bingo_nguyen.yaml on
+bingo isalsr     Nguyen-1 experiments/configs/bingo_nguyen.yaml on
+bingo baseline   Nguyen-7 experiments/configs/bingo_nguyen.yaml on
+bingo hash       Nguyen-7 experiments/configs/bingo_nguyen.yaml on
+bingo isalsr     Nguyen-7 experiments/configs/bingo_nguyen.yaml on
+bingo baseline   Pagie-1  experiments/configs/bingo_hard.yaml   on
+bingo hash       Pagie-1  experiments/configs/bingo_hard.yaml   on
+bingo isalsr     Pagie-1  experiments/configs/bingo_hard.yaml   on
+bingo baseline   I.15.10  experiments/configs/bingo_hard.yaml   on
+bingo hash       I.15.10  experiments/configs/bingo_hard.yaml   on
+bingo isalsr     I.15.10  experiments/configs/bingo_hard.yaml   on
+bingo isalsr     Nguyen-1 experiments/configs/bingo_nguyen.yaml off
+bingo isalsr     Pagie-1  experiments/configs/bingo_hard.yaml   off
+udfs  baseline   Nguyen-1 experiments/configs/udfs_nguyen.yaml  on
+udfs  hash       Nguyen-1 experiments/configs/udfs_nguyen.yaml  on
+udfs  isalsr     Nguyen-1 experiments/configs/udfs_nguyen.yaml  on
+udfs  baseline   Nguyen-7 experiments/configs/udfs_nguyen.yaml  on
+udfs  hash       Nguyen-7 experiments/configs/udfs_nguyen.yaml  on
+udfs  isalsr     Nguyen-7 experiments/configs/udfs_nguyen.yaml  on
+udfs  baseline   Pagie-1  experiments/configs/udfs_hard.yaml    on
+udfs  hash       Pagie-1  experiments/configs/udfs_hard.yaml    on
+udfs  isalsr     Pagie-1  experiments/configs/udfs_hard.yaml    on
+udfs  baseline   I.15.10  experiments/configs/udfs_hard.yaml    on
+udfs  hash       I.15.10  experiments/configs/udfs_hard.yaml    on
+udfs  isalsr     I.15.10  experiments/configs/udfs_hard.yaml    on
+udfs  isalsr     Nguyen-1 experiments/configs/udfs_nguyen.yaml  off
+udfs  isalsr     Pagie-1  experiments/configs/udfs_hard.yaml    off

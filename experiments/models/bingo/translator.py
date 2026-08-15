@@ -15,6 +15,7 @@ import numpy as np
 import sympy
 
 from experiments.models.analyzer.metrics import (
+    count_nonfinite_predictions,
     jaccard_index,
     mse,
     nrmse,
@@ -66,6 +67,7 @@ class BingoTranslator(ResultTranslator):
         nrmse_train = nrmse(self._y_train, r.y_pred_train)
         nrmse_test = nrmse(self._y_test, r.y_pred_test)
         mse_test = mse(self._y_test, r.y_pred_test)
+        n_nonfinite_test = count_nonfinite_predictions(r.y_pred_test)
 
         # Solution recovery
         sol_rec = False
@@ -91,6 +93,7 @@ class BingoTranslator(ResultTranslator):
             solution_recovered=sol_rec,
             jaccard_index=jac_idx,
             model_complexity=complexity,
+            n_nonfinite_test_predictions=n_nonfinite_test,
         )
 
         # Time-to-threshold: conservative upper bound from final R²
@@ -103,9 +106,22 @@ class BingoTranslator(ResultTranslator):
         avg_canon = r.canon_fallback_time_s / max(r.atlas_misses, 1) if r.atlas_misses > 0 else 0.0
         estimated_saved = r.atlas_hits * avg_canon
 
+        # Cost attribution.  Search time is the wall clock minus every block the
+        # dedup wrapper ran inside the same budget; overhead is the
+        # representation layer's own cost, which is canonicalisation plus the
+        # adapter conversion that produces the object it canonicalises.  The
+        # shadow sketches are audit instrumentation, not method cost: they are
+        # removed from search time but deliberately left out of the overhead and
+        # reported separately, so both figures are clean.
+        search_only = max(
+            0.0,
+            r.wall_clock_s - r.canonicalization_time_s - r.conversion_time_s - r.shadow_time_s,
+        )
+        overhead = r.canonicalization_time_s + r.conversion_time_s
+
         time_results = TimeResults(
             wall_clock_total_s=r.wall_clock_s,
-            wall_clock_search_only_s=r.search_only_time_s,
+            wall_clock_search_only_s=search_only,
             canonicalization_precomputed_s=r.atlas_lookup_time_s,
             canonicalization_runtime_s=r.canonicalization_time_s,
             cache_hit_rate=hit_rate,
@@ -114,8 +130,10 @@ class BingoTranslator(ResultTranslator):
             estimated_time_saved_s=estimated_saved,
             time_to_r2_099_s=time_to_099,
             time_to_r2_0999_s=time_to_0999,
-            evaluation_time_s=r.search_only_time_s,
-            overhead_time_s=r.canonicalization_time_s,
+            evaluation_time_s=search_only,
+            overhead_time_s=overhead,
+            conversion_time_s=r.conversion_time_s,
+            shadow_time_s=r.shadow_time_s,
         )
 
         total = max(r.n_total_dags, 1)
@@ -133,6 +151,9 @@ class BingoTranslator(ResultTranslator):
             max_internal_nodes_seen=max_k,
             theoretical_reduction_bound=theoretical,
             redundancy_rate=redundancy,
+            n_nonstructural=r.n_nonstructural,
+            penalised_in_population_mean=r.penalised_in_population_mean,
+            penalised_in_population_max=r.penalised_in_population_max,
         )
 
         # Best expression: symbolic form + IsalSR/canonical strings
@@ -173,13 +194,33 @@ class BingoTranslator(ResultTranslator):
         for snap in r.trajectory_snapshots:
             r2_train = 1.0 - snap.best_fitness / var_y if np.isfinite(snap.best_fitness) else 0.0
             dedup_rate = snap.n_skipped / snap.n_total_dags if snap.n_total_dags > 0 else 0.0
+            # `n_dags_explored` must come from the SAME counter as the final row,
+            # or the series is not a series.  Two different counters exist:
+            #
+            #   snap.n_total_dags -- candidate DAGs admitted to the dedup hook.
+            #       This is rho's numerator and what the final row reports.  It
+            #       is 0 on the baseline arm, which has no dedup hook at all.
+            #   snap.n_evals      -- ExplicitRegression.eval_count, i.e. fitness
+            #       FUNCTION INVOCATIONS.  Inflated 3.3-4.1x on the dedup arms by
+            #       ScipyOptimizer/LocalOptFitnessFunction inner iterations during
+            #       LM constant optimisation, so it counts a different population.
+            #
+            # Using n_evals on a dedup arm made the trajectory climb to ~110k and
+            # then DROP to ~30k on the final row -- the same quantity measured two
+            # ways.  Each arm now uses whichever counter its own final row uses:
+            # the DAG counter where it exists, eval_count on the baseline (where
+            # runner.py sets n_total_dags = total_evals = eval_count anyway).
+            # rho itself was never affected: translator.py builds it from
+            # dedup.n_total / dedup.n_unique, and no analyzer or figure code reads
+            # this column.
+            n_explored = snap.n_total_dags if snap.n_total_dags > 0 else snap.n_evals
             rows.append(
                 TrajectoryRow(
                     timestamp_s=snap.timestamp_s,
                     iteration=snap.generation,
                     best_r2=r2_train,
                     best_nrmse=0.0,
-                    n_dags_explored=snap.n_evals,
+                    n_dags_explored=n_explored,
                     n_unique_canonical=snap.n_unique_canonical,
                     current_expr="",
                     current_complexity=0,
@@ -187,9 +228,23 @@ class BingoTranslator(ResultTranslator):
                 )
             )
 
-        # Final row with full test metrics
-        r2_test = r_squared(self._y_test, r.y_pred_test)
-        nrmse_test = nrmse(self._y_test, r.y_pred_test)
+        # Final row -- TRAIN metrics, like every row above it.
+        #
+        # This column used to switch to r2_test on the last row only, which made
+        # `best_r2` two different quantities in one series and produced a
+        # decrease wherever test R2 < train R2 -- 459 of Stage C's 1,260 cells,
+        # 100 % of them at the final row and nowhere else (C1.10, 2026-08-04).
+        # It is the same defect class as the n_dags_explored mix-up fixed above:
+        # intermediate rows measuring one population, the final row another.
+        #
+        # Test metrics are NOT lost -- they are the authoritative copy in
+        # run_log.json's `results.regression` (r2_test / nrmse_test), which is
+        # what every analyzer and figure reads.  No consumer reads this column:
+        # the convergence scripts read `best_r2_train` from the .npz, and
+        # time_to_r2_099_s / time_to_r2_0999_s are computed in this file from
+        # the snapshots.  So no reported number changes.
+        r2_train_final = r_squared(self._y_train, r.y_pred_train)
+        nrmse_train_final = nrmse(self._y_train, r.y_pred_train)
         sym_form = get_symbolic_form(r.best_agraph, r.best_sympy)
         complexity = 0
         if r.best_agraph is not None:
@@ -201,8 +256,8 @@ class BingoTranslator(ResultTranslator):
             TrajectoryRow(
                 timestamp_s=r.wall_clock_s,
                 iteration=r.n_generations,
-                best_r2=r2_test,
-                best_nrmse=nrmse_test,
+                best_r2=r2_train_final,
+                best_nrmse=nrmse_train_final,
                 n_dags_explored=r.n_total_dags,
                 n_unique_canonical=r.n_unique_canonical,
                 current_expr=sym_form,

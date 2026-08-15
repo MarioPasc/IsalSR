@@ -13,6 +13,7 @@ import numpy as np
 import sympy
 
 from experiments.models.analyzer.metrics import (
+    count_nonfinite_predictions,
     jaccard_index,
     mse,
     nrmse,
@@ -65,6 +66,7 @@ class UDFSTranslator(ResultTranslator):
         nrmse_train = nrmse(self._y_train, r.y_pred_train)
         nrmse_test = nrmse(self._y_test, r.y_pred_test)
         mse_test = mse(self._y_test, r.y_pred_test)
+        n_nonfinite_test = count_nonfinite_predictions(r.y_pred_test)
 
         # Solution recovery
         sol_rec = False
@@ -91,6 +93,7 @@ class UDFSTranslator(ResultTranslator):
             solution_recovered=sol_rec,
             jaccard_index=jac_idx,
             model_complexity=complexity,
+            n_nonfinite_test_predictions=n_nonfinite_test,
         )
 
         # Time-to-threshold: conservative upper bound from final R²
@@ -103,9 +106,22 @@ class UDFSTranslator(ResultTranslator):
         avg_canon = r.canon_fallback_time_s / max(r.atlas_misses, 1) if r.atlas_misses > 0 else 0.0
         estimated_saved = r.atlas_hits * avg_canon
 
+        # Cost attribution.  Search time is the wall clock minus every block the
+        # dedup wrapper ran inside the same budget; overhead is the
+        # representation layer's own cost, which is canonicalisation plus the
+        # adapter conversion that produces the object it canonicalises.  The
+        # shadow sketches are audit instrumentation, not method cost: they are
+        # removed from search time but deliberately left out of the overhead and
+        # reported separately, so both figures are clean.
+        search_only = max(
+            0.0,
+            r.wall_clock_s - r.canonicalization_time_s - r.conversion_time_s - r.shadow_time_s,
+        )
+        overhead = r.canonicalization_time_s + r.conversion_time_s
+
         time_results = TimeResults(
             wall_clock_total_s=r.wall_clock_s,
-            wall_clock_search_only_s=r.search_only_time_s,
+            wall_clock_search_only_s=search_only,
             canonicalization_precomputed_s=r.atlas_lookup_time_s,
             canonicalization_runtime_s=r.canonicalization_time_s,
             cache_hit_rate=hit_rate,
@@ -114,8 +130,10 @@ class UDFSTranslator(ResultTranslator):
             estimated_time_saved_s=estimated_saved,
             time_to_r2_099_s=time_to_099,
             time_to_r2_0999_s=time_to_0999,
-            evaluation_time_s=r.search_only_time_s,
-            overhead_time_s=r.canonicalization_time_s,
+            evaluation_time_s=search_only,
+            overhead_time_s=overhead,
+            conversion_time_s=r.conversion_time_s,
+            shadow_time_s=r.shadow_time_s,
         )
 
         # Search space metrics
@@ -138,6 +156,7 @@ class UDFSTranslator(ResultTranslator):
             max_internal_nodes_seen=max_k,
             theoretical_reduction_bound=theoretical,
             redundancy_rate=redundancy,
+            n_nonstructural=r.n_nonstructural,
         )
 
         # Best expression with IsalSR/canonical strings
@@ -196,9 +215,14 @@ class UDFSTranslator(ResultTranslator):
                 )
             )
 
-        # Final row with full test metrics
-        r2_test = r_squared(self._y_test, r.y_pred_test)
-        nrmse_test = nrmse(self._y_test, r.y_pred_test)
+        # Final row -- TRAIN metrics, like every row above it.  See the matching
+        # comment in bingo/translator.py: switching this column to r2_test on the
+        # last row alone made `best_r2` two quantities in one series and broke
+        # monotonicity on 459 of Stage C's 1,260 cells (241 of them UDFS), always
+        # at the final row and nowhere else.  Test metrics remain authoritative
+        # in run_log.json's `results.regression`; no analyzer reads this column.
+        r2_train_final = r_squared(self._y_train, r.y_pred_train)
+        nrmse_train_final = nrmse(self._y_train, r.y_pred_train)
         expr_str = str(r.best_sympy) if r.best_sympy is not None else ""
         complexity = _count_sympy_nodes(r.best_sympy) if r.best_sympy is not None else 0
         cache_rate = 0.0
@@ -209,8 +233,8 @@ class UDFSTranslator(ResultTranslator):
             TrajectoryRow(
                 timestamp_s=r.wall_clock_s,
                 iteration=r.total_evals,
-                best_r2=r2_test,
-                best_nrmse=nrmse_test,
+                best_r2=r2_train_final,
+                best_nrmse=nrmse_train_final,
                 n_dags_explored=r.n_total_dags,
                 n_unique_canonical=r.n_unique_canonical,
                 current_expr=expr_str,

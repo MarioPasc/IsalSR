@@ -70,10 +70,23 @@ def generate_all(
     methods: list[str],
     benchmarks: list[str],
     *,
+    variants: list[str] | None = None,
     dag_weighted: bool = False,
     case_studies: list[tuple[str, str, str]] | None = None,
 ) -> dict[str, bool]:
-    """Run every figure/table generator and return a name→success map."""
+    """Run every figure/table generator and return a name→success map.
+
+    Args:
+        results_dir: Root results directory.
+        output_dir: Where figures and tables are written.
+        methods: Method names.
+        benchmarks: Benchmark suites.
+        variants: Arms to plot in the CD diagrams, in group order. None keeps
+            the two-arm default; a three-arm root must pass all three or the
+            hash arm is silently absent from every CD figure (check E5).
+        dag_weighted: Show DAG-weighted RF diamonds.
+        case_studies: Override the default case-study selection.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if case_studies is None:
@@ -131,19 +144,23 @@ def generate_all(
         # -- Critical difference diagrams ------------------------------------
         (
             "CD diagram – R² test",
-            lambda: generate_cd_r2(results_dir, output_dir, methods, benchmarks),
+            lambda: generate_cd_r2(results_dir, output_dir, methods, benchmarks, variants=variants),
         ),
         (
             "CD diagram – NRMSE test",
-            lambda: generate_cd_nrmse(results_dir, output_dir, methods, benchmarks),
+            lambda: generate_cd_nrmse(
+                results_dir, output_dir, methods, benchmarks, variants=variants
+            ),
         ),
         (
             "CD diagram – 2D (R² + RF)",
-            lambda: generate_cd_2d(results_dir, output_dir, methods, benchmarks),
+            lambda: generate_cd_2d(results_dir, output_dir, methods, benchmarks, variants=variants),
         ),
         (
             "CD diagrams – per benchmark",
-            lambda: generate_cd_per_benchmark(results_dir, output_dir, methods, benchmarks),
+            lambda: generate_cd_per_benchmark(
+                results_dir, output_dir, methods, benchmarks, variants=variants
+            ),
         ),
     ]
 
@@ -206,6 +223,14 @@ def main() -> None:
         help="Comma-separated benchmark suites (default: nguyen,feynman).",
     )
     parser.add_argument(
+        "--variants",
+        default="baseline,isalsr",
+        help=(
+            "Comma-separated arms for the CD diagrams, in group order "
+            "(e.g. 'baseline,hash,isalsr'). Defaults to the two-arm campaign."
+        ),
+    )
+    parser.add_argument(
         "--dag-weighted",
         action="store_true",
         help="Show DAG-weighted RF diamonds on the reduction-factor figure.",
@@ -222,11 +247,14 @@ def main() -> None:
     methods = [m.strip() for m in args.methods.split(",")]
     benchmarks = [b.strip() for b in args.benchmarks.split(",")]
 
+    variants = [v.strip() for v in args.variants.split(",") if v.strip()]
+
     results = generate_all(
         results_dir=args.results_dir,
         output_dir=args.output_dir,
         methods=methods,
         benchmarks=benchmarks,
+        variants=variants,
         dag_weighted=args.dag_weighted,
     )
 

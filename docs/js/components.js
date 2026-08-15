@@ -128,6 +128,7 @@
           '</div>' +
           '<div class="site-footer__links">' +
             '<h4 class="site-footer__heading">Contact</h4>' +
+            '<a href="mailto:karlkhader@uma.es">karlkhader@uma.es</a>' +
             '<a href="mailto:ezeqlr@lcc.uma.es">ezeqlr@lcc.uma.es</a>' +
             '<a href="mailto:mpascual@uma.es">mpascual@uma.es</a>' +
             '<a href="team.html">Team</a>' +

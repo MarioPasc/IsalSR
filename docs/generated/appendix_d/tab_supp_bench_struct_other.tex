@@ -1,0 +1,23 @@
+% Display notes for this table (place in the caption):
+%   Keijzer-6: the campaign target is the exact harmonic number $H(x_{0}) = \sum_{i=1}^{x_{0}} 1/i$; solution recovery is assessed against its asymptotic form $\log x_{0} + \gamma$, which is the closest expression available in the operator set.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llclrrl@{}}
+\toprule
+ID & Expression & $m$ & Variable ranges & $n_{\mathrm{train}}$ & $n_{\mathrm{test}}$ & Sampling \\
+\midrule
+Keijzer-6 & $\sum_{i=1}^{x_{0}} \frac{1}{i}$ & 1 & $[1, 120]$ & 50 & 120 & integer grid (extrapolation) \\
+Liv-19 & $\log{\left(x_{0}^{2} + x_{0} \right)} + \log{\left(x_{0}^{3} + x_{0} \right)}$ & 1 & $[0.1, 10]$ & 1000 & 250 & i.i.d. uniform \\
+Liv-4 & $\log{\left(x_{0} \right)} + \log{\left(x_{0} + 1 \right)} + \log{\left(x_{0}^{2} + 1 \right)}$ & 1 & $[0.1, 10]$ & 1000 & 250 & i.i.d. uniform \\
+R1 & $\frac{\left(x_{0} + 1\right)^{3}}{x_{0}^{2} - x_{0} + 1}$ & 1 & $[-1, 1]$ & 1000 & 250 & i.i.d. uniform \\
+R2 & $\frac{x_{0}^{5} - 3 x_{0}^{3} + 1}{x_{0}^{2} + 1}$ & 1 & $[-1, 1]$ & 1000 & 250 & i.i.d. uniform \\
+R3 & $\frac{x_{0}^{6} + x_{0}^{5}}{x_{0}^{4} + x_{0}^{3} + x_{0}^{2} + x_{0} + 1}$ & 1 & $[-1, 1]$ & 1000 & 250 & i.i.d. uniform \\
+Vladislavleva-2 & $x_{0}^{3} \left(\sin^{2}{\left(x_{0} \right)} \cos{\left(x_{0} \right)} - 1\right) e^{- x_{0}} \sin{\left(x_{0} \right)} \cos{\left(x_{0} \right)}$ & 1 & $[0.05, 10]$ & 100 & 221 & 1D uniform train / grid test \\
+Keijzer-11 & $x_{0} x_{1} + \sin{\left(\left(x_{0} - 1\right) \left(x_{1} - 1\right) \right)}$ & 2 & $[-3, 3]^{2}$ & 1000 & 250 & i.i.d. uniform \\
+Liv-14 & $x_{0}^{3} + x_{0}^{2} + x_{0} + \sin{\left(x_{0} \right)} + \sin{\left(x_{1}^{2} \right)}$ & 2 & $[-1, 1]^{2}$ & 1000 & 250 & i.i.d. uniform \\
+Pagie-1 & $\frac{1}{1 + \frac{1}{x_{1}^{4}}} + \frac{1}{1 + \frac{1}{x_{0}^{4}}}$ & 2 & $[-5, 5]^{2}$ & 676 & 2500 & 2D grid, zero skipped \\
+Vlad-7 & $\left(x_{0} - 3\right) \left(x_{1} - 3\right) + 2 \sin{\left(\left(x_{0} - 4\right) \left(x_{1} - 4\right) \right)}$ & 2 & $[0.05, 6.05]^{2}$ & 300 & 1200 & i.i.d. uniform \\
+Pagie-2 & $\frac{x_{0}^{4}}{x_{0}^{4} + 1} + \frac{x_{1}^{4}}{x_{1}^{4} + 1} + \frac{x_{2}^{4}}{x_{2}^{4} + 1}$ & 3 & $[-5, 5]^{3}$ & 1000 & 250 & i.i.d. uniform \\
+Korns-12 & $- 2.1 \sin{\left(1.3 x_{4} \right)} \cos{\left(9.8 x_{0} \right)} + 2.0$ & 5 & $[-50, 50]^{5}$ & 2000 & 2000 & i.i.d. uniform \\
+Vladislavleva-4 & $\frac{10}{\left(x_{0} - 3\right)^{2} + \left(x_{1} - 3\right)^{2} + \left(x_{2} - 3\right)^{2} + \left(x_{3} - 3\right)^{2} + \left(x_{4} - 3\right)^{2} + 5}$ & 5 & $[0.05, 6.05]^{5}$ & 1024 & 5000 & i.i.d. uniform \\
+\bottomrule
+\end{tabular}

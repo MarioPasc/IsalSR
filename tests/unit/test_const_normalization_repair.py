@@ -206,7 +206,11 @@ def test_completeness_distinct_const_provenance_native() -> None:
 
 
 def test_orphan_const_receives_creation_edge() -> None:
-    """A CONST leaf with no in-edge (as from_sympy and the adapters emit) is repaired."""
+    # CONTRACT CHANGED 2026-07-29: 𝒩 removed from canonicaliser.
+    # The method still repairs the orphan (producer-side responsibility of adapters).
+    # New division of responsibility: the *unrepaired* DAG raises at canonicaliser
+    # (loud refusal); 𝒩(D) satisfies the precondition and canonicalises successfully.
+    """𝒩 repairs orphan CONST; unrepaired DAG raises, 𝒩(D) canonicalises successfully."""
     dag = LabeledDAG(8)
     dag.add_node(NodeType.VAR, var_index=0)  # 0
     dag.add_node(NodeType.CONST, const_value=2.0)  # 1
@@ -220,7 +224,14 @@ def test_orphan_const_receives_creation_edge() -> None:
     assert repaired.in_degree(1) == 1
     assert repaired.has_edge(0, 1)
     assert _satisfies_precondition(repaired)
-    assert fast_canonical_string(dag) != ""
+
+    # Unrepaired DAG is now refused loudly (not silently canonicalised via 𝒩).
+    with pytest.raises(RuntimeError):
+        fast_canonical_string(dag, timeout=5.0)
+
+    # 𝒩(D) satisfies the precondition and canonicalises without error.
+    cs = fast_canonical_string(repaired, timeout=5.0)
+    assert isinstance(cs, str) and len(cs) > 0
 
 
 def test_orphan_const_anchor_skips_cycle_closing_variable() -> None:

@@ -15,7 +15,12 @@ benchmarks:
 bingo:
   population_size: 500
   stack_size: 32
-  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log"]
+  # Uniform operator set across all 50 problems (2026-08-03). Previously this
+  # tier omitted sqrt and pow, which confounded the operator set with the
+  # problem group and made the single operator set of Appendix D.2 wrong.
+  # Changing it re-defines the Bingo search on this tier: the baseline arm must
+  # be re-run, not only the IsalSR arm.
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
   use_simplification: false
   crossover_prob: 0.4
   mutation_prob: 0.4
@@ -26,6 +31,14 @@ bingo:
   max_time: 43200
   max_evals: 100000000
   snapshot_frequency: 10
+  # Shadow sketches OFF for the campaign (audit.md §7.3, Mario 2026-08-04).
+  # They cost 17.6 % of Bingo's wall clock / 0.03 % of UDFS's, are paid by the
+  # isalsr arm alone inside a fixed budget, and would penalise exactly the arm
+  # carrying the headline claim.  The fixed-order numbers come from the Stage D
+  # trace cell and the D3 replay instead.  Read by the isalsr/hash runners via
+  # config.get("shadow_hash"); BingoConfig.from_dict filters it out of the
+  # dataclass, so it perturbs no host parameter.
+  shadow_hash: false
 
 isalsr:
   canonicalization_timeout: 60.0

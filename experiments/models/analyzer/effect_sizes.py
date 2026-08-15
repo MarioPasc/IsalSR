@@ -58,11 +58,26 @@ def cohens_d_ci_bootstrap(
     if n < 2:
         return 0.0, 0.0
 
-    boot_ds = np.empty(n_boot)
-    for b in range(n_boot):
-        sample = rng.choice(differences, size=n, replace=True)
-        sd = np.std(sample, ddof=1)
-        boot_ds[b] = np.mean(sample) / sd if sd > 1e-10 else 0.0
+    # Drawn as one (n_boot, n) block rather than n_boot successive calls.  This
+    # is BIT-IDENTICAL to the loop it replaces, not merely equivalent in
+    # distribution: `Generator.choice(a, size=n, replace=True)` with no `p` and
+    # no `axis` delegates to `Generator.integers(0, len(a), size=n)`, and
+    # `integers` fills its output buffer element by element from the same PCG64
+    # stream, so one block draw of n_boot*n values consumes the stream in
+    # exactly the order n_boot draws of n values would.  `tests/unit/
+    # test_effect_sizes_bootstrap.py` asserts equality against a reference
+    # implementation of the loop, including on the real 1,260-run corpus.
+    #
+    # Why it matters: the loop was 10,000 iterations of three tiny NumPy calls
+    # on an array of length 3-20, so its cost was pure interpreter dispatch and
+    # essentially independent of n (0.1066 s at n=3, 0.1094 s at n=20).  It is
+    # called 14 times per contrast, 42 times per problem and 5,880 times for
+    # campaign C2, where it accounted for ~95 % of the aggregation job's wall
+    # clock.  Vectorised it is 51x faster at n=20 and 128x at n=3.
+    samples = np.asarray(differences)[rng.integers(0, n, size=(n_boot, n))]
+    sd = samples.std(axis=1, ddof=1)
+    ok = sd > 1e-10
+    boot_ds = np.where(ok, samples.mean(axis=1) / np.where(ok, sd, 1.0), 0.0)
 
     alpha = 1 - ci
     lower = float(np.percentile(boot_ds, 100 * alpha / 2))

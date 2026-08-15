@@ -219,3 +219,8 @@ cmake_install.cmake
 install_manifest.txt
 *.egg-info/
 dist/
+.provenance.json
+
+# Local agent workspace: instructions, notes, review tickets and worktrees.
+# Kept on disk, deliberately not published with the repository.
+.claude/

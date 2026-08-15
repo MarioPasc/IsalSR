@@ -108,16 +108,51 @@ class DAGToString:
     # Conversion
     # ------------------------------------------------------------------
 
-    def run(self, *, trace: bool = False) -> str:
+    @property
+    def trace_log(
+        self,
+    ) -> list[tuple[LabeledDAG, CircularDoublyLinkedList, int, int, str]]:
+        """Snapshots collected during ``run(trace=True)``.
+
+        Each entry is a five-tuple
+        ``(output_dag, cdll, primary_ptr, secondary_ptr, emitted_string)``
+        captured at the start of each loop iteration, plus one final entry
+        appended after the loop exits successfully.  On a stalled run
+        (``skip_precondition_check=True`` on a violated DAG) the post-loop
+        entry is absent; callers must not assume a fixed length.
+        """
+        return self._trace_log
+
+    def run(self, *, trace: bool = False, skip_precondition_check: bool = False) -> str:
         """Execute the DAG-to-string conversion.
 
         Args:
-            trace: If ``True``, collect deep-copied snapshots.
+            trace: If ``True``, collect deep-copied snapshots into
+                :attr:`trace_log` before each loop iteration and once more
+                after the loop exits successfully.
+            skip_precondition_check: If ``True``, bypass the up-front
+                reachability check.  The conversion loop will run until it
+                stalls on the first node it cannot emit, then raise
+                :class:`RuntimeError` from inside the loop.  Use this only
+                for diagnostic purposes (for example, tracing a violated
+                DAG to show where the algorithm stalls);
+                :func:`~isalsr.core.canonical.fast_canonical_string` on the
+                same violated DAG raises the same :class:`RuntimeError`
+                mid-run for the same structural reason, confirming that the
+                stall is not an artefact of this bypass.  Production callers
+                must leave this ``False``.
 
         Returns:
             The IsalSR instruction string.
+
+        Raises:
+            ValueError: If the reachability precondition fails and
+                ``skip_precondition_check`` is ``False``.
+            RuntimeError: If the algorithm stalls (unreachable node when
+                ``skip_precondition_check=True``, or algorithmic error).
         """
-        self._check_reachability()
+        if not skip_precondition_check:
+            self._check_reachability()
         self._initialize_variables()
 
         num_nodes_to_insert: int = self._input_dag.node_count - self._num_variables

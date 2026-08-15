@@ -132,10 +132,12 @@ PLOT_SETTINGS = {
 
 COLOR_NATIVE: str = PAUL_TOL_BRIGHT["blue"]  # #4477AA — Native DAG (baseline)
 COLOR_ISALSR: str = PAUL_TOL_BRIGHT["red"]  # #EE6677 — IsalSR variant
+COLOR_HASH: str = PAUL_TOL_BRIGHT["green"]  # #228833 — naive hash arm
 
 VARIANT_COLORS: dict[str, str] = {
     "baseline": COLOR_NATIVE,
     "native": COLOR_NATIVE,
+    "hash": COLOR_HASH,
     "isalsr": COLOR_ISALSR,
 }
 
