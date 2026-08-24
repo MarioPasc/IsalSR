@@ -224,3 +224,8 @@ dist/
 # Local agent workspace: instructions, notes, review tickets and worktrees.
 # Kept on disk, deliberately not published with the repository.
 .claude/
+
+# Working notes: change records, design rationales and analysis write-ups.
+# Kept on disk, deliberately not published with the repository.
+# docs/engineering/ stays tracked: README links to CPP_BUILD.md.
+docs/md_files/
