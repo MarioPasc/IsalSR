@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
 # =============================================================================
-# IsalSR Cherrypicked Experiment Launcher for Picasso HPC
+# IsalSR Structural Experiment Launcher for Picasso HPC
 # =============================================================================
 #
-# Submits SLURM array jobs for the 10 cherrypicked benchmarks (5 Feynman + 5
+# Submits SLURM array jobs for the 10 structural benchmarks (5 Feynman + 5
 # GP-classic/DSO) for both UDFS and Bingo, baseline + IsalSR variants.
 #
 # Usage:
-#   bash slurm/cherrypicked_launch.sh                                          # Submit all 4 groups
-#   bash slurm/cherrypicked_launch.sh --dry-run                                # Print sbatch only
-#   bash slurm/cherrypicked_launch.sh --experiment udfs_cherrypicked_baseline   # Single group
-#   bash slurm/cherrypicked_launch.sh --analyze-only                           # Only analysis
+#   bash slurm/structural_launch.sh                                          # Submit all 4 groups
+#   bash slurm/structural_launch.sh --dry-run                                # Print sbatch only
+#   bash slurm/structural_launch.sh --experiment udfs_cherrypicked_baseline   # Single group
+#   bash slurm/structural_launch.sh --analyze-only                           # Only analysis
 #
 # This script reuses slurm/workers/models_experiment_slurm.sh as the worker;
-# the worker auto-detects the "cherrypicked" benchmark via MODELS_BENCHMARK.
+# the worker auto-detects the suite via MODELS_BENCHMARK. The suite key is still
+# "cherrypicked", a legacy identifier baked into the on-disk result tree.
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG="${SCRIPT_DIR}/cherrypicked_config.yaml"
+CONFIG="${SCRIPT_DIR}/structural_config.yaml"
 WORKER_SCRIPT="${SCRIPT_DIR}/workers/models_experiment_slurm.sh"
 ANALYZE_SCRIPT="${SCRIPT_DIR}/workers/models_analyze_slurm.sh"
 
@@ -57,7 +58,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------------------------------------------------------------------------
-# Parse cherrypicked_config.yaml using Python
+# Parse structural_config.yaml using Python
 # ---------------------------------------------------------------------------
 parse_config() {
     "$PYTHON" -c "
@@ -77,7 +78,7 @@ CONSTRAINT=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.loa
 ACCOUNT=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['account'])")
 
 echo "=============================================="
-echo "IsalSR Cherrypicked Experiment Launcher"
+echo "IsalSR Structural Experiment Launcher"
 echo "=============================================="
 echo "Config:     ${CONFIG}"
 echo "Repo:       ${REPO_DIR}"
@@ -266,7 +267,7 @@ else
     echo "=== Phased submission: UDFS -> Bingo -> Analysis ==="
     echo ""
 
-    echo "--- Phase 1: UDFS cherrypicked experiments ---"
+    echo "--- Phase 1: UDFS structural experiments ---"
     PHASE1_IDS=()
     for exp in udfs_cherrypicked_baseline udfs_cherrypicked_isalsr; do
         job_id=$(submit_experiment "$exp")
@@ -275,7 +276,7 @@ else
         fi
     done
 
-    echo "--- Phase 2: Bingo cherrypicked experiments (after UDFS) ---"
+    echo "--- Phase 2: Bingo structural experiments (after UDFS) ---"
     PHASE2_IDS=()
     if [[ ${#PHASE1_IDS[@]} -gt 0 ]]; then
         P1_DEP=$(IFS=:; echo "${PHASE1_IDS[*]}")

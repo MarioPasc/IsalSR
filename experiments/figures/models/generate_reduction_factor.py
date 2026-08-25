@@ -1,7 +1,7 @@
 """Generate Reduction Factor distribution figure for IsalSR model validation.
 
 Produces a single wide figure with all problems on one x-axis, visually
-grouped by benchmark suite (Nguyen, Feynman, Hard, Cherrypicked) with
+grouped by benchmark suite (Nguyen, Feynman, Hard, Structural) with
 vertical separators between groups.
 
 Each box = 30 seeds. Horizontal dashed line at ρ = 1 (no reduction).
@@ -335,7 +335,7 @@ def generate_reduction_factor_figure(
     caption = (
         "Distribution of the empirical reduction factor $\\rho$ across "
         "42 benchmark problems for UDFS and Bingo. Problems are visually "
-        "grouped by source suite (Nguyen, Feynman, Hard, Cherrypicked) "
+        "grouped by source suite (Nguyen, Feynman, Hard, Structural) "
         "and sorted by descending median $\\rho$ within each group. "
         "Each box summarizes $\\rho$ over 30 independent seeds; "
         "thick horizontal ticks denote problems where all seeds yield "

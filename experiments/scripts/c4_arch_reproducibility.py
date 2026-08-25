@@ -26,10 +26,10 @@ from typing import Any
 
 import numpy as np
 
-from benchmarks.datasets.cherrypicked import CHERRYPICKED_BENCHMARKS
 from benchmarks.datasets.feynman import FEYNMAN_BENCHMARKS
 from benchmarks.datasets.hard import HARD_BENCHMARKS
 from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS
+from benchmarks.datasets.structural import STRUCTURAL_BENCHMARKS
 from experiments.models.orchestrator import _generate_benchmark_data
 from experiments.models.provenance import data_fingerprint
 
@@ -51,7 +51,7 @@ _REGISTRY: dict[str, list[dict[str, Any]]] = {
     "nguyen": NGUYEN_BENCHMARKS,
     "feynman": FEYNMAN_BENCHMARKS,
     "hard": HARD_BENCHMARKS,
-    "cherrypicked": CHERRYPICKED_BENCHMARKS,
+    "cherrypicked": STRUCTURAL_BENCHMARKS,
 }
 
 

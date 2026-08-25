@@ -68,7 +68,7 @@ _PROBLEM_LABELS = {
     "pagie_1": "Pagie-1",
     "vladislavleva_2": "Vlad-2",
     "vladislavleva_4": "Vlad-4",
-    # Cherrypicked
+    # Structural
     "i.16.6": "I.16.6",
     "i.29.16": "I.29.16",
     "i.50.26": "I.50.26",

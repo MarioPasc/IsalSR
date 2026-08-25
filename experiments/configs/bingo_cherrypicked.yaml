@@ -1,13 +1,16 @@
-# Bingo experiment on cherrypicked benchmarks (10 problems)
+# Bingo experiment on the structural benchmarks (10 problems)
 # References:
 #   docs/md_files/changes/candidate_problem_screening.md (2026-04-20)
-#   benchmarks/datasets/cherrypicked.py
+#   benchmarks/datasets/structural.py
+#
+# The ``cherrypicked`` suite key below, and this file's name, are legacy
+# identifiers kept because they are baked into the on-disk result tree.
 #
 # Operator set: identical to bingo_hard.yaml (sqrt, pow included).
 # All Bingo hyperparameters match production Nguyen/Feynman/hard exactly.
 #
 # Note: train_size/test_size below are HINTS for orchestrator; Vlad-7 overrides
-# them via n_train_override=300 / n_test_override=1200 inside cherrypicked.py.
+# them via n_train_override=300 / n_test_override=1200 inside structural.py.
 
 experiment:
   name: bingo_cherrypicked

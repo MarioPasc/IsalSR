@@ -30,10 +30,6 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from benchmarks.datasets.cherrypicked import CHERRYPICKED_BENCHMARKS  # noqa: E402
-from benchmarks.datasets.cherrypicked import (
-    generate_data as cherrypicked_generate_data,  # noqa: E402
-)
 from benchmarks.datasets.feynman import FEYNMAN_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.feynman import generate_data as feynman_generate_data  # noqa: E402
 from benchmarks.datasets.feynman_remainder import FEYNMAN_REMAINDER_BENCHMARKS  # noqa: E402
@@ -48,6 +44,10 @@ from benchmarks.datasets.roundoff import ROUNDOFF_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.roundoff import generate_data as roundoff_generate_data  # noqa: E402
 from benchmarks.datasets.strogatz import STROGATZ_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.strogatz import generate_data as strogatz_generate_data  # noqa: E402
+from benchmarks.datasets.structural import STRUCTURAL_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.structural import (
+    generate_data as structural_generate_data,  # noqa: E402
+)
 from experiments.models.analyzer.aggregation import (  # noqa: E402
     aggregate_all_metrics,
     apply_holm_correction,
@@ -80,11 +80,13 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # Benchmark registries: name -> (problem_list, generate_data_fn)
+# ``cherrypicked`` is a legacy suite key kept because it is baked into the
+# on-disk result tree; its problems are defined in ``benchmarks.datasets.structural``.
 _BENCHMARK_REGISTRY: dict[str, tuple[list[dict[str, Any]], Any]] = {
     "nguyen": (NGUYEN_BENCHMARKS, nguyen_generate_data),
     "feynman": (FEYNMAN_BENCHMARKS, feynman_generate_data),
     "hard": (HARD_BENCHMARKS, hard_generate_data),
-    "cherrypicked": (CHERRYPICKED_BENCHMARKS, cherrypicked_generate_data),
+    "cherrypicked": (STRUCTURAL_BENCHMARKS, structural_generate_data),
     "roundoff": (ROUNDOFF_BENCHMARKS, roundoff_generate_data),
     # D2, the R3.1 extension (T05): ODE-Strogatz plus the pre-registered
     # AI Feynman remainder.  See docs/md_files/changes/r31_extension_selection.md
@@ -164,7 +166,7 @@ def _generate_benchmark_data(
     elif bench_name == "cherrypicked":
         n_samples = train_size + test_size
         train_ratio = train_size / n_samples
-        return cherrypicked_generate_data(
+        return structural_generate_data(
             bench,
             n_samples=n_samples,
             train_ratio=train_ratio,

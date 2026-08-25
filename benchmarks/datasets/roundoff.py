@@ -225,7 +225,7 @@ def generate_data(
 ]:
     """Generate train/test data for a roundoff benchmark.
 
-    Same signature as ``cherrypicked.generate_data`` for orchestrator
+    Same signature as ``structural.generate_data`` for orchestrator
     compatibility. All 8 problems use uniform sampling.
 
     Returns

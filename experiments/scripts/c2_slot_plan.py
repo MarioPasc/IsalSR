@@ -25,7 +25,7 @@ the C1 campaign's own ``sacct`` record (COMPLETED tasks only):
 ===========================  =======  =========  =========  =============
 array                          n      mean (h)   p50 (h)    frac < 2 h
 ===========================  =======  =========  =========  =============
-``udfs`` hard / cherry / rd    1,680      12.01      12.01      0.0 %
+``udfs`` hard / struct / rd    1,680      12.01      12.01      0.0 %
 ``udfs`` feynman               4,924       0.82       0.03    ~93 %
 ``bingo`` nguyen               5,608       0.14       0.02     100 %
 ``bingo`` feynman                297       0.20       0.02     100 %

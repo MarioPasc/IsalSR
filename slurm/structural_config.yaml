@@ -1,8 +1,12 @@
-# IsalSR Cherrypicked Experiments for Picasso HPC
-# ================================================
+# IsalSR Structural Experiments for Picasso HPC
+# =============================================
 #
-# Runs UDFS + Bingo (baseline + isalsr) on the 10 cherrypicked problems defined
-# in benchmarks/datasets/cherrypicked.py (5 Feynman + 5 GP-classic/DSO).
+# Runs UDFS + Bingo (baseline + isalsr) on the 10 structural-bottleneck problems
+# defined in benchmarks/datasets/structural.py (5 Feynman + 5 GP-classic/DSO).
+#
+# The ``cherrypicked`` suite key, and every path derived from it, are legacy
+# identifiers kept because they are baked into the on-disk result tree and into
+# the ``experiments/configs/{method}_{suite}.yaml`` naming convention.
 #
 # References:
 #   docs/md_files/changes/candidate_problem_screening.md (2026-04-20)
@@ -26,7 +30,7 @@ account: tic_163_uma
 
 experiments:
   # =========================================================
-  # UDFS on cherrypicked (10 problems x 30 seeds = 300 tasks/group)
+  # UDFS on the structural suite (10 problems x 30 seeds = 300 tasks/group)
   # =========================================================
   udfs_cherrypicked_baseline:
     enabled: true
@@ -53,7 +57,7 @@ experiments:
     mem_gb: 8
 
   # =========================================================
-  # Bingo on cherrypicked (10 problems x 30 seeds = 300 tasks/group)
+  # Bingo on the structural suite (10 problems x 30 seeds = 300 tasks/group)
   # =========================================================
   bingo_cherrypicked_baseline:
     enabled: true
@@ -80,7 +84,7 @@ experiments:
     mem_gb: 128             # heap fragmentation on long runs + malloc_trim
 
   # =========================================================
-  # Analysis (runs after ALL cherrypicked experiments complete)
+  # Analysis (runs after ALL structural experiments complete)
   # =========================================================
   cherrypicked_analyze:
     enabled: true

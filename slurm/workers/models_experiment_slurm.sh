@@ -73,7 +73,7 @@ elif benchmark == 'feynman':
 elif benchmark == 'hard':
     from benchmarks.datasets.hard import HARD_BENCHMARKS as B
 elif benchmark == 'cherrypicked':
-    from benchmarks.datasets.cherrypicked import CHERRYPICKED_BENCHMARKS as B
+    from benchmarks.datasets.structural import STRUCTURAL_BENCHMARKS as B
 elif benchmark == 'roundoff':
     from benchmarks.datasets.roundoff import ROUNDOFF_BENCHMARKS as B
 else:

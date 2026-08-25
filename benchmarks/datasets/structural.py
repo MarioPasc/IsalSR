@@ -1,11 +1,13 @@
-"""Cherrypicked benchmark definitions for IsalSR advantage validation.
+"""Structural benchmark definitions: 10 structural-bottleneck problems.
 
-Ten problems selected from published SR benchmarks that satisfy the
-structural-bottleneck screening criterion (n_nontrivial_constants = 0, k >= 5).
-These are predicted to show IsalSR advantage based on the bottleneck-type
-analysis (``docs/md_files/changes/bottleneck_type_analysis.md``, 2026-04-19).
+Ten problems drawn from published SR benchmarks that satisfy the
+structural-bottleneck screening criterion (n_nontrivial_constants = 0, k >= 5)
+from the bottleneck-type analysis
+(``docs/md_files/changes/bottleneck_type_analysis.md``, 2026-04-19). The
+criterion is a property of the target expression alone and is applied without
+reference to any solver's measured performance.
 
-Selection rationale: ``docs/md_files/changes/candidate_problem_screening.md``
+Screening procedure: ``docs/md_files/changes/candidate_problem_screening.md``
 
 AI Feynman (Udrescu & Tegmark, 2020):
     - I.29.16     Law of cosines (k=11, 4 vars)
@@ -36,7 +38,7 @@ import numpy as np
 import sympy
 
 
-def _make_cherrypicked(
+def _make_structural(
     name: str,
     expression: str,
     sympy_expression: sympy.Expr,
@@ -46,7 +48,7 @@ def _make_cherrypicked(
     target_fn: Callable[..., np.ndarray[Any, np.dtype[Any]]],
     sampling: dict[str, Any],
 ) -> dict[str, Any]:
-    """Create a cherrypicked-benchmark specification dict."""
+    """Create a structural-benchmark specification dict."""
     return {
         "name": name,
         "expression": expression,
@@ -67,8 +69,8 @@ _x = [sympy.Symbol(f"x_{i}") for i in range(5)]
 # Variable ranges from the canonical Feynman CSV (Udrescu & Tegmark, 2020).
 # ----------------------------------------------------------------------
 
-_FEYNMAN_CHERRYPICKED: list[dict[str, Any]] = [
-    _make_cherrypicked(
+_FEYNMAN_STRUCTURAL: list[dict[str, Any]] = [
+    _make_structural(
         "I.29.16",
         "sqrt(x1^2 + x2^2 - 2*x1*x2*cos(theta1 - theta2))",
         sympy.sqrt(_x[0] ** 2 + _x[1] ** 2 - 2 * _x[0] * _x[1] * sympy.cos(_x[2] - _x[3])),
@@ -79,7 +81,7 @@ _FEYNMAN_CHERRYPICKED: list[dict[str, Any]] = [
         # Argument of sqrt = (x1 - x2*cos(d))^2 + (x2*sin(d))^2 >= 0 always.
         {"type": "uniform"},
     ),
-    _make_cherrypicked(
+    _make_structural(
         "I.50.26",
         "x1*(cos(omega*t) + alpha*cos(omega*t)^2)",
         _x[0] * (sympy.cos(_x[1] * _x[2]) + _x[3] * sympy.cos(_x[1] * _x[2]) ** 2),
@@ -89,7 +91,7 @@ _FEYNMAN_CHERRYPICKED: list[dict[str, Any]] = [
         lambda x1, omega, t, alpha: x1 * (np.cos(omega * t) + alpha * np.cos(omega * t) ** 2),
         {"type": "uniform"},
     ),
-    _make_cherrypicked(
+    _make_structural(
         "I.16.6",
         "(u + v) / (1 + u*v/c^2)",
         (_x[2] + _x[1]) / (1 + _x[2] * _x[1] / _x[0] ** 2),
@@ -100,7 +102,7 @@ _FEYNMAN_CHERRYPICKED: list[dict[str, Any]] = [
         # Denominator = 1 + uv/c^2 > 1 for positive inputs.
         {"type": "uniform"},
     ),
-    _make_cherrypicked(
+    _make_structural(
         "II.11.28",
         "1 + n*alpha / (1 - n*alpha/3)",
         1 + _x[0] * _x[1] / (1 - _x[0] * _x[1] / 3),
@@ -111,7 +113,7 @@ _FEYNMAN_CHERRYPICKED: list[dict[str, Any]] = [
         # Singularity at n*alpha=3; domain [0,1]^2 keeps n*alpha <= 1 < 3.
         {"type": "uniform"},
     ),
-    _make_cherrypicked(
+    _make_structural(
         "III.14.14",
         "I_0 * (exp(q*Volt/(kb*T)) - 1)",
         _x[0] * (sympy.exp(_x[1] * _x[2] / (_x[3] * _x[4])) - 1),
@@ -135,8 +137,8 @@ _FEYNMAN_CHERRYPICKED: list[dict[str, Any]] = [
 # GP-classic / DSO benchmarks (per-problem sampling protocols)
 # ----------------------------------------------------------------------
 
-_GP_CHERRYPICKED: list[dict[str, Any]] = [
-    _make_cherrypicked(
+_GP_STRUCTURAL: list[dict[str, Any]] = [
+    _make_structural(
         "Vlad-7",
         "(x1-3)*(x2-3) + 2*sin((x1-4)*(x2-4))",
         (_x[0] - 3) * (_x[1] - 3) + 2 * sympy.sin((_x[0] - 4) * (_x[1] - 4)),
@@ -147,7 +149,7 @@ _GP_CHERRYPICKED: list[dict[str, Any]] = [
         # Published Vladislavleva protocol: 300 random train, 1200 random test.
         {"type": "uniform", "n_train_override": 300, "n_test_override": 1200},
     ),
-    _make_cherrypicked(
+    _make_structural(
         "R2",
         "(x^5 - 3*x^3 + 1) / (x^2 + 1)",
         (_x[0] ** 5 - 3 * _x[0] ** 3 + 1) / (_x[0] ** 2 + 1),
@@ -158,7 +160,7 @@ _GP_CHERRYPICKED: list[dict[str, Any]] = [
         # Denominator x^2 + 1 >= 1 always.
         {"type": "uniform"},
     ),
-    _make_cherrypicked(
+    _make_structural(
         "R3",
         "(x^6 + x^5) / (x^4 + x^3 + x^2 + x + 1)",
         (_x[0] ** 6 + _x[0] ** 5) / (_x[0] ** 4 + _x[0] ** 3 + _x[0] ** 2 + _x[0] + 1),
@@ -169,7 +171,7 @@ _GP_CHERRYPICKED: list[dict[str, Any]] = [
         # Denominator = (x^5 - 1)/(x - 1) for x != 1; min ~ 0.674 on [-1,1].
         {"type": "uniform"},
     ),
-    _make_cherrypicked(
+    _make_structural(
         "Keijzer-11",
         "x*y + sin((x-1)*(y-1))",
         _x[0] * _x[1] + sympy.sin((_x[0] - 1) * (_x[1] - 1)),
@@ -179,7 +181,7 @@ _GP_CHERRYPICKED: list[dict[str, Any]] = [
         lambda x, y: x * y + np.sin((x - 1) * (y - 1)),
         {"type": "uniform"},
     ),
-    _make_cherrypicked(
+    _make_structural(
         "Liv-14",
         "x1^3 + x1^2 + x1 + sin(x1) + sin(x2^2)",
         _x[0] ** 3 + _x[0] ** 2 + _x[0] + sympy.sin(_x[0]) + sympy.sin(_x[1] ** 2),
@@ -192,7 +194,7 @@ _GP_CHERRYPICKED: list[dict[str, Any]] = [
 ]
 
 
-CHERRYPICKED_BENCHMARKS: list[dict[str, Any]] = _FEYNMAN_CHERRYPICKED + _GP_CHERRYPICKED
+STRUCTURAL_BENCHMARKS: list[dict[str, Any]] = _FEYNMAN_STRUCTURAL + _GP_STRUCTURAL
 
 
 # ----------------------------------------------------------------------
@@ -249,7 +251,7 @@ def generate_data(
     np.ndarray[Any, np.dtype[Any]],
     np.ndarray[Any, np.dtype[Any]],
 ]:
-    """Generate train/test data for a cherrypicked benchmark.
+    """Generate train/test data for a structural benchmark.
 
     Same signature as ``hard.generate_data`` for orchestrator compatibility.
     All 10 problems use uniform sampling; the dispatch is included for
@@ -267,11 +269,11 @@ def generate_data(
 
 
 def get_benchmark(name: str) -> dict[str, Any]:
-    """Get a cherrypicked benchmark by name."""
-    for b in CHERRYPICKED_BENCHMARKS:
+    """Get a structural benchmark by name."""
+    for b in STRUCTURAL_BENCHMARKS:
         if b["name"] == name:
             return b
     raise ValueError(
-        f"Unknown cherrypicked benchmark: {name}. "
-        f"Available: {[b['name'] for b in CHERRYPICKED_BENCHMARKS]}"
+        f"Unknown structural benchmark: {name}. "
+        f"Available: {[b['name'] for b in STRUCTURAL_BENCHMARKS]}"
     )

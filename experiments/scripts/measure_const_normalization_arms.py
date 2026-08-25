@@ -59,13 +59,15 @@ DEFAULT_PROBLEMS: list[tuple[str, str]] = [
     ("roundoff", "R1"),
 ]
 
-# Production dataset sizes (experiments/configs/*.yaml).
-_BENCH_CONSTANT = {
-    "nguyen": "NGUYEN_BENCHMARKS",
-    "feynman": "FEYNMAN_BENCHMARKS",
-    "hard": "HARD_BENCHMARKS",
-    "cherrypicked": "CHERRYPICKED_BENCHMARKS",
-    "roundoff": "ROUNDOFF_BENCHMARKS",
+# Suite key -> (defining module, benchmark-list constant). The key and the module
+# name coincide except for ``cherrypicked``, a legacy suite key kept because it is
+# baked into the on-disk result tree.
+_BENCH_SOURCE = {
+    "nguyen": ("nguyen", "NGUYEN_BENCHMARKS"),
+    "feynman": ("feynman", "FEYNMAN_BENCHMARKS"),
+    "hard": ("hard", "HARD_BENCHMARKS"),
+    "cherrypicked": ("structural", "STRUCTURAL_BENCHMARKS"),
+    "roundoff": ("roundoff", "ROUNDOFF_BENCHMARKS"),
 }
 
 ARMS = ("submitted", "repair", "none")
@@ -230,8 +232,9 @@ def _load_problem(suite: str, problem: str, seed: int):  # type: ignore[no-untyp
     """
     import importlib
 
-    module = importlib.import_module(f"benchmarks.datasets.{suite}")
-    benches = getattr(module, _BENCH_CONSTANT[suite])
+    module_name, const_name = _BENCH_SOURCE[suite]
+    module = importlib.import_module(f"benchmarks.datasets.{module_name}")
+    benches = getattr(module, const_name)
     if isinstance(benches, dict):
         benches = list(benches.values())
     bench = next(b for b in benches if b["name"] == problem)

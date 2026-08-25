@@ -43,13 +43,13 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from benchmarks.datasets import (  # noqa: E402
-    cherrypicked,
     feynman,
     feynman_remainder,
     hard,
     nguyen,
     roundoff,
     strogatz,
+    structural,
 )
 from experiments.models.orchestrator import (  # noqa: E402
     _generate_benchmark_data,
@@ -74,7 +74,7 @@ SUITES: Final[dict[str, list[dict[str, Any]]]] = {
     "nguyen": nguyen.NGUYEN_BENCHMARKS,
     "feynman": feynman.FEYNMAN_BENCHMARKS,
     "hard": hard.HARD_BENCHMARKS,
-    "cherrypicked": cherrypicked.CHERRYPICKED_BENCHMARKS,
+    "cherrypicked": structural.STRUCTURAL_BENCHMARKS,
     "roundoff": roundoff.ROUNDOFF_BENCHMARKS,
     "feynman_remainder": feynman_remainder.FEYNMAN_REMAINDER_BENCHMARKS,
     "strogatz": strogatz.STROGATZ_BENCHMARKS,
@@ -84,7 +84,7 @@ TIER_TITLES: Final[dict[str, str]] = {
     "nguyen": "Nguyen tier",
     "feynman": "Feynman tier",
     "hard": "Hard tier",
-    "cherrypicked": "Cherry-picked tier",
+    "cherrypicked": "Structural tier",
     "roundoff": "Round-off tier",
     "feynman_remainder": "Feynman-remainder tier",
     "strogatz": "ODE-Strogatz tier",
@@ -248,8 +248,9 @@ SUPP_FEYNMAN_FILENAME: Final[str] = "tab_supp_bench_struct_feynman.tex"
 SUPP_OTHER_FILENAME: Final[str] = "tab_supp_bench_struct_other.tex"
 
 #: Substrings that must never appear in the supplementary bodies: they are
-#: internal tier vocabulary and one of them would be actively damaging in a
-#: reviewer-facing appendix.
+#: internal tier vocabulary, and the legacy ``cherrypicked`` key in particular
+#: misdescribes how the tier was assembled. Problems enter it by a screening
+#: criterion on the target expression, not by any measured solver outcome.
 _FORBIDDEN_TIER_WORDS: Final[tuple[str, ...]] = (
     "hard",
     "cherrypicked",

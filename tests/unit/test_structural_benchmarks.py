@@ -1,6 +1,6 @@
-"""Unit tests for cherrypicked benchmark definitions.
+"""Unit tests for structural benchmark definitions.
 
-Validates each of the 10 cherrypicked problems:
+Validates each of the 10 structural problems:
     - target_fn evaluates correctly at canonical points
     - generate_data returns expected shapes
     - Outputs are finite (no NaN, no Inf) for the canonical seed
@@ -16,8 +16,8 @@ import math
 import numpy as np
 import pytest
 
-from benchmarks.datasets.cherrypicked import (
-    CHERRYPICKED_BENCHMARKS,
+from benchmarks.datasets.structural import (
+    STRUCTURAL_BENCHMARKS,
     generate_data,
     get_benchmark,
 )
@@ -28,21 +28,21 @@ from benchmarks.datasets.cherrypicked import (
 
 
 def test_registry_has_ten_problems() -> None:
-    assert len(CHERRYPICKED_BENCHMARKS) == 10
+    assert len(STRUCTURAL_BENCHMARKS) == 10
 
 
 def test_registry_names_are_unique() -> None:
-    names = [b["name"] for b in CHERRYPICKED_BENCHMARKS]
+    names = [b["name"] for b in STRUCTURAL_BENCHMARKS]
     assert len(names) == len(set(names))
 
 
 def test_get_benchmark_lookup() -> None:
-    for b in CHERRYPICKED_BENCHMARKS:
+    for b in STRUCTURAL_BENCHMARKS:
         assert get_benchmark(b["name"]) is b
 
 
 def test_get_benchmark_unknown_raises() -> None:
-    with pytest.raises(ValueError, match="Unknown cherrypicked benchmark"):
+    with pytest.raises(ValueError, match="Unknown structural benchmark"):
         get_benchmark("DoesNotExist")
 
 
@@ -57,7 +57,7 @@ def test_each_dict_has_required_keys() -> None:
         "target_fn",
         "sampling",
     }
-    for b in CHERRYPICKED_BENCHMARKS:
+    for b in STRUCTURAL_BENCHMARKS:
         assert required <= set(b.keys()), f"{b['name']} missing keys"
 
 
@@ -246,7 +246,7 @@ def test_iii14_14_exp_arg_bounded() -> None:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("bench", CHERRYPICKED_BENCHMARKS, ids=lambda b: b["name"])
+@pytest.mark.parametrize("bench", STRUCTURAL_BENCHMARKS, ids=lambda b: b["name"])
 def test_outputs_finite_for_canonical_seed(bench: dict) -> None:
     _, y_train, _, y_test = generate_data(bench, seed=42)
     assert np.all(np.isfinite(y_train)), f"{bench['name']} train NaN/Inf"
@@ -258,7 +258,7 @@ def test_outputs_finite_for_canonical_seed(bench: dict) -> None:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("bench", CHERRYPICKED_BENCHMARKS, ids=lambda b: b["name"])
+@pytest.mark.parametrize("bench", STRUCTURAL_BENCHMARKS, ids=lambda b: b["name"])
 def test_sympy_expression_evaluates(bench: dict) -> None:
     import sympy
 

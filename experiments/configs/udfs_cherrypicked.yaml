@@ -1,7 +1,10 @@
-# UDFS experiment on cherrypicked benchmarks (10 problems)
+# UDFS experiment on the structural benchmarks (10 problems)
 # References:
 #   docs/md_files/changes/candidate_problem_screening.md (2026-04-20)
-#   benchmarks/datasets/cherrypicked.py
+#   benchmarks/datasets/structural.py
+#
+# The ``cherrypicked`` suite key below, and this file's name, are legacy
+# identifiers kept because they are baked into the on-disk result tree.
 #
 # All UDFS hyperparameters match production Nguyen/Feynman/hard exactly.
 # processes: 1 is REQUIRED — UDFS spawn-mode workers bypass the IsalSR monkeypatch.
