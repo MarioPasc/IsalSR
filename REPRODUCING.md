@@ -25,7 +25,10 @@ point: every reported number was produced with the C++ engine, and the claim
 that the two are semantically interchangeable is only evidence if both are
 exercised.
 
-Measured on the capsule image (24-core x86-64, `--network none`):
+Measured on the capsule image built from
+`registry.codeocean.com/codeocean/miniconda3:4.12.0-python3.9-ubuntu20.04`
+(24-core x86-64, `--network none`) — deliberately the oldest base in play, so
+any newer starter environment is covered too:
 
 | engine | tests | passed | failed | skipped | time |
 |---|---:|---:|---:|---:|---:|
@@ -45,13 +48,24 @@ point for a single cell.
 
 1. **New Capsule → Clone from Git**, pointing at this repository's `main` branch.
 2. Open the **Environment** editor. The imported `environment/Dockerfile` is
-   already complete; confirm the base image resolves. It is
-   `registry.codeocean.com/codeocean/ubuntu:22.04`, chosen because the C++ engine
-   targets `-march=x86-64-v3`, which GCC did not accept before version 11 —
-   Ubuntu 22.04 ships GCC 11.4. Any 22.04 or 24.04 base works; an older one
-   does not. Python is **not** taken from the base image: `postInstall` installs
-   Miniforge and pins Python 3.11, because the project requires `>=3.11` and
-   Ubuntu 22.04 ships 3.10.
+   already complete. Code Ocean accepts base images only from its own registry,
+   and which tags a given deployment offers varies, so if the build reports
+   *Base Image Not Found*, pick any starter environment from the dropdown — it
+   rewrites the `FROM` line and nothing else has to follow.
+
+   The Dockerfile assumes almost nothing about the base. `postInstall` installs
+   the system packages, Python 3.11 (the project requires `>=3.11`; the starter
+   environments ship anything from 3.8 up) and the C++ toolchain, all at the
+   private prefix `/opt/isalsr-conda` so it cannot collide with a base image
+   that already carries conda. GCC 12 comes from conda-forge rather than the
+   base, for two reasons: Ubuntu 20.04 ships GCC 9 and CMake 3.16, below the
+   GCC 11 that `-march=x86-64-v3` needs and the CMake 3.18 that `pyproject`
+   needs; and the compiler determines the extension's `build_hash`, so pinning
+   it makes the engine reproducible instead of a function of the base image.
+   `mpi4py` likewise comes from conda-forge with OpenMPI pinned — a pip build
+   links the base's MPI and segfaults at interpreter teardown on older bases,
+   *after* every test has passed, and left free the conda solver picks Intel
+   MPI, which cannot initialise inside a container.
 3. If the source tree landed under **Other Files** rather than `/code`, either
    leave it — `code/run` finds it either way — or drag it into `/code`.
 4. Set the master script to `code/run` in the Reproducibility panel.

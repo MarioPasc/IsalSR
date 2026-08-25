@@ -37,11 +37,36 @@ RESULTS="${RESULTS_DIR:-/results}"
 mkdir -p "${RESULTS}"
 cd "${ROOT}"
 
+# --------------------------------------------------------------------------- #
+# Locate the interpreter
+# --------------------------------------------------------------------------- #
+# postInstall installs Python 3.11 at a private prefix and the Dockerfile puts it
+# on PATH, but the Environment Editor rewrites the Dockerfile whenever the base
+# image changes and may drop that ENV line.  Resolve by absolute path so the run
+# does not depend on it; the base image's own Python is generally too old.
+if [ -x /opt/isalsr-conda/bin/python ]; then
+    PYTHON=/opt/isalsr-conda/bin/python
+    export PATH="/opt/isalsr-conda/bin:${PATH}"
+else
+    PYTHON="$(command -v python3 || command -v python)"
+fi
+
 echo "IsalSR capsule"
 echo "  project root : ${ROOT}"
 echo "  results      : ${RESULTS}"
-echo "  python       : $(python -c 'import sys; print(sys.executable)')"
+echo "  python       : ${PYTHON} ($("${PYTHON}" -c 'import sys; print(sys.version.split()[0])'))"
 echo
+
+"${PYTHON}" - <<'PY'
+import sys
+
+if sys.version_info[:2] < (3, 11):
+    sys.exit(
+        f"FATAL: IsalSR requires Python >= 3.11, found {sys.version.split()[0]}. "
+        "The capsule's interpreter is installed by environment/postInstall at "
+        "/opt/isalsr-conda; if it is missing, rebuild the environment."
+    )
+PY
 
 # --------------------------------------------------------------------------- #
 # Build the C++ engine
@@ -62,12 +87,24 @@ echo "== building isalsr (C++ engine) =="
 # /tmp so the build does not depend on the project root being writable, which
 # differs between a Reproducible Run and a Cloud Workstation.
 export SKBUILD_BUILD_DIR="${TMPDIR:-/tmp}/isalsr-build/{wheel_tag}"
-python -m pip install --no-build-isolation --no-deps --no-index -e . 2>&1 \
+
+# Build with the compiler postInstall pinned, not with the base image's, which
+# may predate -march=x86-64-v3.  conda-forge exports CC/CXX only from an
+# activation script that a Reproducible Run never sources, so postInstall
+# recorded them to a file.
+if [ -f /opt/isalsr-conda/toolchain.env ]; then
+    # shellcheck disable=SC1091
+    . /opt/isalsr-conda/toolchain.env
+    export CC CXX
+    echo "  toolchain    : $(${CXX} -dumpfullversion) (${CXX})"
+fi
+
+"${PYTHON}" -m pip install --no-build-isolation --no-deps --no-index -e . 2>&1 \
     | tail -5
 
 # The extension resolves from site-packages while the Python sources resolve
 # from the repository, so a failed compile is invisible unless it is asserted.
-python - <<'PY'
+"${PYTHON}" - <<'PY'
 import sys
 from isalsr.core import backends
 
@@ -89,8 +126,8 @@ echo
     echo "# IsalSR capsule run environment"
     echo
     echo '```'
-    python -c 'import sys; print("python:", sys.version)'
-    python -c 'from isalsr.core import backends; import json; print("backends:", json.dumps(backends.build_info()))'
+    "${PYTHON}" -c 'import sys; print("python:", sys.version)'
+    "${PYTHON}" -c 'from isalsr.core import backends; import json; print("backends:", json.dumps(backends.build_info()))'
     echo "cmake:  $(cmake --version | head -1)"
     echo "gcc:    $(gcc --version | head -1)"
     echo "cpus:   $(nproc)"
@@ -99,7 +136,7 @@ echo
     echo '## Installed packages'
     echo
     echo '```'
-    python -m pip freeze
+    "${PYTHON}" -m pip freeze
     echo '```'
 } > "${RESULTS}/environment.md"
 
@@ -118,7 +155,7 @@ status=0
 run_suite() {
     local label="$1"; shift
     echo "== test suite (${label} engine) =="
-    if env "$@" python -m pytest tests/ \
+    if env "$@" "${PYTHON}" -m pytest tests/ \
             -p no:cacheprovider \
             -m "not manuscript" \
             --junitxml="${RESULTS}/pytest-${label}.xml" \
@@ -140,7 +177,7 @@ run_suite python ISALSR_ENGINE=python
 # Static analysis
 # --------------------------------------------------------------------------- #
 echo "== ruff =="
-if python -m ruff check src/ tests/ > "${RESULTS}/ruff.log" 2>&1; then
+if "${PYTHON}" -m ruff check src/ tests/ > "${RESULTS}/ruff.log" 2>&1; then
     echo "   PASS"
 else
     status=1
@@ -148,7 +185,7 @@ else
 fi
 
 echo "== mypy (strict) =="
-if python -m mypy src/isalsr/ > "${RESULTS}/mypy.log" 2>&1; then
+if "${PYTHON}" -m mypy src/isalsr/ > "${RESULTS}/mypy.log" 2>&1; then
     echo "   PASS"
 else
     status=1
@@ -159,7 +196,7 @@ echo
 # --------------------------------------------------------------------------- #
 # Summary
 # --------------------------------------------------------------------------- #
-python - "${RESULTS}" <<'PY'
+"${PYTHON}" - "${RESULTS}" <<'PY'
 """Fold the two JUnit reports into one Markdown summary."""
 import pathlib
 import sys

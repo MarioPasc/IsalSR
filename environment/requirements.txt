@@ -56,7 +56,8 @@ pygraphviz==1.14
 bingo-nasa==0.5.7
 smcpy==0.1.12
 dill==0.4.1
-mpi4py==4.1.1
+# mpi4py is installed by postInstall from conda-forge, not from here: a pip build
+# links the base image's MPI and segfaults at interpreter teardown on older bases.
 pybind11==3.0.2
 pybind11-global==3.0.2
 
