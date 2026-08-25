@@ -11,14 +11,14 @@ Three top-level folders exist only for that purpose and are inert everywhere els
 
 Code Ocean's git import recognises these four names (`metadata`, `environment`,
 `code`, `data`) and files them under the matching capsule directory; everything
-else lands at the capsule root. `code/run` locates the project by searching for
+else lands at the capsule root. `run` locates the project by searching for
 `pyproject.toml`, so it works whether the source tree ends up at `/code` or at `/`.
 
 ## What the capsule reproduces
 
 The verification suite, not the benchmark campaign.
 
-`code/run` builds the C++ engine from source, then runs the full test suite
+`run` builds the C++ engine from source, then runs the full test suite
 **twice** — once on the C++ engine and once on the pure-Python reference
 implementation — plus `ruff` and `mypy --strict`. Running both engines is the
 point: every reported number was produced with the C++ engine, and the claim
@@ -67,8 +67,8 @@ point for a single cell.
    *after* every test has passed, and left free the conda solver picks Intel
    MPI, which cannot initialise inside a container.
 3. If the source tree landed under **Other Files** rather than `/code`, either
-   leave it — `code/run` finds it either way — or drag it into `/code`.
-4. Set the master script to `code/run` in the Reproducibility panel.
+   leave it — `run` finds it either way — or drag it into `/code`.
+4. Set the master script to `run` in the Reproducibility panel.
 5. **Reproducible Run**.
 
 ### Why the package is built at run time
@@ -76,7 +76,7 @@ point for a single cell.
 A Reproducible Run has no network, so everything must be installed at image
 build time. The one exception is the project itself: `postInstall` runs during
 the build, when Code Ocean has not yet mounted `/code`, so it cannot see the
-source. `code/run` therefore compiles the extension during the run, offline,
+source. `run` therefore compiles the extension during the run, offline,
 which forces three pip flags:
 
 ```
@@ -86,7 +86,7 @@ which forces three pip flags:
 --no-deps              every runtime dependency is already installed
 ```
 
-`code/run` asserts `backends.engine() == "cpp"` immediately after and exits
+`run` asserts `backends.engine() == "cpp"` immediately after and exits
 non-zero otherwise. The check is not decorative: the extension resolves from
 site-packages while the Python sources resolve from the repository, so a failed
 compile is silent — the pure-Python fallback simply takes over and the run looks
@@ -98,7 +98,7 @@ Two modules carry `pytestmark = pytest.mark.manuscript`:
 `tests/unit/test_appendix_d_generator.py` and `tests/unit/test_numerical_audit.py`.
 Both check the LaTeX manuscript against the code and read a manuscript checkout
 that is not part of this repository, so outside the authors' workstation they can
-only skip. `code/run` deselects them with `-m "not manuscript"` rather than
+only skip. `run` deselects them with `-m "not manuscript"` rather than
 letting 170 skips accumulate in the report, where they would read as untested
 behaviour instead of out-of-scope tooling. Run them locally with the manuscript
 mounted; `python -m pytest tests/` still collects them by default.
@@ -115,7 +115,7 @@ provenance and are unaffected.
 docker build -t isalsr -f environment/Dockerfile environment/
 docker run --rm --network none \
     -v "$PWD":/code -v "$PWD/results":/results \
-    -w /code isalsr /code/code/run
+    -w /code isalsr /code/run
 ```
 
 `--network none` is the point of the exercise: it proves the image is

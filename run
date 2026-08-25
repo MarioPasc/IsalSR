@@ -16,19 +16,45 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 # Locate the project root
 # --------------------------------------------------------------------------- #
-# Code Ocean's git import puts a repository's `code/` folder at /code and
-# everything else at the capsule root.  Which of the two holds this repository
-# depends on how the capsule was created, so find pyproject.toml rather than
-# assume.  $PWD is /code during a Reproducible Run.
+# This script lives at the REPOSITORY ROOT, deliberately, and not in a `code/`
+# directory.  Code Ocean's git import treats a top-level `code/` folder
+# specially: its contents become /code, and *everything else is filed under the
+# capsule root, which is not mounted during a Reproducible Run*.  A repository
+# that keeps its sources outside `code/` therefore arrives with the run script
+# present and the sources gone -- the run starts and instantly cannot find the
+# project.  With no `code/` folder to special-case, the whole repository lands
+# at /code, and this script sits beside pyproject.toml.
+#
+# The search still tolerates other layouts, and on failure reports what it
+# actually saw rather than only that it failed.
 find_root() {
-    local candidate
-    for candidate in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" /code / "${PWD}"; do
+    local candidate found
+    for candidate in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" "${PWD}" /code /; do
         if [ -f "${candidate}/pyproject.toml" ]; then
             printf '%s\n' "${candidate}"
             return 0
         fi
     done
-    echo "FATAL: no pyproject.toml found in the capsule; cannot locate IsalSR." >&2
+    # Last resort: the tree may be nested a level or two under /code.
+    found="$(find /code -maxdepth 3 -name pyproject.toml -print -quit 2>/dev/null || true)"
+    if [ -n "${found}" ]; then
+        dirname "${found}"
+        return 0
+    fi
+
+    {
+        echo "FATAL: no pyproject.toml found in the capsule; cannot locate IsalSR."
+        echo
+        echo "This almost always means the capsule was built from a revision that"
+        echo "still had a top-level code/ directory, so the sources were filed"
+        echo "under the capsule root instead of /code and are not mounted here."
+        echo "Re-import from a revision where run sits at the repository root."
+        echo
+        echo "script : ${BASH_SOURCE[0]}"
+        echo "cwd    : ${PWD}"
+        echo "--- /code ---"; ls -la /code 2>&1 | head -40
+        echo "--- / ---";     ls -la /     2>&1 | head -40
+    } >&2
     return 1
 }
 
