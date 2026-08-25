@@ -20,6 +20,7 @@ from experiments.models.structural_scope import (
     count_internal_nodes,
     is_structural,
     nonstructural_key,
+    recorded_key,
 )
 from isalsr.core.canonical import fast_canonical_string
 from isalsr.core.labeled_dag import LabeledDAG
@@ -170,3 +171,52 @@ class TestAdapterLevelCollision:
         # Which is exactly why both must be excluded from dedup.
         assert not is_structural(dag0)
         assert not is_structural(dag1)
+
+
+class TestRecordedKey:
+    """``recorded_key`` reproduces what the production runners persist.
+
+    The D3 verifiers (``stage_d_trace._spot_check_one`` and
+    ``stage_d_mode1_replay._cross_check``) re-derive the key of a traced
+    candidate and compare it byte-exact against the recorded value.  Both
+    runners substitute :func:`nonstructural_key` at k=0, so a verifier that
+    re-canonicalises unconditionally reports a mismatch on every bare-variable
+    record -- and reports it as an *engine* disagreement, which it is not:
+    both engines return ``""`` there.  Regression for that false alarm.
+    """
+
+    def test_structural_dag_keeps_its_canonical_string(self) -> None:
+        dag = LabeledDAG(max_nodes=4)
+        dag.add_node(NodeType.VAR, var_index=0)
+        node = dag.add_node(NodeType.SIN)
+        dag.add_edge(0, node)
+        canonical = fast_canonical_string(dag)
+
+        assert canonical != ""
+        assert recorded_key(dag, canonical) == canonical
+
+    def test_bare_variable_gets_the_substitution_not_the_empty_string(self) -> None:
+        dag = _vars_only(1)
+        canonical = fast_canonical_string(dag)
+
+        assert canonical == ""
+        assert recorded_key(dag, canonical) == nonstructural_key(dag)
+        assert recorded_key(dag, canonical).startswith(NONSTRUCTURAL_KEY_PREFIX)
+
+    def test_distinct_bare_variables_get_distinct_keys(self) -> None:
+        """The whole point of the substitution: x_0 and x_0,x_1 must not merge."""
+        one, two = _vars_only(1), _vars_only(2)
+
+        assert fast_canonical_string(one) == fast_canonical_string(two) == ""
+        assert recorded_key(one, "") != recorded_key(two, "")
+
+    def test_both_engines_agree_at_k_zero(self) -> None:
+        """The k=0 key is engine-independent, so no D3 verifier may flag it."""
+        pytest.importorskip("isalsr.core._native", reason="C++ extension not built")
+        dag = _vars_only(1)
+
+        cpp = fast_canonical_string(dag, backend="cpp")
+        python = fast_canonical_string(dag, backend="python")
+
+        assert cpp == python == ""
+        assert recorded_key(dag, cpp) == recorded_key(dag, python)

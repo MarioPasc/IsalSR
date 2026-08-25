@@ -80,6 +80,7 @@ from pathlib import Path
 from typing import Any
 
 from experiments.models.fallback_ledger import count_nonvar
+from experiments.models.structural_scope import recorded_key
 from isalsr.baselines.fixed_order_hash import (
     FixedOrder,
     SerialisationError,
@@ -1004,7 +1005,12 @@ class StageDTracer:
             "status": "error",
         }
         try:
-            replay = canonicalise(deserialise(entry["serialisation"]), backend="python")
+            dag = deserialise(entry["serialisation"])
+            # The production runners substitute the non-structural key at k=0, and
+            # that substituted value is what the stream recorded.  Replaying the
+            # raw canonical string here would flag every bare-variable candidate
+            # as an engine disagreement (both engines return "" at k=0).
+            replay = recorded_key(dag, canonicalise(dag, backend="python"))
         except Exception as exc:  # noqa: BLE001 -- report, never raise
             out["error"] = f"{type(exc).__name__}: {exc}"
             return out

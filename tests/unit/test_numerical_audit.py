@@ -36,6 +36,13 @@ from experiments.scripts.numerical_audit import (
     run_audit,
 )
 
+#: Everything in this module reads the LaTeX manuscript, which is not part of
+#: this repository (the audit compares the manuscript's numbers against the results tree).
+#: Without it every test here can only skip, so the marker lets a run that has
+#: no manuscript deselect the module outright -- `-m "not manuscript"` -- rather
+#: than report dozens of skips that read as coverage gaps.
+pytestmark = pytest.mark.manuscript
+
 MANUSCRIPT_ROOT = Path(DEFAULT_MANUSCRIPT_ROOT)
 BENCHMARKS_JSON = (
     Path(__file__).resolve().parents[2]

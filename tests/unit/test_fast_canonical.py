@@ -63,6 +63,23 @@ def _internal_k(dag: LabeledDAG) -> int:
     return dag.node_count - len(dag.var_nodes())
 
 
+#: k-range the mode-consistency test can enumerate exhaustively.  It walks all
+#: k! permutations under every mode, so k=7 already costs 5,040 canonicalisations
+#: per mode; k<2 has nothing to permute.
+_MODE_CONSISTENCY_K_RANGE = (2, 6)
+
+#: Expressions the mode-consistency test runs on, selected at collection time so
+#: no case is generated only to be skipped inside the test body.  ``COMPLETENESS_EXPRS``
+#: opens with a k=1 entry, which the old ``[:5]`` slice generated and then skipped.
+MODE_CONSISTENCY_EXPRS: list[tuple[str, int]] = [
+    (expr, num_vars)
+    for expr, num_vars in COMPLETENESS_EXPRS
+    if _MODE_CONSISTENCY_K_RANGE[0]
+    <= _internal_k(_make_dag(expr, num_vars))
+    <= _MODE_CONSISTENCY_K_RANGE[1]
+][:5]
+
+
 # ======================================================================
 # Basics
 # ======================================================================
@@ -404,12 +421,11 @@ class TestFastCanonicalModeConsistency:
     The canonical strings themselves may differ, but the partition must be identical.
     """
 
-    @pytest.mark.parametrize("expr,num_vars", COMPLETENESS_EXPRS[:5])
+    @pytest.mark.parametrize("expr,num_vars", MODE_CONSISTENCY_EXPRS)
     def test_equivalence_classes_agree(self, expr: str, num_vars: int) -> None:
         dag = _make_dag(expr, num_vars)
         k = _internal_k(dag)
-        if k < 2 or k > 6:
-            pytest.skip(f"k={k} not in test range [2,6]")
+        assert _MODE_CONSISTENCY_K_RANGE[0] <= k <= _MODE_CONSISTENCY_K_RANGE[1]
 
         # Collect canonical strings for all permutations under each mode
         canonicals: dict[CanonicalMode, dict[str, set[tuple[int, ...]]]] = {}

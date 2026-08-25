@@ -16,6 +16,7 @@ from experiments.models.stage_d_trace import (
     CANDIDATES_FILE,
     StageDTracer,
 )
+from experiments.models.structural_scope import recorded_key
 from experiments.scripts import stage_d_mode1_replay as m1
 from isalsr.baselines.fixed_order_hash import FixedOrder
 from isalsr.core.canonical import fast_canonical_string
@@ -523,3 +524,78 @@ class TestCli:
         out_md = tmp_path / "notnull.md"
         m1.main(["--trace-dir", str(trace), "--out-md", str(out_md)])
         assert "not** a null result" in out_md.read_text()
+
+
+# --------------------------------------------------------------------------- #
+# k=0 records must replay clean (regression, 2026-08-25)
+# --------------------------------------------------------------------------- #
+
+
+class TestNonStructuralRecordsReplayClean:
+    """A bare-variable candidate must not read as an engine disagreement.
+
+    The production runners record ``nonstructural_key(dag)`` in place of the
+    canonical string whenever k=0.  ``_cross_check`` used to re-canonicalise
+    unconditionally and compare the raw ``""`` against that recorded ``#k0:...``
+    value, so **every** k=0 record landed in ``canonical_mismatches`` and the
+    replay reported ``REPLAY FIDELITY FAILURE``.  Bare variables are common in a
+    GP population, so this fired on essentially every traced run.
+    """
+
+    @staticmethod
+    def _bare_variable() -> LabeledDAG:
+        dag = LabeledDAG(max_nodes=4)
+        dag.add_node(NodeType.VAR, var_index=0)
+        return dag
+
+    @staticmethod
+    def _write(trace_dir: Path, dags: list[LabeledDAG]) -> Path:
+        """Persist *dags* the way the production runners do (with the k=0 key)."""
+        tracer = StageDTracer.from_env(
+            {
+                "ISALSR_STAGE_D_TRACE": "1",
+                "ISALSR_STAGE_D_TRACE_DIR": str(trace_dir),
+                "ISALSR_STAGE_D_TRACE_SAMPLE_RATE": "1",
+            }
+        )
+        for dag in dags:
+            tracer.begin()
+            tracer.note_eval_time(1e-4)
+            tracer.record(
+                dag=dag,
+                representation=recorded_key(dag, fast_canonical_string(dag)),
+                t_canon=2e-4,
+            )
+        tracer.close(run={"method": "bingo", "seed": 1, "problem": "Nguyen-1"})
+        return trace_dir
+
+    def test_stream_of_bare_variables_reports_no_mismatch(self, tmp_path: Path) -> None:
+        trace_dir = self._write(tmp_path / "c2_trace", [self._bare_variable() for _ in range(3)])
+
+        _records, load = m1.load_stream(trace_dir, None)
+
+        assert load.n_replayable == 3
+        assert load.canonical_mismatches == [], load.canonical_mismatches
+        assert load.digest_mismatches == []
+
+    def test_mixed_stream_reports_no_mismatch(self, tmp_path: Path) -> None:
+        dags = [*stream_dags(), self._bare_variable()]
+        trace_dir = self._write(tmp_path / "c2_trace", dags)
+
+        _records, load = m1.load_stream(trace_dir, None)
+
+        assert load.n_replayable == len(dags)
+        assert load.canonical_mismatches == [], load.canonical_mismatches
+
+    def test_a_genuine_canonical_mismatch_is_still_caught(self, tmp_path: Path) -> None:
+        """The substitution must not blunt the check it lives inside."""
+        trace_dir = self._write(tmp_path / "c2_trace", [_add((0, 1))])
+        path = trace_dir / CANDIDATES_FILE
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        rows[0]["canonical"] = "V+"  # a real Sigma_SR word, but the wrong one
+        write_raw_trace(trace_dir, rows)
+
+        _records, load = m1.load_stream(trace_dir, None)
+
+        assert len(load.canonical_mismatches) == 1
+        assert load.canonical_mismatches[0]["recorded"] == "V+"

@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+# Code Ocean post-install script for the IsalSR capsule.
+#
+# Runs ONCE, during the image build, as root, from /.  It has network access;
+# a Reproducible Run does not.  Every dependency the capsule will ever need
+# must therefore be installed here.  It cannot see /code or /data — that is
+# why the capsule's own package is built later, by code/run.
+#
+set -euo pipefail
+
+MINIFORGE_VERSION="25.3.1-0"
+PYTHON_VERSION="3.11"
+
+# Pinned commit of critdd (critical-difference diagrams). Not on PyPI, so the
+# git URL is the only source; the commit is pinned because the project has no
+# tagged releases and its default branch moves.
+CRITDD_COMMIT="0d5422d6e10a69f2a2da2252d59de9e959caa19e"
+
+# --------------------------------------------------------------------------- #
+# Python 3.11 via Miniforge
+# --------------------------------------------------------------------------- #
+# Miniforge rather than the distro Python: Ubuntu 22.04 ships 3.10 and the
+# project requires >=3.11 (pyproject `requires-python`).  Installed into the
+# base environment at /opt/conda, which the Dockerfile has already put on PATH,
+# so `python` resolves correctly in a Reproducible Run and in a Cloud
+# Workstation terminal alike, with no activation step.
+curl -fsSL -o /tmp/miniforge.sh \
+    "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh"
+bash /tmp/miniforge.sh -b -p /opt/conda
+rm -f /tmp/miniforge.sh
+
+/opt/conda/bin/conda install -y -q "python=${PYTHON_VERSION}"
+/opt/conda/bin/conda clean -afy
+
+# --------------------------------------------------------------------------- #
+# Pinned Python dependencies
+# --------------------------------------------------------------------------- #
+/opt/conda/bin/python -m pip install --no-cache-dir --upgrade pip
+
+# CPU-only torch. UDFS imports torch; the capsule has no GPU, and the default
+# PyPI wheel would pull ~2.5 GB of CUDA payload that can never be used.
+/opt/conda/bin/python -m pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    "torch==2.10.0+cpu"
+
+/opt/conda/bin/python -m pip install --no-cache-dir -r /requirements.txt
+
+/opt/conda/bin/python -m pip install --no-cache-dir \
+    "critdd @ git+https://github.com/mirkobunse/critdd@${CRITDD_COMMIT}"
+
+# --------------------------------------------------------------------------- #
+# Build-time verification
+# --------------------------------------------------------------------------- #
+# Fail the image build here rather than at run time: a missing import is far
+# cheaper to diagnose in a build log than inside a Reproducible Run.
+/opt/conda/bin/python - <<'PY'
+import sys
+
+assert sys.version_info[:2] == (3, 11), f"expected Python 3.11, got {sys.version}"
+
+import bingo            # noqa: F401  host solver (evolutionary)
+import h5py             # noqa: F401
+import hypothesis       # noqa: F401
+import matplotlib       # noqa: F401
+import networkx         # noqa: F401
+import numpy            # noqa: F401
+import pandas           # noqa: F401
+import pytest           # noqa: F401
+import scipy            # noqa: F401
+import sklearn          # noqa: F401
+import statsmodels      # noqa: F401
+import sympy            # noqa: F401
+import torch            # noqa: F401  host solver (UDFS) dependency
+import zss              # noqa: F401
+
+# The C++ extension is compiled from /code at run time, offline. Its build
+# backend must be importable now, or that build cannot happen at all.
+import nanobind         # noqa: F401
+import scikit_build_core  # noqa: F401
+
+print(f"environment OK: Python {sys.version.split()[0]}, torch {torch.__version__}")
+PY
+
+command -v cmake ninja gcc >/dev/null || { echo "missing C++ toolchain" >&2; exit 1; }
+cmake --version | head -1
+gcc --version | head -1

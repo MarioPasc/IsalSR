@@ -74,7 +74,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from experiments.models.structural_scope import is_structural
+from experiments.models.structural_scope import is_structural, recorded_key
 from isalsr.baselines.fixed_order_hash import (
     FixedOrder,
     SerialisationError,
@@ -304,7 +304,7 @@ def _replay_line(
         log.debug("candidate %s: canonicalisation failed (%s)", row.get("i"), exc)
         return None
 
-    _cross_check(row, digests, canonical, report)
+    _cross_check(row, digests, canonical, dag, report)
     return StreamRecord(
         index=int(row.get("i", -1)),
         k=_count_nonvar(dag),
@@ -320,14 +320,24 @@ def _cross_check(
     row: dict[str, Any],
     digests: dict[str, int],
     canonical: str,
+    dag: LabeledDAG,
     report: LoadReport,
 ) -> None:
     """Compare the replayed keys against the ones recorded at trace time.
+
+    The recorded value is the *deduplication key*, not the raw canonical string:
+    at :math:`k = 0` the production runners substitute
+    :func:`~experiments.models.structural_scope.nonstructural_key`.  The replay
+    applies the same substitution through
+    :func:`~experiments.models.structural_scope.recorded_key`; comparing the raw
+    canonical string instead reports a mismatch on every bare-variable candidate,
+    which reads as an engine disagreement but is a difference of key definition.
 
     Args:
         row: The raw persisted record.
         digests: Digests recomputed during the replay.
         canonical: Canonical string recomputed during the replay.
+        dag: The reconstructed DAG, needed to decide the k=0 substitution.
         report: Load report, mutated with any mismatch.
     """
     for order in ORDERS:
@@ -342,12 +352,13 @@ def _cross_check(
                 }
             )
     recorded_canonical = row.get("canonical")
-    if recorded_canonical is not None and recorded_canonical != canonical:
+    replayed_key = recorded_key(dag, canonical)
+    if recorded_canonical is not None and recorded_canonical != replayed_key:
         report.canonical_mismatches.append(
             {
                 "i": row.get("i"),
                 "recorded": recorded_canonical,
-                "replayed": canonical,
+                "replayed": replayed_key,
             }
         )
 

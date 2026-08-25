@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from experiments.scripts import stage_d_certify as sdc
 from experiments.scripts.stage_d_certify import (
     DEFAULT_WALL_S,
     MEM_ROUND_STEP_GB,
@@ -28,6 +29,40 @@ from experiments.scripts.stage_d_certify import (
     main,
 )
 from experiments.scripts.stage_d_task_spec import STAGE_D_CERTIFICATION_CELLS, StageDCell
+
+#: A syntactically valid 40-char SHA.  ``validate_manifest`` checks length and
+#: non-emptiness, not that the object exists.
+_PINNED_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+@pytest.fixture(autouse=True)
+def _pinned_git_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the build provenance that ``_build_provenance`` shells out to git for.
+
+    Without this the certification verdict depends on the ambient checkout
+    rather than on the Stage-D root under test, in two ways.  A tree with no
+    ``.git`` -- a release tarball, a Code Ocean capsule, an rsync'd Picasso
+    working copy -- leaves ``build.git_commit`` empty, and ``validate_manifest``
+    correctly rejects that, so D1.8 and every test downstream of it fail for a
+    reason that has nothing to do with certification.  A tree with uncommitted
+    edits flips ``build.git_dirty``, which the strict validator rejects.
+
+    Leaving unresolvable provenance empty is deliberate in ``_build_provenance``
+    (it is what makes a missing commit visible instead of plausible), so the fix
+    belongs here: supply the provenance the fixtures assume, rather than weaken
+    the validator that reports its absence.
+    """
+    responses: dict[tuple[str, ...], str] = {
+        ("rev-parse", "HEAD"): _PINNED_COMMIT,
+        ("rev-parse", "--abbrev-ref", "HEAD"): "main",
+        ("describe", "--tags", "--exact-match"): "",
+        ("status", "--porcelain"): "",
+    }
+
+    def _fake_git(args: list[str]) -> str:
+        return responses.get(tuple(args), "")
+
+    monkeypatch.setattr(sdc, "_git", _fake_git)
 
 # ---------------------------------------------------------------------- #
 # Fixture parameters. Chosen so a CLEAN root passes every threshold with

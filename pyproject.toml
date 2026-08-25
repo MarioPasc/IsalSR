@@ -96,6 +96,7 @@ markers = [
     "integration: Integration tests (external libs)",
     "property: Property-based tests (hypothesis)",
     "slow: Long-running tests",
+    "manuscript: Checks the LaTeX manuscript against the code; needs the manuscript checkout, which is not part of this repository",
 ]
 
 [tool.mypy]

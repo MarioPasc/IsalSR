@@ -53,6 +53,7 @@ __all__ = [
     "count_internal_nodes",
     "is_structural",
     "nonstructural_key",
+    "recorded_key",
 ]
 
 #: Recorded on the trace record of every k=0 candidate, so the substitution is
@@ -135,3 +136,26 @@ def nonstructural_key(dag: LabeledDAG) -> str:
         # which is what distinguishes the colliding shapes (1|x0<> vs
         # 2|x0<>;x1<>).  Coarser than the serialisation, never wrong.
         return f"{NONSTRUCTURAL_KEY_PREFIX}n{dag.node_count}"
+
+
+def recorded_key(dag: LabeledDAG, canonical: str) -> str:
+    """Return the key the production runners record for *dag*.
+
+    Both IsalSR runners substitute :func:`nonstructural_key` for the canonical
+    string whenever :math:`k = 0` (``bingo/isalsr_runner.py``,
+    ``udfs/isalsr_runner.py``), because ``""`` equates ``f(x) = x_0`` with
+    ``f(x) = x_1``.  The Stage-D trace persists the *substituted* value, so
+    every replay verifier must apply the same substitution before comparing.
+    Re-canonicalising unconditionally and comparing the result against the
+    recorded value reports a mismatch on every k=0 record -- a false engine
+    disagreement, not a real one, since both engines return ``""`` there.
+
+    Args:
+        dag: The candidate DAG the key belongs to.
+        canonical: The canonical string computed for *dag*.
+
+    Returns:
+        ``canonical`` when *dag* is structural, the non-structural substitution
+        key otherwise.
+    """
+    return canonical if is_structural(dag) else nonstructural_key(dag)

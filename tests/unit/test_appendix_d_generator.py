@@ -11,6 +11,13 @@ import pytest
 
 from experiments.scripts import generate_appendix_d_tables as gen
 
+#: Everything in this module reads the LaTeX manuscript, which is not part of
+#: this repository (references.bib and the appendix-D sources live in the manuscript checkout).
+#: Without it every test here can only skip, so the marker lets a run that has
+#: no manuscript deselect the module outright -- `-m "not manuscript"` -- rather
+#: than report dozens of skips that read as coverage gaps.
+pytestmark = pytest.mark.manuscript
+
 REPO_ROOT = Path(gen.__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "experiments" / "configs"
 BIB_PATH = Path(gen.DEFAULT_BIB_PATH)

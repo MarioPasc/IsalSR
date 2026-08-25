@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 
+from experiments.scripts import equivalence_gate as eg
 from experiments.scripts.equivalence_gate import (
     FIXED_SEED,
     _build_corpus,
@@ -37,6 +38,20 @@ from experiments.scripts.equivalence_gate import (
 )
 from isalsr.core.labeled_dag import LabeledDAG
 from isalsr.core.node_types import NodeType
+
+
+def _raise(exc: Exception) -> Any:
+    """Return a ``fast_canonical_string`` stand-in that always raises *exc*.
+
+    Used to simulate a build without the C++ extension.  The two branches of
+    every capability check are mutually exclusive, so simulating the absent one
+    is the only way to cover both from a single installation.
+    """
+
+    def _stub(*_args: Any, **_kwargs: Any) -> str:
+        raise exc
+
+    return _stub
 
 # ---------------------------------------------------------------------------
 # Unit tests for helpers
@@ -77,24 +92,45 @@ class TestProbeCppCanonical:
         assert isinstance(detail, str)
         assert len(detail) > 0
 
-    def test_cpp_not_available_absence_path(self) -> None:
-        """When C++ canonicaliser is absent the probe must return False.
+    def test_cpp_not_available_absence_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When the C++ canonicaliser is absent the probe must return False.
 
-        Skip when the C++ canonicaliser is already live (another workstream
-        may have landed it).  The two outcomes are mutually exclusive; the
-        test is only meaningful in the absence case.
+        Absence is simulated rather than waited for.  These two outcomes are
+        mutually exclusive, so keying the test on the ambient build meant it ran
+        in exactly one of the two supported installations and was skipped in the
+        other -- and the C++-enabled one is the one everything else is tested on,
+        so in practice the absence path was never exercised at all.
         """
-        available, detail = _probe_cpp_canonical()
-        if available:
-            pytest.skip("C++ canonicaliser is live in this tree; absence-path test skipped")
-        assert available is False, f"Expected False but got True: {detail!r}"
+        monkeypatch.setattr(eg, "fast_canonical_string", _raise(RuntimeError("no extension")))
 
-    def test_detail_mentions_type_error_when_absent(self) -> None:
-        """When C++ canonicaliser is absent (TypeError raised), detail records it."""
         available, detail = _probe_cpp_canonical()
+
+        assert available is False, f"Expected False but got True: {detail!r}"
+        assert "RuntimeError" in detail
+
+    def test_detail_mentions_type_error_when_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A ``backend=``-less canonicaliser is reported as a TypeError."""
+        monkeypatch.setattr(
+            eg,
+            "fast_canonical_string",
+            _raise(TypeError("unexpected keyword argument 'backend'")),
+        )
+
+        available, detail = _probe_cpp_canonical()
+
+        assert available is False
+        assert "TypeError" in detail
+
+    def test_probe_reports_available_when_the_call_path_works(self) -> None:
+        """The presence branch, asserted directly rather than by absence of a skip."""
+        available, detail = _probe_cpp_canonical()
+
         if available:
-            pytest.skip("C++ canonicaliser is live; TypeError-detail test skipped")
-        assert "TypeError" in detail or "not" in detail.lower(), detail
+            assert "live" in detail.lower()
+        else:
+            assert detail  # pure-Python install: a reason must still be recorded
 
 
 class TestCanonicalizeWrapper:
@@ -119,7 +155,9 @@ class TestCanonicalizeWrapper:
         r2 = _canonicalize(dag, "python")
         assert r1 == r2
 
-    def test_cpp_backend_raises_when_unavailable(self) -> None:
+    def test_cpp_backend_raises_when_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """``_canonicalize("cpp")`` must raise when the C++ engine is absent —
         never silently return a Python result.
 
@@ -137,9 +175,8 @@ class TestCanonicalizeWrapper:
         back silently.
         """
         dag = self._make_simple_dag()
-        available, _ = _probe_cpp_canonical()
-        if available:
-            pytest.skip("C++ canonicaliser is available; skip absence test")
+        monkeypatch.setattr(eg, "fast_canonical_string", _raise(RuntimeError("no extension")))
+
         with pytest.raises((TypeError, RuntimeError)):
             _canonicalize(dag, "cpp")
 
@@ -439,13 +476,15 @@ class TestMainCLI:
         assert report["self_comparison_note"] is not None
         assert "python" in report["self_comparison_note"].lower()
 
-    def test_default_backend_b_cpp_is_self_comparison_currently(self, tmp_path: Any) -> None:
+    def test_default_backend_b_cpp_is_self_comparison_currently(
+        self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """With no C++ canonicaliser present, --backend-b cpp (default) must
         fall back to python and produce self_comparison=True with pass=False."""
         out = str(tmp_path / "default.json")
-        available, _ = _probe_cpp_canonical()
-        if available:
-            pytest.skip("C++ canonicaliser is present; skip absence behaviour test")
+        monkeypatch.setattr(
+            eg, "_probe_cpp_canonical", lambda: (False, "simulated: extension not installed")
+        )
 
         exit_code = main(["--gate", "all", "--quick", "--out", out])
         with open(out, encoding="utf-8") as fh:
