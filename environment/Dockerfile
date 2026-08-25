@@ -8,17 +8,19 @@
 # /code or /data at that point.  `isalsr` is therefore compiled from /code by
 # code/run, offline, against the build backend installed below.
 #
-# Base image: registry.codeocean.com/codeocean/ubuntu:22.04 provides GCC 11.4
-# (the C++ engine targets -march=x86-64-v3, which GCC did not accept before 11)
-# and CMake 3.22 (pyproject requires >= 3.18).  Python comes from Miniforge in
-# postInstall, pinned to 3.11 to match the environment the reported results were
-# produced on; Ubuntu 22.04's own Python is 3.10 and the project requires >=3.11.
+# Base image: Ubuntu 22.04 provides GCC 11.4 (the C++ engine targets
+# -march=x86-64-v3, which GCC did not accept before 11) and CMake 3.22
+# (pyproject requires >= 3.18).  Python comes from Miniforge in postInstall,
+# pinned to 3.11 to match the environment the reported results were produced on;
+# Ubuntu 22.04's own Python is 3.10 and the project requires >= 3.11.
 #
-# If you change the base image from the Environment Editor, Code Ocean rewrites
-# the FROM line and leaves the rest of this file intact.  Any Ubuntu 22.04 or
-# 24.04 base works; a base whose GCC is older than 11 does not.
+# If the build fails with "Base Image Not Found", the tag is not registered as a
+# starter environment on this Code Ocean deployment.  Pick any Ubuntu 22.04 or
+# 24.04 starter from the Environment Editor: it rewrites the FROM line and
+# leaves the rest of this file intact.  A base whose GCC predates 11 will not
+# work.
 
-FROM registry.codeocean.com/codeocean/ubuntu:22.04
+FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
