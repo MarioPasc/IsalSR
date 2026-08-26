@@ -34,6 +34,8 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from experiments.scripts.docs_root import docs_dir
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -46,9 +48,7 @@ DEFAULT_ARTICLE = Path(
 )
 
 #: The authoritative benchmark inventory, generated from the campaign corpus.
-DEFAULT_INVENTORY = (
-    Path(__file__).resolve().parents[3] / "docs/generated/appendix_d/appendix_d_benchmarks.json"
-)
+DEFAULT_INVENTORY = docs_dir("generated", "appendix_d", "appendix_d_benchmarks.json")
 
 PAPER = "article/paper"
 SUPP = "article/supplementary"

@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from experiments.scripts.docs_root import docs_root
 from experiments.scripts.numerical_audit import (
     AUDITED_FILES,
     DEFAULT_MANUSCRIPT_ROOT,
@@ -44,13 +45,7 @@ from experiments.scripts.numerical_audit import (
 pytestmark = pytest.mark.manuscript
 
 MANUSCRIPT_ROOT = Path(DEFAULT_MANUSCRIPT_ROOT)
-BENCHMARKS_JSON = (
-    Path(__file__).resolve().parents[2]
-    / "docs"
-    / "generated"
-    / "appendix_d"
-    / "appendix_d_benchmarks.json"
-)
+BENCHMARKS_JSON = docs_root() / "docs" / "generated" / "appendix_d" / "appendix_d_benchmarks.json"
 
 requires_manuscript = pytest.mark.skipif(
     not MANUSCRIPT_ROOT.exists(),

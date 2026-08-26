@@ -10,38 +10,43 @@ everywhere else:
 | `metadata/` | `metadata.yml` — capsule title, description, authors |
 | `run` | the capsule's master script |
 
-## Import from the `codeocean` branch, not from `main`
+## Layout
 
 Code Ocean's git import recognises exactly four directory names — `code`,
-`data`, `environment`, `metadata` — and files their *contents* into the matching
-capsule directories. Anything outside them is neither mounted during a
-Reproducible Run nor offered as a core file, so the whole project has to sit
-inside `code/`.
-
-Putting it there on `main` would move `pyproject.toml` out of the repository
-root and break `pip install git+…`, the README paths and the docs site. So
-`main` keeps the normal layout and the capsule layout is *derived* onto a
-separate branch:
+`data`, `environment`, `metadata` — and files **their contents** into the
+matching capsule directories. Anything outside them is neither mounted during a
+Reproducible Run nor offered as a core file, so the whole project lives under
+`code/`:
 
 ```
-main                        codeocean
-  pyproject.toml     ->       code/pyproject.toml
-  src/               ->       code/src/
-  tests/             ->       code/tests/
-  run                ->       code/run
-  environment/       ->       environment/     (unchanged)
-  metadata/          ->       metadata/        (unchanged)
+code/          the project: pyproject.toml, src/, tests/, benchmarks/,
+               experiments/, slurm/, CMakeLists.txt and the master script `run`
+environment/   Dockerfile, postInstall, requirements.txt
+metadata/      metadata.yml
+docs/          the companion website — GitHub Pages serves it from main:/docs,
+               so it stays at the root and is simply not imported
+README.md      the repository landing page, likewise not imported
 ```
 
-Regenerate it after any change to `main`:
+This is on `main` because Code Ocean requires a published capsule to track the
+repository's **default** branch. An earlier arrangement derived the layout onto a
+separate `codeocean` branch to keep `main` conventional; that branch imports and
+runs fine but cannot be published, so it was abandoned.
 
-```bash
-bash tools/make_codeocean_branch.sh
-git push -f origin codeocean
-```
+Two consequences of the move, both deliberate:
 
-The branch is derived, never edited by hand — it is rebuilt from scratch each
-time, so there is nothing to merge. Every change belongs on `main`.
+- `pyproject.toml` is at `code/pyproject.toml`, so installing from a checkout is
+  `pip install -e code/`, and from the URL it is
+  `pip install "git+https://github.com/MarioPasc/IsalSR#subdirectory=code"`.
+- The project no longer declares a `readme`: the canonical `README.md` is at the
+  repository root, outside the project directory, and PEP 621 requires that path
+  to be inside it. A second copy under `code/` would drift.
+
+`docs/` stays at the root while the code that reads it moved, so the two roots
+are now different directories. `code/experiments/scripts/docs_root.py` resolves
+`docs/` by searching upward for it rather than by counting parent directories —
+counting is what broke when the tree moved, and it would break again on the next
+move.
 
 ## What the capsule reproduces
 
@@ -75,9 +80,8 @@ point for a single cell.
 
 ## Setting the capsule up
 
-1. **New Capsule → Clone from Git**, pointing at this repository and selecting
-   the **`codeocean`** branch. Importing `main` produces a capsule that cannot
-   see its own sources — see above.
+1. **New Capsule → Clone from Git**, pointing at this repository's `main`
+   branch.
 2. Open the **Environment** editor. The imported `environment/Dockerfile` is
    already complete. Code Ocean accepts base images only from its own registry,
    and which tags a given deployment offers varies, so if the build reports
@@ -97,9 +101,8 @@ point for a single cell.
    links the base's MPI and segfaults at interpreter teardown on older bases,
    *after* every test has passed, and left free the conda solver picks Intel
    MPI, which cannot initialise inside a container.
-3. Set the master script to `run` in the Reproducibility panel. On the
-   `codeocean` branch it arrives as `code/run`, i.e. `/code/run` in the capsule,
-   beside `pyproject.toml`.
+3. Set the master script to `run`. It arrives as `/code/run`, beside
+   `pyproject.toml`.
 4. **Reproducible Run**.
 
 ### Why the package is built at run time
@@ -145,8 +148,8 @@ provenance and are unaffected.
 ```bash
 docker build -t isalsr -f environment/Dockerfile environment/
 docker run --rm --network none \
-    -v "$PWD":/code -v "$PWD/results":/results \
-    -w /code isalsr /code/run
+    -v "$PWD/code":/code -v "$PWD/results":/results \
+    -w /code isalsr /code/run   # mount the repo root; run resolves /code
 ```
 
 `--network none` is the point of the exercise: it proves the image is

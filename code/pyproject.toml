@@ -25,7 +25,11 @@ CMAKE_BUILD_TYPE = "Release"
 name = "isalsr"
 version = "1.0.0"
 description = "Instruction Set and Language for Symbolic Regression"
-readme = "README.md"
+# No `readme` key: the canonical README.md lives at the repository root, which is
+# outside this project directory, and PEP 621 requires the path to be inside it.
+# The root is where GitHub renders it and where the Pages site links from, and
+# the alternative -- a second copy here -- would drift. The package is not
+# published to PyPI, so the long description is unused.
 license = {text = "MIT"}
 requires-python = ">=3.11"
 authors = [

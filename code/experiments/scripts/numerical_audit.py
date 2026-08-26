@@ -42,6 +42,8 @@ log = logging.getLogger(__name__)
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 
+from experiments.scripts.docs_root import docs_dir  # noqa: E402
+
 DEFAULT_MANUSCRIPT_ROOT: Final[str] = (
     "/media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/article/journal/"
     "69c1637a28a81fea2badda9a/article"
@@ -1298,7 +1300,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         type=Path,
-        default=_REPO_ROOT / "docs" / "generated" / "audit",
+        default=docs_dir("generated", "audit"),
         help="Output directory.",
     )
     parser.add_argument(
@@ -1310,7 +1312,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--benchmarks-json",
         type=Path,
-        default=_REPO_ROOT / "docs" / "generated" / "appendix_d" / "appendix_d_benchmarks.json",
+        default=docs_dir("generated", "appendix_d", "appendix_d_benchmarks.json"),
         help="Appendix D.1 benchmark inventory, used to bind dataset sizes.",
     )
     return parser

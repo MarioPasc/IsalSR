@@ -42,6 +42,8 @@ _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from experiments.scripts.docs_root import docs_dir  # noqa: E402
+
 from benchmarks.datasets import (  # noqa: E402
     feynman,
     feynman_remainder,
@@ -1556,7 +1558,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         type=Path,
-        default=_REPO_ROOT / "docs" / "generated" / "appendix_d",
+        default=docs_dir("generated", "appendix_d"),
         help="Output directory.",
     )
     parser.add_argument(
