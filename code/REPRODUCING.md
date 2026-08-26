@@ -8,19 +8,40 @@ everywhere else:
 |---|---|
 | `environment/` | `Dockerfile`, `postInstall`, `requirements.txt` — the capsule image |
 | `metadata/` | `metadata.yml` — capsule title, description, authors |
-| `run` | the capsule's master script, at the **repository root** |
+| `run` | the capsule's master script |
 
-Code Ocean's git import recognises four directory names — `metadata`,
-`environment`, `code`, `data` — and files their contents under the matching
-capsule directory; everything else lands at the capsule root, **which is not
-mounted during a Reproducible Run**.
+## Import from the `codeocean` branch, not from `main`
 
-That is why there is no `code/` directory here and `run` sits at the repository
-root instead. A repository with a top-level `code/` folder gets its sources
-filed under the unmounted capsule root, so the capsule builds cleanly, starts,
-and dies at the first line with `FATAL: no pyproject.toml found`. With no `code/`
-folder to special-case, the whole repository lands at `/code` and `run` sits
-beside `pyproject.toml`.
+Code Ocean's git import recognises exactly four directory names — `code`,
+`data`, `environment`, `metadata` — and files their *contents* into the matching
+capsule directories. Anything outside them is neither mounted during a
+Reproducible Run nor offered as a core file, so the whole project has to sit
+inside `code/`.
+
+Putting it there on `main` would move `pyproject.toml` out of the repository
+root and break `pip install git+…`, the README paths and the docs site. So
+`main` keeps the normal layout and the capsule layout is *derived* onto a
+separate branch:
+
+```
+main                        codeocean
+  pyproject.toml     ->       code/pyproject.toml
+  src/               ->       code/src/
+  tests/             ->       code/tests/
+  run                ->       code/run
+  environment/       ->       environment/     (unchanged)
+  metadata/          ->       metadata/        (unchanged)
+```
+
+Regenerate it after any change to `main`:
+
+```bash
+bash tools/make_codeocean_branch.sh
+git push -f origin codeocean
+```
+
+The branch is derived, never edited by hand — it is rebuilt from scratch each
+time, so there is nothing to merge. Every change belongs on `main`.
 
 ## What the capsule reproduces
 
@@ -54,7 +75,9 @@ point for a single cell.
 
 ## Setting the capsule up
 
-1. **New Capsule → Clone from Git**, pointing at this repository's `main` branch.
+1. **New Capsule → Clone from Git**, pointing at this repository and selecting
+   the **`codeocean`** branch. Importing `main` produces a capsule that cannot
+   see its own sources — see above.
 2. Open the **Environment** editor. The imported `environment/Dockerfile` is
    already complete. Code Ocean accepts base images only from its own registry,
    and which tags a given deployment offers varies, so if the build reports
@@ -122,7 +145,7 @@ provenance and are unaffected.
 docker build -t isalsr -f environment/Dockerfile environment/
 docker run --rm --network none \
     -v "$PWD":/code -v "$PWD/results":/results \
-    -w /code isalsr /code/run
+    -w /code isalsr /code/run   # from a codeocean-branch checkout
 ```
 
 `--network none` is the point of the exercise: it proves the image is
