@@ -1,27 +1,18 @@
 metadata_version: 1
-name: >-
-  IsalSR: an isomorphism-invariant string representation for symbolic regression
-description: >-
-  A symbolic regression solver searches over expressions, and an expression is a
-  labeled directed acyclic graph. A DAG with k internal nodes admits Theta(k!)
-  node numberings that all encode the same expression; each occupies a separate
-  point in the search space and each reaches the fitness evaluator as if it were
-  new. IsalSR defines an instruction set over labeled DAGs whose canonical string
-  is a complete isomorphism invariant, collapsing those Theta(k!) numberings onto
-  one representative.
-
-  The capsule builds the C++ engine from source and runs the verification suite
-  twice, once on the C++ engine and once on the pure-Python reference
-  implementation, establishing that the two are semantically interchangeable.
-  It does not re-run the 12,600-run benchmark campaign, which needs a cluster;
-  REPRODUCING.md documents how to launch it.
+name: Instruction Set and Language for Symbolic Regression (IsalSR)
+description: |-
+  A symbolic regression solver searches over expressions, and an expression is a labeled directed acyclic graph. A DAG with k internal nodes admits Theta(k!) node numberings that all encode the same expression; each occupies a separate point in the search space and each reaches the fitness evaluator as if it were new. IsalSR defines an instruction set over labeled DAGs whose canonical string is a complete isomorphism invariant, collapsing those Theta(k!) numberings onto one representative.
+  The capsule builds the C++ engine from source and runs the verification suite twice, once on the C++ engine and once on the pure-Python reference implementation, establishing that the two are semantically interchangeable. It does not re-run the 12,600-run benchmark campaign, which needs a cluster; REPRODUCING.md documents how to launch it.
 authors:
-  - name: Ezequiel Lopez-Rubio
-    affiliations:
-      - name: Universidad de Malaga
-  - name: Mario Pascual Gonzalez
-    affiliations:
-      - name: Universidad de Malaga
+- name: Ezequiel Lopez-Rubio
+  affiliations:
+  - name: ITIS Software
+- name: Mario Pascual Gonzalez
+  affiliations:
+  - name: Universidad de Malaga
+- name: Karl Khader Thurnhofer Hemsi
+  affiliations:
+  - name: ITIS Software
 corresponding_contributor:
   name: Mario Pascual Gonzalez
   email: mpascual@uma.es

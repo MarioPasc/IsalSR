@@ -1,18 +1,26 @@
 # Reproducing IsalSR
 
 This repository doubles as a [Code Ocean](https://codeocean.com) compute capsule.
-Three top-level folders exist only for that purpose and are inert everywhere else:
+Two top-level folders and one script exist only for that purpose and are inert
+everywhere else:
 
-| Folder | Contents |
+| Path | Contents |
 |---|---|
 | `environment/` | `Dockerfile`, `postInstall`, `requirements.txt` — the capsule image |
-| `code/` | `run` — the capsule's master script |
 | `metadata/` | `metadata.yml` — capsule title, description, authors |
+| `run` | the capsule's master script, at the **repository root** |
 
-Code Ocean's git import recognises these four names (`metadata`, `environment`,
-`code`, `data`) and files them under the matching capsule directory; everything
-else lands at the capsule root. `run` locates the project by searching for
-`pyproject.toml`, so it works whether the source tree ends up at `/code` or at `/`.
+Code Ocean's git import recognises four directory names — `metadata`,
+`environment`, `code`, `data` — and files their contents under the matching
+capsule directory; everything else lands at the capsule root, **which is not
+mounted during a Reproducible Run**.
+
+That is why there is no `code/` directory here and `run` sits at the repository
+root instead. A repository with a top-level `code/` folder gets its sources
+filed under the unmounted capsule root, so the capsule builds cleanly, starts,
+and dies at the first line with `FATAL: no pyproject.toml found`. With no `code/`
+folder to special-case, the whole repository lands at `/code` and `run` sits
+beside `pyproject.toml`.
 
 ## What the capsule reproduces
 
@@ -66,10 +74,9 @@ point for a single cell.
    links the base's MPI and segfaults at interpreter teardown on older bases,
    *after* every test has passed, and left free the conda solver picks Intel
    MPI, which cannot initialise inside a container.
-3. If the source tree landed under **Other Files** rather than `/code`, either
-   leave it — `run` finds it either way — or drag it into `/code`.
-4. Set the master script to `run` in the Reproducibility panel.
-5. **Reproducible Run**.
+3. Set the master script to `run` in the Reproducibility panel. It is at the
+   capsule root, not under a `code/` subdirectory — see above for why.
+4. **Reproducible Run**.
 
 ### Why the package is built at run time
 
