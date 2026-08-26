@@ -1,0 +1,309 @@
+#!/usr/bin/env bash
+# =============================================================================
+# IsalSR Roundoff Experiment Launcher for Picasso HPC
+# =============================================================================
+#
+# Submits SLURM array jobs for the 8 roundoff benchmarks (4 Feynman + 4
+# GP-classic/DSO) for both UDFS and Bingo, baseline + IsalSR variants.
+# These 8 problems bring the total benchmark cohort from 42 to 50.
+#
+# Usage:
+#   bash slurm/roundoff_launch.sh                                          # Submit all 4 groups
+#   bash slurm/roundoff_launch.sh --dry-run                                # Print sbatch only
+#   bash slurm/roundoff_launch.sh --experiment udfs_roundoff_baseline      # Single group
+#   bash slurm/roundoff_launch.sh --analyze-only                           # Only analysis
+#
+# This script reuses slurm/workers/models_experiment_slurm.sh as the worker;
+# the worker auto-detects the "roundoff" benchmark via MODELS_BENCHMARK.
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG="${SCRIPT_DIR}/roundoff_config.yaml"
+WORKER_SCRIPT="${SCRIPT_DIR}/workers/models_experiment_slurm.sh"
+ANALYZE_SCRIPT="${SCRIPT_DIR}/workers/models_analyze_slurm.sh"
+
+eval "$(conda shell.bash hook 2>/dev/null)" || true
+conda activate isalsr 2>/dev/null || true
+
+PYTHON="$(conda run -n isalsr which python 2>/dev/null || echo python3)"
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+DRY_RUN=false
+SINGLE_EXP=""
+ANALYZE_ONLY=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --experiment)
+            SINGLE_EXP="$2"
+            shift 2
+            ;;
+        --analyze-only)
+            ANALYZE_ONLY=true
+            shift
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            echo "Usage: $0 [--dry-run] [--experiment NAME] [--analyze-only]"
+            exit 1
+            ;;
+    esac
+done
+
+# ---------------------------------------------------------------------------
+# Parse roundoff_config.yaml using Python
+# ---------------------------------------------------------------------------
+parse_config() {
+    "$PYTHON" -c "
+import yaml, json, sys
+with open('${CONFIG}') as f:
+    cfg = yaml.safe_load(f)
+json.dump(cfg, sys.stdout)
+"
+}
+
+CONFIG_JSON=$(parse_config)
+
+REPO_DIR=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['repo_dir'])")
+RESULTS_DIR=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['results_dir'])")
+CONDA_ENV=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['conda_env'])")
+CONSTRAINT=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['constraint'])")
+ACCOUNT=$(echo "$CONFIG_JSON" | "$PYTHON" -c "import json,sys; print(json.load(sys.stdin)['account'])")
+
+echo "=============================================="
+echo "IsalSR Roundoff Experiment Launcher"
+echo "=============================================="
+echo "Config:     ${CONFIG}"
+echo "Repo:       ${REPO_DIR}"
+echo "Results:    ${RESULTS_DIR}"
+echo "Conda env:  ${CONDA_ENV}"
+echo "Constraint: ${CONSTRAINT}"
+echo "Account:    ${ACCOUNT}"
+echo "Dry run:    ${DRY_RUN}"
+echo ""
+
+# ---------------------------------------------------------------------------
+get_exp_field() {
+    local exp_name="$1"
+    local field="$2"
+    echo "$CONFIG_JSON" | "$PYTHON" -c "
+import json, sys
+cfg = json.load(sys.stdin)
+exp = cfg['experiments'].get('${exp_name}', {})
+print(exp.get('${field}', ''))
+"
+}
+
+# ---------------------------------------------------------------------------
+# Submit a single experiment array job. Returns: job ID on stdout.
+# ---------------------------------------------------------------------------
+submit_experiment() {
+    local exp_name="$1"
+    local dep_flag="${2:-}"
+
+    local enabled
+    enabled=$(get_exp_field "$exp_name" "enabled")
+    if [[ "$enabled" != "True" ]]; then
+        echo "[SKIP] ${exp_name}: disabled in config" >&2
+        return 0
+    fi
+
+    local method benchmark variant config_file n_seeds n_problems time_limit cpus mem_gb
+    method=$(get_exp_field "$exp_name" "method")
+    benchmark=$(get_exp_field "$exp_name" "benchmark")
+    variant=$(get_exp_field "$exp_name" "variant")
+    config_file=$(get_exp_field "$exp_name" "config")
+    n_seeds=$(get_exp_field "$exp_name" "n_seeds")
+    n_problems=$(get_exp_field "$exp_name" "n_problems")
+    time_limit=$(get_exp_field "$exp_name" "time_limit")
+    cpus=$(get_exp_field "$exp_name" "cpus")
+    mem_gb=$(get_exp_field "$exp_name" "mem_gb")
+
+    local array_size=$((n_seeds * n_problems))
+    local out_dir="${RESULTS_DIR}/slurm_logs/${exp_name}"
+
+    echo "[${exp_name}]" >&2
+    echo "  Method:    ${method}" >&2
+    echo "  Benchmark: ${benchmark}" >&2
+    echo "  Variant:   ${variant}" >&2
+    echo "  Array:     1-${array_size} (${n_problems} problems x ${n_seeds} seeds)" >&2
+    echo "  Time:      ${time_limit}" >&2
+    echo "  CPUs:      ${cpus}" >&2
+    echo "  Mem:       ${mem_gb}G" >&2
+    echo "  Out:       ${out_dir}" >&2
+    if [[ -n "$dep_flag" ]]; then
+        echo "  Depends:   ${dep_flag}" >&2
+    fi
+
+    local sbatch_cmd="sbatch \
+        --job-name=isalsr_${exp_name} \
+        --output=${out_dir}/slurm_%A_%a.out \
+        --error=${out_dir}/slurm_%A_%a.err \
+        --time=${time_limit} \
+        --cpus-per-task=${cpus} \
+        --mem=${mem_gb}G \
+        --constraint=${CONSTRAINT} \
+        --account=${ACCOUNT} \
+        --chdir=${REPO_DIR} \
+        --array=1-${array_size}%50 \
+        ${dep_flag} \
+        --export=ALL,ISALSR_REPO_DIR=${REPO_DIR},MODELS_METHOD=${method},MODELS_BENCHMARK=${benchmark},MODELS_VARIANT=${variant},MODELS_EXPERIMENT_CONFIG=${REPO_DIR}/${config_file},MODELS_N_SEEDS=${n_seeds},MODELS_RESULTS_DIR=${RESULTS_DIR} \
+        ${WORKER_SCRIPT}"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "  [DRY RUN] Would execute:" >&2
+        echo "    ${sbatch_cmd}" >&2
+        echo "" >&2
+        echo "12345"
+        return 0
+    fi
+
+    mkdir -p "${out_dir}"
+    echo "  Submitting..." >&2
+    local sbatch_output
+    sbatch_output=$(eval "${sbatch_cmd}" 2>&1)
+    echo "  ${sbatch_output}" >&2
+    echo "" >&2
+
+    local job_id
+    job_id=$(echo "$sbatch_output" | grep -oP 'job\s+\K[0-9]+' | head -1)
+    if [[ -z "$job_id" ]]; then
+        job_id=$(echo "$sbatch_output" | grep -oP '[0-9]+' | head -1)
+    fi
+    echo "$job_id"
+}
+
+# ---------------------------------------------------------------------------
+# Submit analysis job with dependencies
+# ---------------------------------------------------------------------------
+submit_analysis() {
+    local dep_flag="$1"
+
+    local time_limit cpus mem_gb methods benchmarks
+    time_limit=$(get_exp_field "roundoff_analyze" "time_limit")
+    cpus=$(get_exp_field "roundoff_analyze" "cpus")
+    mem_gb=$(get_exp_field "roundoff_analyze" "mem_gb")
+    methods=$(get_exp_field "roundoff_analyze" "methods")
+    benchmarks=$(get_exp_field "roundoff_analyze" "benchmarks")
+
+    local out_dir="${RESULTS_DIR}/slurm_logs/roundoff_analyze"
+
+    echo "[roundoff_analyze]" >&2
+    echo "  Methods:    ${methods}" >&2
+    echo "  Benchmarks: ${benchmarks}" >&2
+    echo "  Time:       ${time_limit}" >&2
+    echo "  CPUs:       ${cpus}" >&2
+    echo "  Mem:        ${mem_gb}G" >&2
+    if [[ -n "$dep_flag" ]]; then
+        echo "  Dependency: ${dep_flag}" >&2
+    fi
+    echo "  Out:        ${out_dir}" >&2
+
+    export ISALSR_REPO_DIR="${REPO_DIR}"
+    export MODELS_RESULTS_DIR="${RESULTS_DIR}"
+    export MODELS_METHODS="${methods}"
+    export MODELS_BENCHMARKS="${benchmarks}"
+
+    local sbatch_cmd="sbatch \
+        --job-name=isalsr_roundoff_analyze \
+        --output=${out_dir}/slurm_%j.out \
+        --error=${out_dir}/slurm_%j.err \
+        --time=${time_limit} \
+        --cpus-per-task=${cpus} \
+        --mem=${mem_gb}G \
+        --constraint=${CONSTRAINT} \
+        --account=${ACCOUNT} \
+        --chdir=${REPO_DIR} \
+        --export=ALL \
+        ${dep_flag} \
+        ${ANALYZE_SCRIPT}"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "  [DRY RUN] Would execute:" >&2
+        echo "    ${sbatch_cmd}" >&2
+        echo "" >&2
+        return 0
+    fi
+
+    mkdir -p "${out_dir}"
+    echo "  Submitting..." >&2
+    local sbatch_output
+    sbatch_output=$(eval "${sbatch_cmd}" 2>&1)
+    echo "  ${sbatch_output}" >&2
+    echo "" >&2
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+EXPERIMENT_GROUPS=(
+    udfs_roundoff_baseline
+    udfs_roundoff_isalsr
+    bingo_roundoff_baseline
+    bingo_roundoff_isalsr
+)
+
+if [[ "$ANALYZE_ONLY" == "true" ]]; then
+    echo "=== Submitting analysis job only ==="
+    submit_analysis ""
+elif [[ -n "$SINGLE_EXP" ]]; then
+    if [[ "$SINGLE_EXP" == "roundoff_analyze" ]]; then
+        submit_analysis ""
+    else
+        submit_experiment "$SINGLE_EXP"
+    fi
+else
+    # =========================================================================
+    # Phased submission: UDFS first, Bingo afterany, analysis at the end.
+    # Each array throttled to %50 concurrent tasks (set in --array flag).
+    # =========================================================================
+    echo "=== Phased submission: UDFS -> Bingo -> Analysis ==="
+    echo ""
+
+    echo "--- Phase 1: UDFS roundoff experiments ---"
+    PHASE1_IDS=()
+    for exp in udfs_roundoff_baseline udfs_roundoff_isalsr; do
+        job_id=$(submit_experiment "$exp")
+        if [[ -n "$job_id" && "$job_id" != "0" ]]; then
+            PHASE1_IDS+=("$job_id")
+        fi
+    done
+
+    echo "--- Phase 2: Bingo roundoff experiments (after UDFS) ---"
+    PHASE2_IDS=()
+    if [[ ${#PHASE1_IDS[@]} -gt 0 ]]; then
+        P1_DEP=$(IFS=:; echo "${PHASE1_IDS[*]}")
+        BINGO_DEP="--dependency=afterany:${P1_DEP}"
+        echo "  Bingo depends on UDFS jobs: ${P1_DEP}"
+        echo ""
+    else
+        BINGO_DEP=""
+    fi
+    for exp in bingo_roundoff_baseline bingo_roundoff_isalsr; do
+        job_id=$(submit_experiment "$exp" "$BINGO_DEP")
+        if [[ -n "$job_id" && "$job_id" != "0" ]]; then
+            PHASE2_IDS+=("$job_id")
+        fi
+    done
+
+    ALL_JOB_IDS=("${PHASE1_IDS[@]}" "${PHASE2_IDS[@]}")
+    if [[ ${#ALL_JOB_IDS[@]} -gt 0 ]]; then
+        ALL_DEP=$(IFS=:; echo "${ALL_JOB_IDS[*]}")
+        echo "--- Phase 3: Analysis (after all experiments) ---"
+        echo "  Depends on ${#ALL_JOB_IDS[@]} experiment jobs"
+        echo ""
+        submit_analysis "--dependency=afterany:${ALL_DEP}"
+    else
+        echo ""
+        echo "[WARN] No experiment jobs submitted. Skipping analysis."
+    fi
+fi
+
+echo "Done."

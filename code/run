@@ -1,0 +1,273 @@
+#!/usr/bin/env bash
+#
+# Code Ocean master script for the IsalSR capsule.
+#
+# Reproduces the artifact's verification suite: it builds the C++ engine from
+# source and runs the whole test suite twice -- once on the C++ engine and once
+# on the pure-Python engine -- because the paper's numbers were produced with
+# the C++ engine and the two are claimed to be semantically identical.  Running
+# both is what turns that claim into evidence rather than an assertion.
+#
+# It does NOT re-run the 12,600-run SR campaign.  That is 12 h per run on a
+# cluster; see REPRODUCING.md for how to launch it.
+#
+set -euo pipefail
+
+# --------------------------------------------------------------------------- #
+# Locate the project root
+# --------------------------------------------------------------------------- #
+# On `main` this script sits at the repository root, beside pyproject.toml, so
+# it can be run directly during development.  In the capsule it sits at
+# `code/run`, beside the same pyproject.toml, because the `codeocean` branch
+# moves the whole project under `code/`.
+#
+# That move is not cosmetic.  Code Ocean's git import recognises only four
+# directory names -- code, data, environment, metadata -- and files their
+# *contents* into the matching capsule directories.  Anything outside them is
+# neither mounted during a Reproducible Run nor selectable as the master script.
+# So a layout with the sources at the repository root yields a capsule that
+# either cannot see its own code, or cannot start.  Both failure modes were
+# observed.  See tools/make_codeocean_branch.sh.
+#
+# The search below still tolerates other layouts, and on failure reports what it
+# actually saw rather than only that it failed.
+find_root() {
+    local candidate found
+    for candidate in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" "${PWD}" /code /; do
+        if [ -f "${candidate}/pyproject.toml" ]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+    # Last resort: the tree may be nested a level or two under /code.
+    found="$(find /code -maxdepth 3 -name pyproject.toml -print -quit 2>/dev/null || true)"
+    if [ -n "${found}" ]; then
+        dirname "${found}"
+        return 0
+    fi
+
+    {
+        echo "FATAL: no pyproject.toml found in the capsule; cannot locate IsalSR."
+        echo
+        echo "This almost always means the capsule was built from a revision that"
+        echo "still had a top-level code/ directory, so the sources were filed"
+        echo "under the capsule root instead of /code and are not mounted here."
+        echo "Re-import from a revision where run sits at the repository root."
+        echo
+        echo "script : ${BASH_SOURCE[0]}"
+        echo "cwd    : ${PWD}"
+        echo "--- /code ---"; ls -la /code 2>&1 | head -40
+        echo "--- / ---";     ls -la /     2>&1 | head -40
+    } >&2
+    return 1
+}
+
+ROOT="$(find_root)"
+RESULTS="${RESULTS_DIR:-/results}"
+mkdir -p "${RESULTS}"
+cd "${ROOT}"
+
+# --------------------------------------------------------------------------- #
+# Locate the interpreter
+# --------------------------------------------------------------------------- #
+# postInstall installs Python 3.11 at a private prefix and the Dockerfile puts it
+# on PATH, but the Environment Editor rewrites the Dockerfile whenever the base
+# image changes and may drop that ENV line.  Resolve by absolute path so the run
+# does not depend on it; the base image's own Python is generally too old.
+if [ -x /opt/isalsr-conda/bin/python ]; then
+    PYTHON=/opt/isalsr-conda/bin/python
+    export PATH="/opt/isalsr-conda/bin:${PATH}"
+else
+    PYTHON="$(command -v python3 || command -v python)"
+fi
+
+echo "IsalSR capsule"
+echo "  project root : ${ROOT}"
+echo "  results      : ${RESULTS}"
+echo "  python       : ${PYTHON} ($("${PYTHON}" -c 'import sys; print(sys.version.split()[0])'))"
+echo
+
+"${PYTHON}" - <<'PY'
+import sys
+
+if sys.version_info[:2] < (3, 11):
+    sys.exit(
+        f"FATAL: IsalSR requires Python >= 3.11, found {sys.version.split()[0]}. "
+        "The capsule's interpreter is installed by environment/postInstall at "
+        "/opt/isalsr-conda; if it is missing, rebuild the environment."
+    )
+PY
+
+# --------------------------------------------------------------------------- #
+# Build the C++ engine
+# --------------------------------------------------------------------------- #
+# This is the one install that cannot happen at image-build time: the
+# post-install script runs before /code is mounted.  It therefore runs here,
+# with no network, which forces two flags:
+#
+#   --no-build-isolation  pip may not fetch scikit-build-core into a throwaway
+#                         env; the pinned copy in the image is used instead.
+#   --no-index            nothing may be resolved from PyPI. Every runtime
+#                         dependency is already installed, hence --no-deps.
+#
+# Editable rather than a wheel, to match the installation the development
+# workflow documents and the reported results were produced under.
+echo "== building isalsr (C++ engine) =="
+# scikit-build-core's build-dir is relative to the source tree.  Redirect it to
+# /tmp so the build does not depend on the project root being writable, which
+# differs between a Reproducible Run and a Cloud Workstation.
+export SKBUILD_BUILD_DIR="${TMPDIR:-/tmp}/isalsr-build/{wheel_tag}"
+
+# Build with the compiler postInstall pinned, not with the base image's, which
+# may predate -march=x86-64-v3.  conda-forge exports CC/CXX only from an
+# activation script that a Reproducible Run never sources, so postInstall
+# recorded them to a file.
+if [ -f /opt/isalsr-conda/toolchain.env ]; then
+    # shellcheck disable=SC1091
+    . /opt/isalsr-conda/toolchain.env
+    export CC CXX
+    echo "  toolchain    : $(${CXX} -dumpfullversion) (${CXX})"
+fi
+
+"${PYTHON}" -m pip install --no-build-isolation --no-deps --no-index -e . 2>&1 \
+    | tail -5
+
+# The extension resolves from site-packages while the Python sources resolve
+# from the repository, so a failed compile is invisible unless it is asserted.
+"${PYTHON}" - <<'PY'
+import sys
+from isalsr.core import backends
+
+info = backends.build_info()
+print(f"engine: {backends.engine()}")
+for key in ("build_hash", "isa_level", "compiler", "cplusplus"):
+    print(f"  {key}: {info.get(key)}")
+if backends.engine() != "cpp":
+    print("FATAL: the C++ extension did not build; results would not be "
+          "comparable to the reported ones.", file=sys.stderr)
+    sys.exit(1)
+PY
+echo
+
+# --------------------------------------------------------------------------- #
+# Provenance
+# --------------------------------------------------------------------------- #
+{
+    echo "# IsalSR capsule run environment"
+    echo
+    echo '```'
+    "${PYTHON}" -c 'import sys; print("python:", sys.version)'
+    "${PYTHON}" -c 'from isalsr.core import backends; import json; print("backends:", json.dumps(backends.build_info()))'
+    echo "cmake:  $(cmake --version | head -1)"
+    echo "gcc:    $(gcc --version | head -1)"
+    echo "cpus:   $(nproc)"
+    echo '```'
+    echo
+    echo '## Installed packages'
+    echo
+    echo '```'
+    "${PYTHON}" -m pip freeze
+    echo '```'
+} > "${RESULTS}/environment.md"
+
+# --------------------------------------------------------------------------- #
+# Test suite, on both engines
+# --------------------------------------------------------------------------- #
+# A non-zero pytest exit must not abort the script before the reports are
+# written, so each pass records its own status and the script exits on the
+# aggregate at the end.
+status=0
+
+# `-m "not manuscript"` deselects the two modules that check the LaTeX
+# manuscript against the code.  The manuscript is not part of this repository,
+# so those tests can only skip here; deselecting them keeps the report free of
+# skips that would otherwise read as untested behaviour.
+run_suite() {
+    local label="$1"; shift
+    echo "== test suite (${label} engine) =="
+    if env "$@" "${PYTHON}" -m pytest tests/ \
+            -p no:cacheprovider \
+            -m "not manuscript" \
+            --junitxml="${RESULTS}/pytest-${label}.xml" \
+            -rfEs -q \
+            > "${RESULTS}/pytest-${label}.log" 2>&1; then
+        echo "   PASS"
+    else
+        status=1
+        echo "   FAIL (see ${RESULTS}/pytest-${label}.log)"
+    fi
+    tail -1 "${RESULTS}/pytest-${label}.log"
+    echo
+}
+
+run_suite cpp    ISALSR_ENGINE=cpp
+run_suite python ISALSR_ENGINE=python
+
+# --------------------------------------------------------------------------- #
+# Static analysis
+# --------------------------------------------------------------------------- #
+echo "== ruff =="
+if "${PYTHON}" -m ruff check src/ tests/ > "${RESULTS}/ruff.log" 2>&1; then
+    echo "   PASS"
+else
+    status=1
+    echo "   FAIL (see ${RESULTS}/ruff.log)"
+fi
+
+echo "== mypy (strict) =="
+if "${PYTHON}" -m mypy src/isalsr/ > "${RESULTS}/mypy.log" 2>&1; then
+    echo "   PASS"
+else
+    status=1
+    echo "   FAIL (see ${RESULTS}/mypy.log)"
+fi
+echo
+
+# --------------------------------------------------------------------------- #
+# Summary
+# --------------------------------------------------------------------------- #
+"${PYTHON}" - "${RESULTS}" <<'PY'
+"""Fold the two JUnit reports into one Markdown summary."""
+import pathlib
+import sys
+import xml.etree.ElementTree as ET
+
+results = pathlib.Path(sys.argv[1])
+rows = []
+for engine in ("cpp", "python"):
+    path = results / f"pytest-{engine}.xml"
+    if not path.is_file():
+        rows.append((engine, "—", "—", "—", "—", "—"))
+        continue
+    suite = ET.parse(path).getroot()
+    suite = suite.find("testsuite") if suite.tag == "testsuites" else suite
+    get = lambda k: int(suite.get(k, 0))  # noqa: E731
+    total = get("tests")
+    failures, errors, skipped = get("failures"), get("errors"), get("skipped")
+    rows.append((
+        engine,
+        str(total),
+        str(total - failures - errors - skipped),
+        str(failures + errors),
+        str(skipped),
+        f'{float(suite.get("time", 0.0)):.1f}s',
+    ))
+
+lines = [
+    "# IsalSR — verification summary",
+    "",
+    "The suite runs twice.  The C++ engine is the one the reported results were",
+    "produced with; the pure-Python engine is the reference implementation.  Both",
+    "must pass identically, which is what makes the two interchangeable.",
+    "",
+    "| engine | tests | passed | failed | skipped | time |",
+    "|---|---:|---:|---:|---:|---:|",
+]
+lines += ["| " + " | ".join(r) + " |" for r in rows]
+lines += ["", "Full logs: `pytest-cpp.log`, `pytest-python.log`, `ruff.log`, `mypy.log`.",
+          "Environment and exact package versions: `environment.md`.", ""]
+(results / "summary.md").write_text("\n".join(lines), encoding="utf-8")
+print("\n".join(lines))
+PY
+
+exit "${status}"

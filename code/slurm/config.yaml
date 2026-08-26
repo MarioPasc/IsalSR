@@ -1,0 +1,237 @@
+# IsalSR Benchmark Configuration for Picasso HPC
+# ===================================================
+#
+# Central config read by slurm/launch.sh and individual worker scripts.
+# Paths assume the Picasso filesystem layout.
+
+# Paths
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu           # Any CPU node (Picasso recommended default)
+account: tic_163_uma
+
+# =================================================================
+# arXiv Experiments (active)
+# =================================================================
+# These experiments validate the canonical string representation
+# without comparing against other SR methods.
+
+experiments:
+  # --- Experiment 1: Shortest Path (illustrative, fast) ---
+  exp1_shortest_path:
+    enabled: true
+    time_limit: "00:30:00"
+    cpus: 1
+    mem_gb: 4
+
+  # --- Experiment 2: Neighborhood (illustrative, fast) ---
+  exp2_neighborhood:
+    enabled: true
+    time_limit: "00:30:00"
+    cpus: 1
+    mem_gb: 4
+
+  # --- One-to-One Property Validation (P1-P4) ---
+  # Array job: one task per num_vars={1,2,3}.
+  # Validates round-trip fidelity, acyclicity, canonical invariance,
+  # and evaluation preservation with Clopper-Pearson 95% CIs.
+  onetoone_properties:
+    enabled: true
+    n_strings: 5000
+    max_tokens: 20
+    timeout: 2.0
+    seed: 42
+    time_limit: "02:00:00"    # per array task (one num_vars)
+    cpus: 1
+    mem_gb: 4
+    n_runs: 3                 # array: 1 task per num_vars={1,2,3}
+
+  # --- Experiment 4: Search Space Reduction (P5) ---
+  # Array job: one task per max_tokens value.
+  # T=25,30 removed: >50% canon timeouts, wasted wall-clock, no scientific value.
+  # Timeout reduced 2s→1s to halve time wasted on unavoidable timeouts.
+  search_space_analysis:
+    enabled: true
+    n_strings: 1000
+    max_tokens_list: "10,15,20"
+    include_feynman: true
+    seed: 42
+    time_limit: "06:00:00"    # per array task; T=20 needs ~2.6h with 1000 strings
+    cpus: 1
+    mem_gb: 8
+    n_runs: 3                 # array size = number of max_tokens values
+
+  # --- Experiment 7: Search Space Permutation Analysis (O(k!) validation) ---
+  # Array job: one task per k value (1..max_k).
+  # For each k: generates n_dags unique random DAGs, then creates all k!
+  # (or sampled) permutations of internal node IDs to directly measure the
+  # number of distinct representations per expression. Validates the paper's
+  # central O(k!) search space reduction claim.
+  search_space_permutation:
+    enabled: true
+    max_k: 15
+    num_vars_list: "1,2,3"    # dispatch grid: max_k × len(num_vars_list)
+    n_dags: 100               # unique DAGs per (k, m)
+    n_perms_sample: 100000    # max permutations (exhaustive if k! <= this)
+    n_canon_verify: 100       # canonical invariance verification samples
+    canon_timeout: 5.0        # seconds per canonicalization
+    seed: 42
+    time_limit: "08:00:00"    # per array task
+    cpus: 1
+    mem_gb: 8
+    n_runs: 45                # array: 15 k-values × 3 m-values = 45 tasks
+
+  # --- Experiment 3: Canonicalization Time vs Nodes ---
+  # Array job: one task per n_internal value (1..max_nodes).
+  # Each task runs all num_vars={1,2,3} for that n_internal.
+  exp3_canonicalization_time:
+    enabled: true
+    min_nodes: 1
+    max_nodes: 15
+    samples_per_node: 200
+    timeout: 120
+    seed: 42
+    time_limit: "08:00:00"    # per array task
+    cpus: 1
+    mem_gb: 8
+    n_runs: 15                # array size = max_nodes
+
+  # --- Experiment 5: Pruning Accuracy ---
+  # Array job: one task per n_internal value (1..max_nodes).
+  # Compares exhaustive vs pruned canonicalization.
+  exp5_pruning_accuracy:
+    enabled: true
+    min_nodes: 1
+    max_nodes: 12
+    samples_per_node: 500
+    timeout: 60
+    seed: 42
+    time_limit: "12:00:00"    # per array task (exhaustive is slow for large k)
+    cpus: 1
+    mem_gb: 8
+    n_runs: 12                # array size = max_nodes
+
+  # --- Experiment 6: String Compression ---
+  # Array job: one task per num_vars={1,2,3}.
+  exp6_string_compression:
+    enabled: true
+    n_strings: 10000
+    max_tokens: 30
+    timeout: 2.0              # canonicalization timeout per string (seconds)
+    seed: 42
+    time_limit: "04:00:00"    # per array task (one num_vars)
+    cpus: 1
+    mem_gb: 4
+    n_runs: 3                 # array: 1 task per num_vars={1,2,3}
+
+  # --- Post-processing: aggregate arXiv results ---
+  # Submitted with --dependency=afterany on all experiment jobs.
+  analyze_arxiv:
+    enabled: true
+    time_limit: "01:00:00"
+    cpus: 1
+    mem_gb: 4
+
+  # =================================================================
+  # Precomputed Canonical String Cache (DISABLED for arXiv)
+  # =================================================================
+  # These are used for model-based experiments (UDFS, Bingo).
+  # Re-enable when running comparative experiments via models_launch.sh.
+
+  generate_cache_nguyen_1var:
+    enabled: true
+    num_variables: 1
+    ops: "+,*,-,/,s,c,e,l"
+    n_strings_per_task: 100000
+    max_tokens: 30
+    n_shards: 50
+    seed_base: 42
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  generate_cache_nguyen_2var:
+    enabled: true
+    num_variables: 2
+    ops: "+,*,-,/,s,c,e,l"
+    n_strings_per_task: 100000
+    max_tokens: 30
+    n_shards: 50
+    seed_base: 42
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  generate_cache_feynman_1var:
+    enabled: true
+    num_variables: 1
+    ops: "+,*,-,/,s,c,e,l,r,^"
+    n_strings_per_task: 100000
+    max_tokens: 30
+    n_shards: 50
+    seed_base: 42
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  generate_cache_feynman_2var:
+    enabled: true
+    num_variables: 2
+    ops: "+,*,-,/,s,c,e,l,r,^"
+    n_strings_per_task: 100000
+    max_tokens: 30
+    n_shards: 50
+    seed_base: 42
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  generate_cache_feynman_3var:
+    enabled: true
+    num_variables: 3
+    ops: "+,*,-,/,s,c,e,l,r,^"
+    n_strings_per_task: 100000
+    max_tokens: 30
+    n_shards: 50
+    seed_base: 42
+    exhaustive_timeout: 10
+    time_limit: "04:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  merge_cache_nguyen_1var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  merge_cache_nguyen_2var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  merge_cache_feynman_1var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  merge_cache_feynman_2var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  merge_cache_feynman_3var:
+    enabled: true
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 32

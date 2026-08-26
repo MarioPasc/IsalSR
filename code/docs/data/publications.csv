@@ -1,0 +1,30 @@
+id,year,type,badge_color,title,authors,abstract,arxiv,doi,pdf,bibtex
+bib-isalchem,2025,Journal,amber,Representation of Molecules by Sequences of Instructions,"Karl Thurnhofer-Hemsi, Iván García-Aguilar, José David Fernández-Rodriguez, Ezequiel López-Rubio","IsalChem applies instruction string encoding to molecular graphs. Molecules are represented as labeled graphs where atoms are nodes and bonds are edges. The encoding framework produces compact string representations that capture molecular topology, enabling string-based techniques for molecular comparison, generation, and classification. Published in the Journal of Chemical Information and Modeling (ACS Publications).",,https://doi.org/10.1021/acs.jcim.5c00572,,"@article{thurnhofer2025representation,
+  title={Representation of Molecules by Sequences of Instructions},
+  author={Thurnhofer-Hemsi, Karl and Garc{\'\\i}a-Aguilar, Iv{\\'a}n and Fern{\\'a}ndez-Rodriguez, Jos{\\'e} David and L{\\'o}pez-Rubio, Ezequiel},
+  journal={Journal of Chemical Information and Modeling},
+  volume={65},
+  number={15},
+  pages={7936--7955},
+  year={2025},
+  publisher={ACS Publications}
+}"
+bib-isalgraph-2025,2025,arXiv preprint,green,Representation of the structure of graphs by sequences of instructions,Ezequiel Lopez-Rubio,This paper presents the foundational theory for representing graph structures using instruction sequences. A graph is encoded as a string over a finite alphabet by traversing it with a circular doubly linked list equipped with two pointers. The encoding procedure is reversible: the original graph can be reconstructed from its string representation.,https://arxiv.org/abs/2512.10429,,https://arxiv.org/pdf/2512.10429,"@misc{lopezrubio2025representationstructuregraphssequences,
+      title={Representation of the structure of graphs by sequences of instructions},
+      author={Ezequiel Lopez-Rubio},
+      year={2025},
+      eprint={2512.10429},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2512.10429},
+}"
+bib-isalgraph-2026,2026,arXiv preprint,green,Instruction set for the representation of graphs,"Ezequiel Lopez-Rubio, Mario Pascual-Gonzalez","IsalGraph: a framework for representing the structure of finite simple graphs as strings over a 9-character instruction alphabet. Using a circular doubly linked list (CDLL) with two mobile pointers, any graph can be encoded into a compact instruction sequence and faithfully decoded back. The canonical string is a complete graph invariant: two graphs are isomorphic if and only if their canonical strings coincide.",https://arxiv.org/abs/2603.11039,,https://arxiv.org/pdf/2603.11039,"@misc{lopezrubio2026instructionsetrepresentationgraphs,
+      title={Instruction set for the representation of graphs},
+      author={Ezequiel Lopez-Rubio and Mario Pascual-Gonzalez},
+      year={2026},
+      eprint={2603.11039},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2603.11039},
+}"
+bib-isalsr,2026,Under review,amber,Representation of Directed Acyclic Graphs by Sequences of Instructions for Symbolic Regression,"Ezequiel López-Rubio, Mario Pascual-González, Karl Thurnhofer-Hemsi","Symbolic regression searches a discrete space of expressions encoded as labeled directed acyclic graphs (DAGs); a DAG with k internal nodes admits Theta(k!) equivalent node orderings of the same expression, so structurally identical candidates repeatedly reach the fitness evaluator and consume search budget. We introduce IsalSR (Instruction Set and Language for Symbolic Regression), an encoding that maps every labeled DAG to a canonical string over a two-tier alphabet of structural and operation-labeled tokens. A greedy algorithm guided by 1-Weisfeiler-Leman (1-WL) subtree hashing computes it. Subtraction and division are absorbed as unary operators, so only the power node remains non-commutative. We prove that the canonical string is a complete labeled-DAG invariant under a reachability condition: two expressions share their string if and only if their DAGs are isomorphic. IsalSR integrates at the evaluation boundary and needs no change to the host search algorithm. We validate it on a systematic enumerator (UDFS) and an evolutionary search (Bingo) over a 70-problem suite assembled from nine published benchmarks, against both the host solvers' native representation and a naive hash of a fixed-order DAG serialization. Canonicalization eliminates a mean of 38.1% of evaluations on UDFS and 43.7% on Bingo, on every one of the 70 problems under both hosts. A paired test across problems puts its reduction factor above that of the naive hash at a Cohen's d of 2.54 and 7.05, both at p < 1e-12. Canonicalization consumes 0.04% of run time on UDFS and 16.1% on Bingo. Submitted to IEEE Transactions on Pattern Analysis and Machine Intelligence.",,,,

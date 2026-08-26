@@ -1,0 +1,54 @@
+# UDFS experiment on hard-tier benchmarks (10 problems)
+# References:
+#   docs/md_files/changes/hard_benchmark_proposal.md (2026-04-13)
+#   benchmarks/datasets/hard.py
+#
+# Operator-set extension (sqrt, pow): justified per Plan-agent review.
+# All other UDFS hyperparameters match production Nguyen/Feynman exactly.
+# processes: 1 is REQUIRED — UDFS spawn-mode workers bypass the IsalSR monkeypatch.
+#
+# Korns-12 is subsampled to 2000 train / 2000 test (vs canonical 10k/10k) inside
+# benchmarks.datasets.hard (n_*_override keys). Documented deviation.
+
+experiment:
+  name: udfs_hard
+  method: udfs
+  n_seeds: 30
+
+benchmarks:
+  hard:
+    problems: all
+    train_size: 1000      # Used by Feynman-extended (uniform); ignored by grid problems.
+    test_size: 250
+
+udfs:
+  n_calc_nodes: 5
+  max_orders: 200000
+  max_time: 43200       # 12h algorithm budget (standard).
+  processes: 1
+  mode: hierarchical
+  k: 2
+  stop_thresh: 1.0e-10
+  use_tan: false
+  # Informational only: to_dag_regressor_kwargs() does not forward this field and
+  # DAGRegressor has no such parameter. The search always enumerates the vendor's
+  # own table (vendor/DAG_search/config.py, NODE_ARITY): binary {+, *, sub_l,
+  # sub_r, div_l, div_r}, unary {id, inv, neg, sin, cos, exp, log, sqrt}, no pow.
+  # The list below records that fixed set and is identical in every UDFS config.
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log", "sqrt", "neg", "inv"]
+  snapshot_frequency: 1000
+  # Shadow sketches OFF for the campaign (audit.md §7.3, Mario 2026-08-04).
+  # They cost 17.6 % of Bingo's wall clock / 0.03 % of UDFS's, are paid by the
+  # isalsr arm alone inside a fixed budget, and would penalise exactly the arm
+  # carrying the headline claim.  The fixed-order numbers come from the Stage D
+  # trace cell and the D3 replay instead.  Read by the isalsr/hash runners via
+  # config.get("shadow_hash"); UDFSConfig.from_dict filters it out of the
+  # dataclass, so it perturbs no host parameter.
+  shadow_hash: false
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

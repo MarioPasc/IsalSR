@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team — IsalSR</title>
+  <meta name="description" content="The IsalSR research team at the University of Málaga.">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="css/variables.css?v=1">
+  <link rel="stylesheet" href="css/reset.css?v=1">
+  <link rel="stylesheet" href="css/typography.css?v=1">
+  <link rel="stylesheet" href="css/layout.css?v=1">
+  <link rel="stylesheet" href="css/components.css?v=1">
+  <link rel="stylesheet" href="css/nav.css?v=1">
+  <link rel="stylesheet" href="css/footer.css?v=1">
+  <link rel="stylesheet" href="css/team.css?v=1">
+</head>
+<body data-page="team">
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+  <div id="site-nav"></div>
+
+  <main id="main-content" class="container">
+    <header class="team-header" style="text-align: center; padding: var(--space-3xl) 0 var(--space-2xl);">
+      <h1>Team</h1>
+      <p style="max-width: 600px; margin: 0 auto;">The researchers behind IsalSR at the University of M&aacute;laga.</p>
+    </header>
+
+    <!-- Team cards rendered from CSV -->
+    <div id="team-grid-container" class="team-grid">
+      <p style="color: var(--text-tertiary); text-align: center;">Loading team data&hellip;</p>
+    </div>
+
+    <!-- Lab section -->
+    <section class="lab-section" style="max-width: 800px; margin: var(--space-3xl) auto;">
+      <div class="card" style="padding: var(--space-2xl); text-align: center;">
+        <img src="images/icai-optimized.png" alt="ICAI Research Group logo" loading="lazy" style="display: block; max-width: 200px; height: auto; margin: 0 auto var(--space-lg);">
+        <h2 style="margin-bottom: var(--space-sm);">ICAI Research Group</h2>
+        <p style="max-width: 500px; margin: 0 auto; font-size: var(--text-sm); color: var(--text-secondary);">
+          The ICAI (Inteligencia Computacional y An&aacute;lisis de Im&aacute;genes) research group
+          at the University of M&aacute;laga focuses on machine learning, computer vision,
+          graph theory, and neural network architectures.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="js/theme.js"></script>
+  <script src="js/components.js"></script>
+  <script src="js/data-loader.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      IsalSR.loadTeamData();
+    });
+  </script>
+</body>
+</html>

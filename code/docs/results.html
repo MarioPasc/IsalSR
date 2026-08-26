@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results — IsalSR</title>
+  <meta name="description" content="Three-arm evaluation of IsalSR on UDFS and Bingo over 70 benchmark problems: search-space reduction, regression quality, and computational cost.">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="css/variables.css?v=2">
+  <link rel="stylesheet" href="css/reset.css?v=2">
+  <link rel="stylesheet" href="css/typography.css?v=2">
+  <link rel="stylesheet" href="css/layout.css?v=2">
+  <link rel="stylesheet" href="css/components.css?v=2">
+  <link rel="stylesheet" href="css/nav.css?v=2">
+  <link rel="stylesheet" href="css/footer.css?v=2">
+  <link rel="stylesheet" href="css/results.css?v=2">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <style>
+    .results-table { width: 100%; border-collapse: collapse; margin: var(--space-lg) 0;
+                     font-size: var(--text-sm); }
+    .results-table th, .results-table td {
+      padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--border-subtle);
+      text-align: right; }
+    .results-table th:first-child, .results-table td:first-child { text-align: left; }
+    .results-table thead th { color: var(--text-primary); font-family: var(--font-display);
+      font-weight: 700; font-size: var(--text-xs); text-transform: uppercase;
+      letter-spacing: 0.04em; border-bottom: 2px solid var(--border-default); }
+    .results-table tbody tr:hover { background: var(--bg-secondary); }
+    .results-table .grouphead td { color: var(--text-tertiary); font-style: italic;
+      text-align: left; padding-top: var(--space-sm); }
+    .table-scroll { overflow-x: auto; }
+    .results-table caption { caption-side: bottom; text-align: left; color: var(--text-tertiary);
+      font-size: var(--text-xs); padding-top: var(--space-sm); line-height: 1.5; }
+    .keyfig { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--space-md); margin: var(--space-xl) 0; }
+    .keyfig__item { text-align: center; padding: var(--space-md); background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+    .keyfig__value { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: 700;
+      color: var(--accent-primary); }
+    .keyfig__label { font-size: var(--text-xs); color: var(--text-tertiary); margin-top: 4px; }
+    .math-display { display: block; margin: var(--space-md) 0; text-align: center; overflow-x: auto; }
+  </style>
+</head>
+<body data-page="results">
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+  <div id="site-nav"></div>
+
+  <main id="main-content" class="container">
+    <header class="results-header">
+      <h1>Results</h1>
+      <p>
+        IsalSR is evaluated by integrating it into two established symbolic regression solvers with
+        contrasting search strategies, and comparing three representations of the candidate stream
+        within each. Everything on this page is Section&nbsp;5 of the paper.
+      </p>
+    </header>
+
+    <div class="keyfig">
+      <div class="keyfig__item">
+        <div class="keyfig__value">70</div>
+        <div class="keyfig__label">problems, 9 published suites</div>
+      </div>
+      <div class="keyfig__item">
+        <div class="keyfig__value">12,600</div>
+        <div class="keyfig__label">runs &middot; 2 hosts &times; 3 arms &times; 70 &times; 30 seeds</div>
+      </div>
+      <div class="keyfig__item">
+        <div class="keyfig__value">12 h</div>
+        <div class="keyfig__label">search budget per run</div>
+      </div>
+      <div class="keyfig__item">
+        <div class="keyfig__value">70 / 70</div>
+        <div class="keyfig__label">problems with &rho; &gt; 1, both hosts</div>
+      </div>
+    </div>
+
+    <!-- ===================== DESIGN ===================== -->
+    <section class="methodology-section">
+      <h2>The Three-Arm Design</h2>
+      <p>
+        Reporting IsalSR against the unmodified hosts alone would not separate
+        isomorphism-invariant canonicalization from a plain equality check on a serialized graph.
+        Every comparison therefore runs <strong>three arms</strong> that differ only in the
+        equivalence relation applied to the candidate stream. They share the solver, its
+        configuration, the data and the seed.
+      </p>
+      <div class="integration-cards" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="card" style="padding: var(--space-xl);">
+          <h4 style="color: var(--text-secondary); margin-bottom: var(--space-sm); font-size: var(--text-base);">Native representation</h4>
+          <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+            The host solver under its own representation, with no deduplication beyond whatever it
+            already performs. Computes no key, so
+            <span class="math-inline" data-tex="\rho = 1"></span> by construction.
+          </p>
+        </div>
+        <div class="card" style="padding: var(--space-xl);">
+          <h4 style="color: var(--accent-secondary); margin-bottom: var(--space-sm); font-size: var(--text-base);">Naive hash</h4>
+          <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+            A fixed-order serialization key taken from each host's <em>own stored structure</em> &mdash;
+            Bingo's command-array row order, UDFS's computation-graph node order. Sound, cheap, and
+            incomplete.
+          </p>
+        </div>
+        <div class="card" style="padding: var(--space-xl); border-color: var(--accent-primary);">
+          <h4 style="color: var(--accent-primary); margin-bottom: var(--space-sm); font-size: var(--text-base);">IsalSR</h4>
+          <p style="font-size: var(--text-sm); color: var(--text-secondary);">
+            The fast canonical string, computed on the fly at the evaluation boundary. If the string
+            has been seen, the candidate is a structural duplicate and its evaluation is skipped.
+          </p>
+        </div>
+      </div>
+      <p>
+        The key must be taken from the host's stored structure and not from the converted labeled DAG:
+        the conversion imposes a node order of its own, so a key computed after it would merge
+        candidates the host itself keeps apart, making the comparator look stronger than it is.
+      </p>
+
+      <div class="integration-cards" style="margin-top: var(--space-xl);">
+        <div class="card integration-card">
+          <span class="integration-card__badge integration-card__badge--enum">Enumeration</span>
+          <h3 class="integration-card__title">UDFS (IJCAI 2024)</h3>
+          <p class="integration-card__text">
+            Systematically enumerates computation graphs ordered by structural complexity, in a fixed
+            order. Hierarchical mode, 2 substructure levels, 200,000 enumeration orders, 5 or 7
+            calculation nodes, stop threshold 10<sup>&minus;10</sup> MSE. Its operator table has no
+            Pow.
+          </p>
+        </div>
+        <div class="card integration-card">
+          <span class="integration-card__badge integration-card__badge--gp">Genetic Programming</span>
+          <h3 class="integration-card__title">Bingo (NASA)</h3>
+          <p class="integration-card__text">
+            Evolves stack-based programs by age-fitness Pareto optimization with
+            Levenberg&ndash;Marquardt constant fitting; its stochastic operators regenerate previously
+            visited structures. Population 500, stack depth 32, crossover and mutation 0.4 each, MSE
+            fitness, termination time-controlled.
+          </p>
+        </div>
+      </div>
+      <p style="margin-top: var(--space-lg);">
+        Neither host searches over <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}"></span>
+        directly. Integration requires only that every operator a host can place have an image in the
+        label set: Sub and Div are host primitives encoded as
+        <span class="math-inline" data-tex="\mathrm{Add}(x, \mathrm{Neg}(y))"></span> and
+        <span class="math-inline" data-tex="\mathrm{Mul}(x, \mathrm{Inv}(y))"></span> at the boundary,
+        and UDFS's identity nodes are contracted onto their operand. Containment is verified before
+        each run.
+      </p>
+    </section>
+
+    <!-- ===================== HEADLINE TABLE ===================== -->
+    <section class="methodology-section">
+      <h2>Three-Axis Summary</h2>
+      <div class="table-scroll">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th rowspan="2">Host</th>
+              <th colspan="3">Search space</th>
+              <th colspan="3">Regression quality</th>
+              <th colspan="4">Computational cost</th>
+            </tr>
+            <tr>
+              <th><span class="math-inline" data-tex="\rho"></span></th>
+              <th><span class="math-inline" data-tex="\rho_{\mathrm{ser}}"></span></th>
+              <th>Red.</th>
+              <th><span class="math-inline" data-tex="R^2_{\mathrm{test}}"></span> (NA/NH/IS)</th>
+              <th><span class="math-inline" data-tex="d"></span></th>
+              <th><span class="math-inline" data-tex="p"></span></th>
+              <th><span class="math-inline" data-tex="T_{\mathrm{canon}}"></span></th>
+              <th><span class="math-inline" data-tex="T_{\mathrm{eval}}"></span></th>
+              <th>OH</th>
+              <th><span class="math-inline" data-tex="S"></span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>UDFS</td>
+              <td>1.66 &plusmn; 0.26</td>
+              <td>1.00 &plusmn; 0.00</td>
+              <td>38.1%</td>
+              <td>0.766 / 0.758 / <strong>0.783</strong></td>
+              <td>+0.41</td>
+              <td>2.0&times;10<sup>&minus;9</sup>***</td>
+              <td>0.126 ms</td>
+              <td>727.30 ms</td>
+              <td>0.04%</td>
+              <td>1.00</td>
+            </tr>
+            <tr>
+              <td>Bingo</td>
+              <td>1.79 &plusmn; 0.09</td>
+              <td>1.73 &plusmn; 0.10</td>
+              <td>43.7%</td>
+              <td>0.976 / 0.975 / <strong>0.976</strong></td>
+              <td>+0.08</td>
+              <td>7.5&times;10<sup>&minus;4</sup>***</td>
+              <td>0.074 ms</td>
+              <td>1.48 ms</td>
+              <td>16.11%</td>
+              <td>0.72</td>
+            </tr>
+          </tbody>
+          <caption>
+            Table 2 of the paper. NA = native representation, NH = naive hash, IS = IsalSR.
+            <span class="math-inline" data-tex="\rho"></span> and
+            <span class="math-inline" data-tex="\rho_{\mathrm{ser}}"></span>: mean &plusmn; std of the
+            reduction factors of the canonical string and the serialization key across the 70
+            per-problem means. Red.: redundancy rate of the IsalSR arm.
+            <span class="math-inline" data-tex="d"></span>,
+            <span class="math-inline" data-tex="p"></span>: Cohen's <em>d</em> and one-sided
+            <span class="math-inline" data-tex="p"></span> of the paired test across problems on
+            <span class="math-inline" data-tex="R^2_{\mathrm{test}}"></span> against the native arm.
+            <span class="math-inline" data-tex="T_{\mathrm{canon}}"></span>,
+            <span class="math-inline" data-tex="T_{\mathrm{eval}}"></span>: median per-DAG
+            canonicalization and per-evaluation fitness cost. OH: median canonicalization overhead.
+            <span class="math-inline" data-tex="S"></span>: median search-only speedup &mdash; on UDFS
+            it is degenerate, see below.
+          </caption>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== AXIS 1 ===================== -->
+    <section class="methodology-section">
+      <h2>Axis 1 &mdash; Search Space Reduction</h2>
+      <p>
+        The largest effect sizes are here. IsalSR reduces evaluations on
+        <strong>every problem of the suite, under both hosts</strong>. UDFS attains a mean reduction
+        factor of 1.66&nbsp;&plusmn;&nbsp;0.26 across 2,100 seed&ndash;problem cells, eliminating
+        38.1% of evaluations; Bingo 1.79&nbsp;&plusmn;&nbsp;0.09 across 2,100 cells, eliminating
+        43.7%. Per-problem means range over
+        <span class="math-inline" data-tex="[1.11, 2.12]"></span> on UDFS and
+        <span class="math-inline" data-tex="[1.19, 1.85]"></span> on Bingo.
+      </p>
+      <p>
+        <strong>Which contrast carries the test.</strong> The native arm computes no key, so
+        <span class="math-inline" data-tex="\rho = 1"></span> there by construction: a test against it
+        would compare a random variable with a constant no experiment can move. That contrast is
+        reported descriptively &mdash; <span class="math-inline" data-tex="\rho"></span> exceeds 1 on
+        70 of 70 problems under both hosts, at a mean per-problem difference of +0.66 on UDFS and
+        +0.79 on Bingo &mdash; and the inferential statement is IsalSR against the naive hash, where
+        both arms compute a key and both reduction factors are measured. There the paired test across
+        problems returns a Cohen's <em>d</em> of <strong>2.54</strong> on UDFS (95% bootstrap CI
+        [+2.12, +3.16], one-sided <span class="math-inline" data-tex="p = 1.8 \times 10^{-13}"></span>)
+        and <strong>7.05</strong> on Bingo. Both sit at the floor of the Wilcoxon signed-rank statistic
+        for <span class="math-inline" data-tex="N = 70"></span>, which is
+        <span class="math-inline" data-tex="1.8 \times 10^{-13}"></span> when every problem falls on
+        the same side; the test cannot resolve further, so the effect size carries the magnitude.
+      </p>
+
+      <div class="figure-container">
+        <figure>
+          <img src="generated/figures/reduction_factor_distribution.png" alt="Per-problem distribution of the reduction factor for UDFS and Bingo, with the naive hash median overlaid" loading="lazy">
+          <figcaption>
+            Per-problem distribution of the reduction factor
+            <span class="math-inline" data-tex="\rho"></span> (30 seeds per box), with the naive hash
+            median overlaid in green and <span class="math-inline" data-tex="\rho = 1"></span> dashed.
+            On UDFS the green line sits at exactly 1 on every problem: the naive hash merges nothing at
+            all there.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===================== AXIS 2 ===================== -->
+    <section class="methodology-section">
+      <h2>Axis 2 &mdash; Regression Quality</h2>
+      <p>
+        IsalSR is a structural deduplication layer, not a regression optimizer, so the question is
+        whether it preserves quality across the portfolio and improves it where the budget binds. All
+        three arms receive the same wall-clock budget, so the IsalSR arm trades search time for
+        canonicalization &mdash; a deliberately conservative protocol.
+      </p>
+      <p>
+        On UDFS, <span class="math-inline" data-tex="R^2_{\mathrm{test}}"></span> yields a mean
+        per-problem difference of +0.0171, a Cohen's <em>d</em> of +0.41 with CI [+0.31, +0.59], and a
+        one-sided <span class="math-inline" data-tex="p"></span> of
+        <span class="math-inline" data-tex="2.0 \times 10^{-9}"></span>. On
+        <span class="math-inline" data-tex="R^2_{\mathrm{train}}"></span> the mean difference is
+        +0.0153 at <span class="math-inline" data-tex="6.1 \times 10^{-12}"></span>, and on
+        <span class="math-inline" data-tex="\mathrm{NRMSE}_{\mathrm{test}}"></span> the test returns
+        <span class="math-inline" data-tex="2.2 \times 10^{-7}"></span>. On Bingo the per-problem
+        effect is +0.08 at a mean difference of +0.0006 and
+        <span class="math-inline" data-tex="p = 7.5 \times 10^{-4}"></span>: Bingo saturates at
+        <span class="math-inline" data-tex="R^2 = 1.0"></span> on the easier problems, where the budget
+        is not the binding constraint, so a portfolio-level difference there can only be carried by
+        the problems that remain unsolved within it.
+      </p>
+      <p>
+        Reading the individual targets: on UDFS the largest gains fall on I.30.3 (+5.59), II.11.28
+        (+3.34), III.17.37 (+2.68) and I.15.10 (+2.49), and the largest shift toward the baseline on
+        Pagie-1 (&minus;3.68). On Bingo they fall on I.16.6 (+1.16), test_4 (+1.03) and I.48.20
+        (+1.03), with R2 (&minus;0.55) shifting furthest the other way. These are descriptive; the
+        inference rests on the portfolio-level test.
+      </p>
+
+      <div class="figure-container">
+        <figure>
+          <img src="generated/figures/cd_legend.png" alt="Legend: native representation, naive hash, IsalSR" loading="lazy" style="max-width: 520px; margin: 0 auto;">
+        </figure>
+      </div>
+      <div class="figure-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-lg);">
+        <figure>
+          <img src="generated/figures/cd_2d_udfs.png" alt="Critical-difference diagram for the three UDFS arms" loading="lazy">
+          <figcaption>UDFS</figcaption>
+        </figure>
+        <figure>
+          <img src="generated/figures/cd_2d_bingo.png" alt="Critical-difference diagram for the three Bingo arms" loading="lazy">
+          <figcaption>Bingo</figcaption>
+        </figure>
+      </div>
+      <p style="font-size: var(--text-sm); color: var(--text-tertiary);">
+        Figure 3 of the paper. Mean ranks over the 70 problems on three axes, with Nemenyi post-hoc
+        bars (<span class="math-inline" data-tex="\alpha = 0.05"></span>, Holm adjustment). The two
+        hosts are ranked <strong>separately, not pooled</strong>: pooling lets the difference between
+        the solvers absorb almost the whole axis &mdash; on
+        <span class="math-inline" data-tex="R^2_{\mathrm{test}}"></span> the three Bingo arms take mean
+        ranks 1.95 to 2.73 and the three UDFS arms 4.20 to 5.10 &mdash; and widens the critical
+        difference from 0.40 to 0.90, which decides whether the arm contrast is resolvable at all.
+      </p>
+      <p>
+        On <span class="math-inline" data-tex="R^2_{\mathrm{test}}"></span>, IsalSR is the only UDFS
+        arm that separates, at mean rank 1.36 against 2.25 for the native representation and 2.39 for
+        the naive hash, which the post-hoc test does not distinguish from each other. On Bingo the two
+        deduplicating arms are indistinguishable from each other, at 1.76 and 1.82, and both are
+        separated from the native representation at 2.42.
+      </p>
+    </section>
+
+    <!-- ===================== PHI ===================== -->
+    <section class="methodology-section">
+      <h2>What Only an Isomorphism Test Reaches</h2>
+      <p>
+        The naive hash arm holds the deduplication idea fixed and varies only the
+        <em>completeness</em> of the key. The share
+        <span class="math-inline" data-tex="\phi"></span> of removable redundancy that a fixed-order
+        serialization cannot reach follows from the two measured reduction factors,
+      </p>
+      <span class="math-display" data-tex="\phi = \frac{\rho_{\mathrm{ser}}^{-1} - \rho^{-1}}{1 - \rho^{-1}} \in [0, 1],"></span>
+      <p>
+        and the two hosts sit at opposite ends of it, for structural reasons. A deterministic
+        enumerator visits each stored structure once, so its exact repeats are rare and whatever
+        redundancy it carries is node renumbering, which only an isomorphism test detects. An
+        evolutionary search re-derives genomes that agree entry for entry, and an equality check
+        catches those.
+      </p>
+      <div class="table-scroll">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Host</th>
+              <th><span class="math-inline" data-tex="N/10^3"></span></th>
+              <th><span class="math-inline" data-tex="\rho"></span></th>
+              <th><span class="math-inline" data-tex="\rho_{\mathrm{ser}}"></span></th>
+              <th><span class="math-inline" data-tex="\Delta r"></span></th>
+              <th><span class="math-inline" data-tex="\phi"></span> [min, max]</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>UDFS</td><td>110</td><td>1.664</td><td>1.000</td><td>38.1%</td><td>1.000 [1.000, 1.000]</td></tr>
+            <tr><td>Bingo</td><td>3,985</td><td>1.785</td><td>1.727</td><td>1.9%</td><td>0.047 [0.034, 0.266]</td></tr>
+          </tbody>
+          <caption>
+            Table 4 of the paper. <span class="math-inline" data-tex="N"></span>: mean candidates per
+            run. <span class="math-inline" data-tex="\Delta r"></span>: share of the candidate stream
+            that only the isomorphism test removes. Means over 70 problems &times; 30 seeds.
+          </caption>
+        </table>
+      </div>
+      <p>
+        On UDFS the naive hash merges nothing at all &mdash;
+        <span class="math-inline" data-tex="\rho_{\mathrm{ser}} = 1.0000"></span> on all 2,100 of its
+        cells &mdash; so the arm pays a key on every candidate, recovers no redundancy, and attains an
+        <span class="math-inline" data-tex="R^2"></span> slightly below the unmodified host. On Bingo
+        the same key recovers <strong>95.3%</strong> of what canonicalization removes, and is the
+        better engineering choice there. Both keys are sound and can never merge two structurally
+        distinct candidates; they differ only in completeness.
+      </p>
+      <div class="table-scroll">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Host</th>
+              <th><span class="math-inline" data-tex="\mathrm{ser}(D)"></span></th>
+              <th><span class="math-inline" data-tex="\hat{w}_D"></span></th>
+              <th>Ratio</th>
+              <th>OH<sub>NH</sub></th>
+              <th>OH<sub>IS</sub></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>UDFS</td><td>0.046 ms</td><td>0.135 ms</td><td>3.1&times;</td><td>0.02%</td><td>0.04%</td></tr>
+            <tr><td>Bingo</td><td>0.036 ms</td><td>0.069 ms</td><td>1.9&times;</td><td>13.32%</td><td>16.11%</td></tr>
+          </tbody>
+          <caption>
+            Table 5 of the paper. Per-candidate cost of the two keys. The serialization key is linear
+            in <span class="math-inline" data-tex="|V| + |E|"></span>; the canonical string is
+            near-<span class="math-inline" data-tex="O(k^2)"></span>. OH is the median share of
+            wall-clock time the key consumes.
+          </caption>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== AXIS 3 ===================== -->
+    <section class="methodology-section">
+      <h2>Axis 3 &mdash; Computational Cost</h2>
+      <p>
+        The net benefit is governed by the ratio
+        <span class="math-inline" data-tex="T_{\mathrm{canon}} / T_{\mathrm{eval}}"></span>, and the
+        two hosts differ on it by more than three orders of magnitude.
+      </p>
+      <p>
+        For <strong>UDFS</strong>, canonicalization takes a median of 0.126&nbsp;ms while fitness
+        evaluation is dominated by the per-batch sweep over the training set and takes a median of
+        727&nbsp;ms. The median overhead is 0.04%, with a 95th percentile of 0.15%. The pooled median
+        search-only speedup of 1.00 measures the <em>budget</em>, not the method: 1,727 of the 2,100
+        UDFS cells exhaust the 12-hour budget in both arms, where
+        <span class="math-inline" data-tex="S = 1"></span> by construction. On the 373 cells in which
+        at least one arm finished first, the median is <strong>1.96</strong>. End to end, the IsalSR
+        arm is the faster of the two on 29 of the 70 problems.
+      </p>
+      <p>
+        For <strong>Bingo</strong>, both quantities are sub-millisecond, at 0.074&nbsp;ms and
+        1.48&nbsp;ms, so the median overhead is 16.1% and canonicalization is no longer amortized by
+        the evaluator. Here the evaluations deduplication removes are not worth the canonicalization
+        spent to find them: the search-only speedup is 0.72, the median seed-matched slowdown is
+        <strong>1.45&times;</strong>, and IsalSR finishes ahead of its baseline on only 13 of the 70
+        problems. The loss is neither marginal nor confined to a subset, and the critical-difference
+        diagram separates the native representation from both deduplicating arms on that axis.
+      </p>
+      <p>
+        Which problems come out ahead is <em>not</em> predicted by
+        <span class="math-inline" data-tex="\rho"></span>. Across the Bingo suite the correlation
+        between a problem's mean <span class="math-inline" data-tex="\rho"></span> and its median
+        <span class="math-inline" data-tex="S"></span> is +0.04, and
+        <span class="math-inline" data-tex="\rho"></span> barely varies on that host, sitting within
+        0.09 of 1.79 on 66 of the 70 problems. Run length does correlate, at
+        <span class="math-inline" data-tex="r = +0.41"></span> against the log of the native arm's wall
+        clock: the deduplicated arm gains on the problems that occupy the budget and loses on those
+        that converge in seconds, where the key is paid on every candidate of a short run.
+      </p>
+
+      <div class="figure-container">
+        <figure>
+          <img src="generated/figures/rf_vs_overhead.png" alt="Reduction factor against canonicalization overhead per problem for both hosts" loading="lazy">
+          <figcaption>
+            Reduction factor against canonicalization overhead, per problem. The two hosts occupy
+            different regimes of
+            <span class="math-inline" data-tex="T_{\mathrm{canon}} / T_{\mathrm{eval}}"></span>, which
+            is what sets the wall-clock verdict.
+          </figcaption>
+        </figure>
+      </div>
+
+      <p>
+        The practical criterion is therefore at the level of the solver and the dataset, not the
+        problem: <strong>IsalSR pays off when fitness evaluation dominates canonicalization</strong>
+        &mdash; large training sets, complex expressions, simulation-based evaluation. Where evaluation
+        is cheap, it preserves regression quality and reshapes the search trajectory at a wall-clock
+        cost the practitioner pays.
+      </p>
+    </section>
+
+    <!-- ===================== BENCHMARKS ===================== -->
+    <section class="methodology-section">
+      <h2>Benchmark Suite</h2>
+      <p>
+        The 70-problem suite is assembled in three stages, with all problems retained and no post-hoc
+        filtering. A candidate enters only if it satisfies four predeclared conditions: published
+        provenance in a peer-reviewed source used by at least two independent SR studies;
+        representability of the published closed form within
+        <span class="math-inline" data-tex="\Sigma_{\mathrm{SR}}"></span>; published evidence that
+        recovery hinges on operator topology rather than constant fitting; and complementary coverage
+        of at least one difficulty axis not already represented.
+      </p>
+      <div class="table-scroll">
+        <table class="results-table">
+          <thead>
+            <tr><th>Stage</th><th style="text-align:left;">Composition</th><th>Problems</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Core</td>
+              <td style="text-align:left;">The 12 Nguyen benchmarks and a 10-problem subset of AI&nbsp;Feynman</td>
+              <td>22</td>
+            </tr>
+            <tr>
+              <td>Extension</td>
+              <td style="text-align:left;">
+                Vladislavleva, Korns, Keijzer, Pagie, the DSO/Koza rational benchmarks,
+                DSO-Livermore and extended Feynman. Spans
+                <span class="math-inline" data-tex="k \in [6,11]"></span>,
+                <span class="math-inline" data-tex="m \in [1,5]"></span>
+              </td>
+              <td>28</td>
+            </tr>
+            <tr>
+              <td>Coverage</td>
+              <td style="text-align:left;">
+                All 14 ODE-Strogatz datasets of SRBench's ground-truth track, taken in full with no
+                filter, plus 6 further AI&nbsp;Feynman equations drawn uniformly at random from the 92
+                eligible ones, under a rule fixed and recorded before any was run
+              </td>
+              <td>20</td>
+            </tr>
+          </tbody>
+          <caption>
+            The suite covers 30 of the 120 AI&nbsp;Feynman equations and 44 of the 130 datasets of
+            SRBench's ground-truth track. SRBench's black-box track is excluded by construction: its
+            datasets carry no ground-truth expression, so two of the inclusion criteria have no
+            referent and solution recovery is undefined on them.
+          </caption>
+        </table>
+      </div>
+      <p style="font-size: var(--text-sm); color: var(--text-tertiary);">
+        One caveat travels with the ODE-Strogatz component: those datasets are 400-row trajectories
+        under SRBench's random split, so temporally adjacent and nearly identical states can fall on
+        opposite sides of it, inflating the absolute
+        <span class="math-inline" data-tex="R^2"></span> attainable on those 14 problems. It does so
+        identically in all three arms, so it cannot bias the paired contrast.
+      </p>
+    </section>
+
+    <!-- ===================== PROTOCOL ===================== -->
+    <section class="methodology-section">
+      <h2>Statistical Protocol</h2>
+      <p>
+        The inferential claim is at the level of the benchmark <em>portfolio</em>, not of any
+        individual problem. Following Dem&scaron;ar's protocol for comparing two methods across a
+        benchmark suite, each problem contributes a single paired observation: the difference
+        <span class="math-inline" data-tex="\delta_i = \bar{m}_i^{\mathrm{IS}} - \bar{m}_i^{\mathrm{BL}}"></span>
+        of its per-seed means, computed under identical splits.
+      </p>
+      <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-bottom: var(--space-lg);">
+        <li>Marginal normality of <span class="math-inline" data-tex="\{\delta_i\}"></span> is screened
+          with Shapiro&ndash;Wilk; the test is then a one-sample
+          <span class="math-inline" data-tex="t"></span>-test or the Wilcoxon signed-rank statistic,
+          one-sided at <span class="math-inline" data-tex="\alpha = 0.05"></span>.</li>
+        <li>Effect size is the standardized mean difference
+          <span class="math-inline" data-tex="d = \bar{\delta}/s_\delta"></span> with a
+          bias-corrected percentile bootstrap CI over 10,000 resamples.</li>
+        <li>One statistic and one <span class="math-inline" data-tex="p"></span>-value per
+          (host, metric) pair, so no multiple-comparison correction is needed at the family level;
+          with three arms the pairwise family has three members and Holm divides by three.</li>
+        <li>The omnibus comparison across arms is a Friedman test with Nemenyi post-hoc, run
+          <em>within</em> each host.</li>
+        <li>Pairing is by <strong>seed number</strong>, not by position in the two seed lists, so a
+          missing run removes only its own pair. In this campaign the count is exactly 30 on every
+          problem, host and contrast: all 12,600 cells produced a record and none returned a
+          non-finite <span class="math-inline" data-tex="R^2_{\mathrm{test}}"></span>.</li>
+      </ul>
+      <p>
+        <strong>Infrastructure.</strong> Every run executes on CPU-only nodes of the Picasso
+        supercomputer (SCBI, University of M&aacute;laga), pinned to a single processor model, one core
+        and 8&ndash;16&nbsp;GB per run under SLURM. Pinning matters because wall-clock time is a
+        reported quantity here and the alternative node models differ in base clock; evaluating a
+        target expression is also not bit-reproducible across the two instruction sets, which a paired
+        design assumes. A 60-second per-DAG canonicalization timeout guards against pathological
+        expressions; none occurred, on any of the 12,176,790 Bingo or 234,865 UDFS candidates of the
+        campaign.
+      </p>
+    </section>
+
+    <!-- ===================== LIMITATIONS ===================== -->
+    <section class="methodology-section">
+      <h2>Limitations</h2>
+      <ul style="color: var(--text-secondary); padding-left: var(--space-xl); margin-bottom: var(--space-lg);">
+        <li>
+          <strong>The wall-clock cost on cheap-evaluation hosts is real.</strong> On Bingo the
+          deduplicated search is 1.45&times; slower end to end. That is the counterweight to the 43.7%
+          of evaluations removed and the <span class="math-inline" data-tex="R^2_{\mathrm{test}}"></span>
+          ranking won on the same figure.
+        </li>
+        <li>
+          <strong>Completeness is not free.</strong> Where a search regenerates byte-identical
+          candidates rather than renumberings, the cheaper key recovers nearly the same reduction, so
+          the case for isomorphism-invariant canonicalization rests on the searches whose duplicates
+          <em>are</em> renumberings.
+        </li>
+        <li>
+          <strong>Structure, not constants.</strong> IsalSR deduplicates on structure, so
+          <span class="math-inline" data-tex="2x + 3"></span> and
+          <span class="math-inline" data-tex="5x + 1"></span> share a canonical string. On problems
+          whose difficulty is constant discovery &mdash; Korns-12 and Keijzer-6 here &mdash; it neither
+          helps nor hurts. Korns-12 is the sharper case: no arm recovers a usable model within the
+          budget, so it contributes a difference of zero and no evidence in either direction.
+        </li>
+        <li>
+          <strong>Worst case remains factorial.</strong> The greedy algorithm degrades to
+          <span class="math-inline" data-tex="O(k!)"></span> when many nodes share subtree hashes and
+          force exhaustive backtracking. Measured per-<span class="math-inline" data-tex="k"></span>
+          timings fit <span class="math-inline" data-tex="O(k^{1.43})"></span> over
+          <span class="math-inline" data-tex="k \in \{8, \ldots, 36\}"></span>, but beyond
+          <span class="math-inline" data-tex="k = 50"></span> the per-DAG cost can become prohibitive.
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="js/theme.js"></script>
+  <script src="js/components.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var interval = setInterval(function () {
+        if (window.katex) {
+          clearInterval(interval);
+          var inlines = document.querySelectorAll('.math-inline');
+          for (var i = 0; i < inlines.length; i++) {
+            var tex = inlines[i].getAttribute('data-tex');
+            if (tex) katex.render(tex, inlines[i], { displayMode: false, throwOnError: false });
+          }
+          var displays = document.querySelectorAll('.math-display');
+          for (var j = 0; j < displays.length; j++) {
+            var dtex = displays[j].getAttribute('data-tex');
+            if (dtex) katex.render(dtex, displays[j], { displayMode: true, throwOnError: false });
+          }
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>

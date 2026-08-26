@@ -1,0 +1,162 @@
+[build-system]
+requires = [
+    "scikit-build-core>=0.9",
+    "nanobind>=2.0",
+]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.18"
+ninja.version = ">=1.10"
+build-dir = "build/{wheel_tag}"
+# wheel.packages must list the Python source tree; the .so is installed
+# into isalsr/core/ by CMake's install() rule, not by this list.
+wheel.packages = ["src/isalsr", "experiments", "benchmarks"]
+# The C++ sources live inside the package tree (src/isalsr/core/native/) so
+# that the whole extension travels with the checkout, but only the compiled
+# .so belongs in a wheel — ship no .cpp/.hpp.
+wheel.exclude = ["isalsr/core/native/**"]
+
+[tool.scikit-build.cmake.define]
+CMAKE_BUILD_TYPE = "Release"
+
+[project]
+name = "isalsr"
+version = "1.0.0"
+description = "Instruction Set and Language for Symbolic Regression"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Ezequiel Lopez-Rubio", email = "ezeqlr@lcc.uma.es"},
+    {name = "Mario Pascual Gonzalez", email = "mpascual@uma.es"},
+]
+# Core has zero dependencies
+dependencies = []
+
+[project.optional-dependencies]
+networkx = ["networkx>=3.0"]
+sympy = ["sympy>=1.12"]
+eval = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "h5py>=3.8",
+]
+search = [
+    "numpy>=1.24",
+]
+viz = ["matplotlib>=3.7"]
+bench = [
+    "isalsr[networkx,sympy,eval,search,viz]",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "scikit-learn>=1.3",
+]
+native = [
+    "nanobind>=2.0",
+    "ninja>=1.10",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "hypothesis>=6.0",
+    "ruff>=0.4",
+    "mypy>=1.0",
+]
+experiments = [
+    "isalsr[bench]",
+    "bingo-nasa",
+    "stopit",
+    "zss",
+    "tqdm",
+    "statsmodels>=0.14",
+    "scikit-posthocs>=0.9",
+    "seaborn>=0.12",
+    "torch",
+    "critdd @ git+https://github.com/mirkobunse/critdd",
+]
+all = ["isalsr[networkx,sympy,eval,search,viz,bench,dev,experiments]"]
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["isalsr*", "experiments*"]
+
+# ------------------------------------------------------------------
+# C++ extension optional extra.
+# The .so is built by CMake; this extra only pulls in the build deps
+# needed to *rebuild* from source (not to use a pre-built wheel).
+# ------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "unit: Unit tests (no external deps)",
+    "integration: Integration tests (external libs)",
+    "property: Property-based tests (hypothesis)",
+    "slow: Long-running tests",
+    "manuscript: Checks the LaTeX manuscript against the code; needs the manuscript checkout, which is not part of this repository",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "networkx", "networkx.*",
+    "sympy", "sympy.*",
+    "numpy", "numpy.*",
+    "scipy", "scipy.*",
+    "torch", "torch.*",
+    "matplotlib", "matplotlib.*",
+    "pandas", "pandas.*",
+    "sklearn", "sklearn.*",
+    "yaml", "yaml.*",
+    "h5py", "h5py.*",
+    "stopit", "stopit.*",
+    "zss", "zss.*",
+    "tqdm", "tqdm.*",
+    "statsmodels", "statsmodels.*",
+    "scikit_posthocs", "scikit_posthocs.*",
+    "seaborn", "seaborn.*",
+    "DAG_search", "DAG_search.*",
+    "bingo", "bingo.*",
+    "mpi4py", "mpi4py.*",
+    "dill", "dill.*",
+    "smcpy", "smcpy.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "isalsr.precomputed",
+    "isalsr.precomputed.*",
+]
+disable_error_code = "import-untyped"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# E402: imports after pytest.importorskip() -- standard pattern for optional deps
+"tests/integration/*.py" = ["E402"]
+# Same pattern: the UDFS vendor dir must be on sys.path and torch checked before import
+"tests/unit/test_udfs_adapter.py" = ["E402"]
+# Same pattern again: pytest.importorskip guards the optional C++ extension, so
+# the imports that depend on it must follow the guard.
+"tests/unit/test_native_datastructures.py" = ["E402"]
+"tests/unit/test_native_s2d.py" = ["E402"]
+"tests/unit/test_native_canonical.py" = ["E402"]
+# N802: test names may use uppercase instruction names (V, C, N, P, W)
+# ANN: test functions/fixtures don't require type annotations
+"tests/**/*.py" = ["N802", "ANN"]
+# ANN: benchmark/experiment scripts use dynamic typing for flexibility
+"benchmarks/**/*.py" = ["E402", "ANN"]
+"experiments/**/*.py" = ["E402", "ANN"]

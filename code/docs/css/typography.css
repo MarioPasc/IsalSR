@@ -1,0 +1,95 @@
+/* ============================================================
+   Typography — Google Fonts + Scale
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=Space+Mono:wght@400;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+h1 { font-size: var(--text-4xl); }
+h2 { font-size: var(--text-3xl); }
+h3 { font-size: var(--text-2xl); }
+h4 { font-size: var(--text-xl); }
+
+@media (min-width: 1024px) {
+  h1 { font-size: var(--text-5xl); }
+  h2 { font-size: var(--text-4xl); }
+}
+
+p {
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+code, .mono {
+  font-family: var(--font-mono);
+}
+
+.text-accent { color: var(--accent-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-sm { font-size: var(--text-sm); }
+
+/* ============================================================
+   Instruction character spans — single-char tokens
+   ============================================================ */
+.char-N, .char-n { color: var(--color-movement-fwd); }
+.char-P, .char-p { color: var(--color-movement-bwd); }
+.char-V, .char-v { color: var(--color-insert-unary); }
+.char-C        { color: var(--color-edge); }
+.char-W        { color: var(--color-noop); }
+
+/* ============================================================
+   Compound token colors — two-char V/v + label
+   ============================================================ */
+
+/* Variadic ops (arity >= 2): V+, V*, v+, v* */
+.token-variadic { color: var(--color-insert-variadic); }
+
+/* Binary ops: V-, V/, V^, v-, v/, v^ */
+.token-binary { color: var(--color-insert-binary); }
+
+/* Unary ops: Vs, Vc, Ve, Vl, Vr, Va, Vg, Vi */
+.token-unary { color: var(--color-insert-unary); }
+
+/* Leaf: Vk, vk */
+.token-leaf { color: var(--color-insert-leaf); }
+
+/* Movement */
+.token-movement-fwd { color: var(--color-movement-fwd); }
+.token-movement-bwd { color: var(--color-movement-bwd); }
+
+/* Edge */
+.token-edge { color: var(--color-edge); }
+
+/* No-op */
+.token-noop { color: var(--color-noop); }
+
+/* Instruction string base */
+.instruction-string {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+/* KaTeX overrides for dark mode */
+.katex { color: var(--text-primary); }
+
+/* Gradient text utility (amber → violet) */
+.gradient-text {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

@@ -1,0 +1,54 @@
+# Bingo experiment on the structural benchmarks (10 problems)
+# References:
+#   docs/md_files/changes/candidate_problem_screening.md (2026-04-20)
+#   benchmarks/datasets/structural.py
+#
+# The ``cherrypicked`` suite key below, and this file's name, are legacy
+# identifiers kept because they are baked into the on-disk result tree.
+#
+# Operator set: identical to bingo_hard.yaml (sqrt, pow included).
+# All Bingo hyperparameters match production Nguyen/Feynman/hard exactly.
+#
+# Note: train_size/test_size below are HINTS for orchestrator; Vlad-7 overrides
+# them via n_train_override=300 / n_test_override=1200 inside structural.py.
+
+experiment:
+  name: bingo_cherrypicked
+  method: bingo
+  n_seeds: 30
+
+benchmarks:
+  cherrypicked:
+    problems: all
+    train_size: 1000      # Default for uniform problems.
+    test_size: 250
+
+bingo:
+  population_size: 500
+  stack_size: 32
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  metric: mse
+  clo_alg: lm
+  generations: 100000000
+  fitness_threshold: 1.0e-16
+  max_time: 43200       # 12h algorithm budget (standard).
+  max_evals: 100000000
+  snapshot_frequency: 10
+  # Shadow sketches OFF for the campaign (audit.md §7.3, Mario 2026-08-04).
+  # They cost 17.6 % of Bingo's wall clock / 0.03 % of UDFS's, are paid by the
+  # isalsr arm alone inside a fixed budget, and would penalise exactly the arm
+  # carrying the headline claim.  The fixed-order numbers come from the Stage D
+  # trace cell and the D3 replay instead.  Read by the isalsr/hash runners via
+  # config.get("shadow_hash"); BingoConfig.from_dict filters it out of the
+  # dataclass, so it perturbs no host parameter.
+  shadow_hash: false
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

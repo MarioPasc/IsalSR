@@ -1,0 +1,64 @@
+"""Bingo experiment configuration.
+
+Maps YAML config to Bingo pipeline construction parameters.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class BingoConfig:
+    """Configuration for Bingo experiments."""
+
+    population_size: int = 500
+    stack_size: int = 32
+    operators: list[str] = field(
+        default_factory=lambda: ["+", "-", "*", "/", "sin", "cos", "exp", "log"],
+    )
+    use_simplification: bool = False
+    crossover_prob: float = 0.4
+    mutation_prob: float = 0.4
+    metric: str = "mse"
+    clo_alg: str = "lm"
+    generations: int = 10_000_000  # effectively infinite; time-limited
+    fitness_threshold: float = 1e-16
+    max_time: float = 1800.0
+    max_evals: int = 10_000_000
+
+    # IsalSR-specific settings
+    canonicalization_timeout: float = 60.0
+    use_fast_canonical: bool = True
+
+    # Diversity enforcement: reject population-level duplicate canonicals
+    enforce_population_dedup: bool = False
+
+    # Trajectory logging
+    snapshot_frequency: int = 10  # snapshot every N generations
+
+    def __post_init__(self) -> None:
+        """Enforce the containment invariant before any search can start.
+
+        Every configured operator must have an image in the encoding alphabet of
+        Definition 3.2. An operator without one is refused by the adapter at
+        conversion time, which the runner catches and counts as a conversion
+        failure before evaluating the candidate undeduplicated, so the reported
+        reduction factor would understate the redundancy with nothing marking it.
+
+        Raises:
+            AlphabetCoverageError: If any operator has no image in the alphabet.
+        """
+        from experiments.models.alphabet_guard import validate_bingo_operators
+
+        validate_bingo_operators(self.operators)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> BingoConfig:
+        known_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        # Backward compat: accept legacy 'use_pruned' key
+        if "use_pruned" in d and "use_fast_canonical" not in d:
+            d = {**d, "use_fast_canonical": d.pop("use_pruned")}
+        filtered = {k: v for k, v in d.items() if k in known_fields}
+        return cls(**filtered)

@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+#
+# Code Ocean post-install script for the IsalSR capsule.
+#
+# Runs ONCE, during the image build, as root, from /.  It has network access;
+# a Reproducible Run does not.  Every dependency the capsule will ever need
+# must therefore be installed here.  It cannot see /code or /data — that is
+# why the capsule's own package is built later, by code/run.
+#
+# BASE-IMAGE AGNOSTIC BY CONSTRUCTION.  Nothing below assumes anything about
+# the FROM line beyond a Debian-family apt and a working curl, so the base
+# image can be swapped from Code Ocean's Environment Editor without touching
+# this file.  In particular Python is NOT taken from the base: the project
+# requires >=3.11 and the available starter environments ship anything from
+# 3.8 upwards, so the capsule installs its own interpreter at a private prefix.
+#
+set -euo pipefail
+
+MINIFORGE_VERSION="25.3.1-0"
+PYTHON_VERSION="3.11"
+
+# The C++ toolchain comes from conda-forge, not from the base image.  Two
+# reasons, one practical and one scientific.  Practically, the starter
+# environments span several distro generations: Ubuntu 20.04 ships GCC 9 and
+# CMake 3.16, and the project needs GCC >= 11 (CMakeLists.txt targets
+# -march=x86-64-v3, which GCC did not accept before 11) and CMake >= 3.18.
+# Scientifically, the compiler is part of the artifact: it determines the
+# extension's build_hash, so pinning it here makes the engine reproducible
+# instead of a function of whichever base image was selected.  GCC 12 matches
+# the development workstation the reported results were produced on.
+GXX_VERSION="12"
+CMAKE_VERSION="3.31"
+
+# mpi4py also comes from conda-forge, with the MPI runtime it was built against.
+# A pip mpi4py links the base image's OpenMPI, and on an Ubuntu 20.04 base
+# (glibc 2.31) `import mpi4py.MPI` then segfaults at interpreter teardown -- after
+# every test has passed, so the failure surfaces as a crashed process with a
+# green report.  bingo-nasa depends on mpi4py unconditionally, so it is imported
+# in every run whether or not MPI is used.  Same version as the development
+# environment; only the build differs.
+#
+# The MPI provider is pinned to OpenMPI explicitly.  Left free, the conda solver
+# selects Intel MPI, whose OFI provider cannot initialise inside a container:
+# `import mpi4py.MPI` then aborts in PMPI_Init_thread and segfaults, taking the
+# interpreter with it.  OpenMPI initialises cleanly single-process.
+MPI4PY_VERSION="4.1.1"
+
+# A prefix of our own.  Several Code Ocean starter environments already carry a
+# conda at /opt/conda; installing over it would either fail or silently replace
+# the base image's interpreter, so the capsule's environment lives beside it and
+# simply takes precedence on PATH.
+CONDA_PREFIX_DIR="/opt/isalsr-conda"
+PY="${CONDA_PREFIX_DIR}/bin/python"
+
+# Pinned commit of critdd (critical-difference diagrams). Not on PyPI, so the
+# git URL is the only source; the commit is pinned because the project has no
+# tagged releases and its default branch moves.
+CRITDD_COMMIT="0d5422d6e10a69f2a2da2252d59de9e959caa19e"
+
+# --------------------------------------------------------------------------- #
+# System packages
+# --------------------------------------------------------------------------- #
+# Installed here rather than in the Dockerfile so that regenerating the
+# Dockerfile from the Environment Editor (which rewrites the FROM line, and may
+# rewrite the RUN layers with it) cannot drop them.
+#
+# build-essential     -> a plain `gcc`, which pip needs to build the pygraphviz
+#                        and mpi4py C extensions from source.  It is NOT what
+#                        compiles the IsalSR engine: that uses the conda-forge
+#                        toolchain pinned below, because the base image's GCC
+#                        may predate -march=x86-64-v3 (Ubuntu 20.04 ships 9).
+#
+# libgraphviz-dev, graphviz -> the `dot` layout backend used by the figure scripts
+#
+# MPI is deliberately absent: conda-forge supplies mpi4py together with the MPI
+# runtime it was built against, which is what keeps it from crashing at exit on
+# older bases.
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    curl \
+    git \
+    graphviz \
+    libgraphviz-dev
+rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------------------------------- #
+# Python 3.11 via Miniforge
+# --------------------------------------------------------------------------- #
+# --retry: the download is a GitHub release asset and the build host's DNS is
+# not always immediately warm.  Flags kept to what curl 7.68 (Ubuntu 20.04)
+# accepts, since that is the oldest base this capsule targets.
+curl -fsSL --retry 5 --retry-delay 3 -o /tmp/miniforge.sh \
+    "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh"
+bash /tmp/miniforge.sh -b -p "${CONDA_PREFIX_DIR}"
+rm -f /tmp/miniforge.sh
+
+"${CONDA_PREFIX_DIR}/bin/conda" install -y -q \
+    "python=${PYTHON_VERSION}" \
+    "gxx_linux-64=${GXX_VERSION}" \
+    "cmake=${CMAKE_VERSION}" \
+    "mpi4py=${MPI4PY_VERSION}" \
+    "openmpi" \
+    ninja
+"${CONDA_PREFIX_DIR}/bin/conda" clean -afy
+
+# conda-forge names its compilers by target triplet and only exports CC/CXX from
+# an activation script, which a Reproducible Run never sources.  Resolve them
+# once, here, and record them where code/run can read them without activating
+# anything.
+CXX_BIN="$(ls "${CONDA_PREFIX_DIR}"/bin/x86_64-conda-linux-gnu-g++ 2>/dev/null || true)"
+CC_BIN="$(ls "${CONDA_PREFIX_DIR}"/bin/x86_64-conda-linux-gnu-gcc 2>/dev/null || true)"
+if [ -z "${CXX_BIN}" ] || [ -z "${CC_BIN}" ]; then
+    echo "FATAL: conda-forge compilers not found under ${CONDA_PREFIX_DIR}/bin" >&2
+    exit 1
+fi
+printf 'CC=%s\nCXX=%s\n' "${CC_BIN}" "${CXX_BIN}" > "${CONDA_PREFIX_DIR}/toolchain.env"
+"${CXX_BIN}" --version | head -1
+
+# Put the capsule's interpreter ahead of the base image's for every login shell
+# and every Cloud Workstation terminal.  `code/run` does not rely on this — it
+# resolves the interpreter by absolute path — so a Dockerfile regenerated
+# without the ENV line still produces a working Reproducible Run.
+printf 'export PATH="%s/bin:$PATH"\n' "${CONDA_PREFIX_DIR}" > /etc/profile.d/00-isalsr-conda.sh
+chmod 0644 /etc/profile.d/00-isalsr-conda.sh
+
+# --------------------------------------------------------------------------- #
+# Pinned Python dependencies
+# --------------------------------------------------------------------------- #
+"${PY}" -m pip install --no-cache-dir --upgrade pip
+
+# CPU-only torch. UDFS imports torch; the capsule has no GPU, and the default
+# PyPI wheel would pull ~2.5 GB of CUDA payload that can never be used.
+"${PY}" -m pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    "torch==2.10.0+cpu"
+
+"${PY}" -m pip install --no-cache-dir -r /requirements.txt
+
+"${PY}" -m pip install --no-cache-dir \
+    "critdd @ git+https://github.com/mirkobunse/critdd@${CRITDD_COMMIT}"
+
+# --------------------------------------------------------------------------- #
+# Build-time verification
+# --------------------------------------------------------------------------- #
+# Fail the image build here rather than at run time: a missing import is far
+# cheaper to diagnose in a build log than inside a Reproducible Run.
+"${PY}" - <<'PY'
+import sys
+
+assert sys.version_info[:2] == (3, 11), f"expected Python 3.11, got {sys.version}"
+
+import bingo            # noqa: F401  host solver (evolutionary)
+import h5py             # noqa: F401
+import hypothesis       # noqa: F401
+import matplotlib       # noqa: F401
+import networkx         # noqa: F401
+import numpy            # noqa: F401
+import pandas           # noqa: F401
+import pytest           # noqa: F401
+import scipy            # noqa: F401
+import sklearn          # noqa: F401
+import statsmodels      # noqa: F401
+import sympy            # noqa: F401
+import torch            # noqa: F401  host solver (UDFS) dependency
+import zss              # noqa: F401
+
+# Not decorative: a pip-built mpi4py imports fine and then segfaults at
+# interpreter shutdown on an older base, which no import check would catch.
+# Importing it in a subprocess that must exit 0 does catch it.
+import mpi4py.MPI       # noqa: F401
+
+# The C++ extension is compiled from /code at run time, offline. Its build
+# backend must be importable now, or that build cannot happen at all.
+import nanobind         # noqa: F401
+import scikit_build_core  # noqa: F401
+
+print(f"environment OK: Python {sys.version.split()[0]}, torch {torch.__version__}")
+PY
+
+# Verify the toolchain the build will actually use, which is the conda one on
+# PATH ahead of the base image's -- not whatever `gcc` resolved to before.
+"${CONDA_PREFIX_DIR}/bin/cmake" --version | head -1
+"${CONDA_PREFIX_DIR}/bin/ninja" --version
+"${CXX_BIN}" -dumpfullversion

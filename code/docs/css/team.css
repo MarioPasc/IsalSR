@@ -1,0 +1,160 @@
+/* ============================================================
+   Team Page
+   ============================================================ */
+
+.team-header {
+  text-align: center;
+  padding: var(--space-3xl) 0 var(--space-2xl);
+}
+
+.team-header h1 {
+  margin-bottom: var(--space-md);
+}
+
+.team-header p {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Team grid */
+.team-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-xl);
+  max-width: 1100px;
+  margin: 0 auto var(--space-3xl);
+}
+
+@media (min-width: 768px) {
+  .team-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Profile card */
+.profile-card {
+  text-align: center;
+  padding: var(--space-2xl);
+}
+
+.profile-card__photo {
+  width: 140px;
+  height: 140px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  margin: 0 auto var(--space-lg);
+  border: 3px solid var(--border-subtle);
+}
+
+.profile-card__name {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-xs);
+}
+
+.profile-card__role {
+  color: var(--accent-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-sm);
+}
+
+.profile-card__affiliation {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-md);
+}
+
+.profile-card__bio {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-lg);
+}
+
+.profile-card__links {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* Lab section */
+.lab-section {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-3xl) 0;
+}
+
+.lab-section__inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+  align-items: center;
+}
+
+@media (min-width: 768px) {
+  .lab-section__inner {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.lab-section__logo {
+  flex: 0 0 auto;
+  width: 240px;
+}
+
+@media (min-width: 768px) {
+  .lab-section__logo {
+    width: 300px;
+  }
+}
+
+.lab-section__logo img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+}
+
+.lab-section__info {
+  flex: 1;
+}
+
+.lab-section__info h3 {
+  margin-bottom: var(--space-md);
+}
+
+.lab-section__info p {
+  margin-bottom: var(--space-md);
+}
+
+/* Acknowledgements */
+.acknowledgements {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-2xl) 0;
+}
+
+.acknowledgements h3 {
+  margin-bottom: var(--space-md);
+}
+
+.acknowledgements p {
+  font-size: var(--text-sm);
+}
+
+/* ORCID link */
+.orcid-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.orcid-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+}

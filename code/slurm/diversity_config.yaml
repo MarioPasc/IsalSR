@@ -1,0 +1,50 @@
+# Diversity Conjecture (X.7) Experiment Configuration
+# =====================================================
+# Validates Conjecture X.7: IsalSR canonical deduplication
+# increases population diversity (delta and mean pairwise GED).
+#
+# Uses Feynman I.48.20 (m*c^2/sqrt(1-(v/c)^2)) — a hard 3-variable
+# relativistic energy problem that maintains selection pressure through
+# 500 generations, unlike Nguyen-1 which is solved by gen ~30.
+#
+# GED: Bipartite approximation (Riesen & Bunke 2009) on all C(N,2)
+# pairs. O(n^3) per pair via Hungarian algorithm. ~1s per snapshot
+# for N=200 with 8 workers.
+#
+# Each SLURM array task runs ONE (seed, variant) pair.
+# Task layout: tasks 1..N_SEEDS = baseline, N_SEEDS+1..2*N_SEEDS = isalsr.
+
+# Paths (Picasso filesystem layout)
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/diversity_v2
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu
+account: tic_163_uma
+
+# Experiment parameters
+experiment:
+  # Benchmark
+  benchmark: "I.48.20"    # Feynman: m*c^2/sqrt(1-(v/c)^2), 3 variables
+
+  # Bingo evolution
+  population_size: 200
+  stack_size: 32          # larger DAGs for harder problem
+  max_time: 7200.0        # 2h wall-clock limit per evolutionary run
+  snapshot_gens: "0,10,25,50,100,150,200,300,400,500"
+  trajectory_freq: 1      # lightweight log every generation (delta + BP-GED)
+
+  # Seeds and array
+  n_seeds: 20             # total seeds (array size = 2 * n_seeds = 40 tasks)
+
+  # SLURM resources per task
+  time_limit: "08:00:00"  # 8 hours per (seed, variant) task
+  cpus: 8                 # CPUs for parallel BP-GED computation
+  mem_gb: 16              # RAM per task
+
+  # Analysis job
+  analysis:
+    time_limit: "01:00:00"
+    cpus: 4
+    mem_gb: 8

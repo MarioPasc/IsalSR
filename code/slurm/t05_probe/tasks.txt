@@ -1,0 +1,58 @@
+# T05 D2 Picasso probe task list -- GENERATED, do not hand-edit.
+# Regenerate with: python slurm/t05_probe/make_tasks.py --out slurm/t05_probe/tasks.txt
+#
+# Fields: method variant problem config suite
+# One line per array task. Line N is read by SLURM_ARRAY_TASK_ID=N (1-indexed).
+#
+# SP-0 compliance: seed 0 only, max_time <= 1800 s, <= 60 tasks, output under
+# ~/execs/isalsr/t05_probe/. This is a PROBE. It produces no number for the paper.
+#
+# Coverage: every D2 problem x both hosts, on the `isalsr` arm -- the arm that
+# exercises the adapter, the alphabet and the dedup hook, and therefore the only
+# one whose failure would be invisible in the other two. The operator-set
+# identity across arms (SP-7.4) is a config-level property checked offline by
+# check_d2.py, not something an array task can establish.
+#
+# One variant per task is deliberate: the orchestrator's post-run
+# compute_paired_stats raises on fewer than 3 paired seeds, and a single-variant
+# run never reaches that code path.
+bingo isalsr I.12.2 experiments/configs/bingo_feynman_remainder.yaml feynman_remainder
+bingo isalsr II.34.29a experiments/configs/bingo_feynman_remainder.yaml feynman_remainder
+bingo isalsr II.34.29b experiments/configs/bingo_feynman_remainder.yaml feynman_remainder
+bingo isalsr III.19.51 experiments/configs/bingo_feynman_remainder.yaml feynman_remainder
+bingo isalsr III.4.32 experiments/configs/bingo_feynman_remainder.yaml feynman_remainder
+bingo isalsr test_4 experiments/configs/bingo_feynman_remainder.yaml feynman_remainder
+bingo isalsr Strogatz-bacres1 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-bacres2 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-barmag1 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-barmag2 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-glider1 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-glider2 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-lv1 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-lv2 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-predprey1 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-predprey2 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-shearflow1 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-shearflow2 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-vdp1 experiments/configs/bingo_strogatz.yaml strogatz
+bingo isalsr Strogatz-vdp2 experiments/configs/bingo_strogatz.yaml strogatz
+udfs isalsr I.12.2 experiments/configs/udfs_feynman_remainder.yaml feynman_remainder
+udfs isalsr II.34.29a experiments/configs/udfs_feynman_remainder.yaml feynman_remainder
+udfs isalsr II.34.29b experiments/configs/udfs_feynman_remainder.yaml feynman_remainder
+udfs isalsr III.19.51 experiments/configs/udfs_feynman_remainder.yaml feynman_remainder
+udfs isalsr III.4.32 experiments/configs/udfs_feynman_remainder.yaml feynman_remainder
+udfs isalsr test_4 experiments/configs/udfs_feynman_remainder.yaml feynman_remainder
+udfs isalsr Strogatz-bacres1 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-bacres2 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-barmag1 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-barmag2 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-glider1 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-glider2 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-lv1 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-lv2 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-predprey1 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-predprey2 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-shearflow1 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-shearflow2 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-vdp1 experiments/configs/udfs_strogatz.yaml strogatz
+udfs isalsr Strogatz-vdp2 experiments/configs/udfs_strogatz.yaml strogatz

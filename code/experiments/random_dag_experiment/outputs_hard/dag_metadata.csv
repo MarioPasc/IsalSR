@@ -1,0 +1,9 @@
+cell_id,k,k_actual,m,op_set,role,n_total_nodes,n_edges,n_vars_used,max_in_degree,max_out_degree,depth,n_perm_samples,n_unique_canon,n_distinct_fingerprints,estimated_RF,canon_invariant,k_factorial,canonical_len
+101,18,15,2,poly_trig,"k=18, m=2, poly+trig",17,22,2,3,6,7,200,1,200,1.0,1,1307674368000,78
+102,18,15,3,poly,"k=18, m=3, pure poly",18,25,3,3,5,8,200,1,200,1.0,1,1307674368000,86
+103,22,17,2,poly,"k=22, m=2, pure poly",19,32,2,3,9,7,200,1,200,1.0,1,355687428096000,103
+104,22,17,3,poly_trig,"k=22, m=3, poly+trig",20,26,3,5,6,7,200,1,200,1.0,1,355687428096000,83
+105,26,24,2,poly_trig,"k=26, m=2, poly+trig",26,30,2,3,4,13,200,1,200,1.0,1,620448401733239439360000,110
+106,26,23,4,full,"k=26, m=4, full alphabet",27,31,4,3,5,11,200,1,200,1.0,1,25852016738884976640000,131
+107,22,20,4,full,"k=22, m=4, full alphabet",24,25,4,4,2,8,200,1,200,1.0,1,2432902008176640000,92
+108,30,25,3,poly_trig,"k=30, m=3, poly+trig (XL)",28,37,3,6,6,10,200,1,200,1.0,1,15511210043330985984000000,140

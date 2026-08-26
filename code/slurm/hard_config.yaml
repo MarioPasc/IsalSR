@@ -1,0 +1,90 @@
+# IsalSR Hard-Tier Experiments for Picasso HPC
+# ==============================================
+#
+# Runs UDFS + Bingo (baseline + isalsr) on the 10 hard problems defined in
+# benchmarks/datasets/hard.py (5 extended Feynman + 5 GP-hard classics).
+#
+# References:
+#   docs/md_files/changes/hard_benchmark_proposal.md (2026-04-13)
+#   experiments/configs/{udfs,bingo}_hard.yaml
+#
+# Array sizing (per group): 10 problems * 30 seeds = 300 tasks.
+# Total: 4 groups * 300 = 1200 tasks.
+#
+# Time budget: 12h algorithm (max_time=43200) + 3-5h SLURM buffer.
+# This matches existing Nguyen/Feynman production. Reduce only if needed.
+
+# Paths (Picasso filesystem layout)
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/models_hard
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu
+account: tic_163_uma
+
+experiments:
+  # =========================================================
+  # UDFS on hard (10 problems x 30 seeds = 300 tasks/group)
+  # =========================================================
+  udfs_hard_baseline:
+    enabled: true
+    method: udfs
+    benchmark: hard
+    variant: baseline
+    config: experiments/configs/udfs_hard.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "15:00:00"    # 12h algorithm + 3h buffer
+    cpus: 1
+    mem_gb: 8
+
+  udfs_hard_isalsr:
+    enabled: true
+    method: udfs
+    benchmark: hard
+    variant: isalsr
+    config: experiments/configs/udfs_hard.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "17:00:00"    # 12h algorithm + 5h canon overhead buffer
+    cpus: 1
+    mem_gb: 8
+
+  # =========================================================
+  # Bingo on hard (10 problems x 30 seeds = 300 tasks/group)
+  # =========================================================
+  bingo_hard_baseline:
+    enabled: true
+    method: bingo
+    benchmark: hard
+    variant: baseline
+    config: experiments/configs/bingo_hard.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "15:00:00"
+    cpus: 1
+    mem_gb: 16
+
+  bingo_hard_isalsr:
+    enabled: true
+    method: bingo
+    benchmark: hard
+    variant: isalsr
+    config: experiments/configs/bingo_hard.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "17:00:00"
+    cpus: 1
+    mem_gb: 128             # heap fragmentation on hard problems + malloc_trim
+
+  # =========================================================
+  # Analysis (runs after ALL hard experiments complete)
+  # =========================================================
+  hard_analyze:
+    enabled: true
+    methods: "udfs,bingo"
+    benchmarks: "hard"
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 16

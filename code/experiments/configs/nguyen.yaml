@@ -1,0 +1,23 @@
+# Nguyen benchmark configuration for IsalSR
+# Reference: Uy et al. (2011). Semantically-based crossover in GP.
+experiment:
+  name: nguyen
+  description: "12 Nguyen symbolic regression benchmarks"
+  seed: 42
+  n_runs: 30
+
+data:
+  train_size: 20
+  test_size: 100
+  x_range: [-1.0, 1.0]
+
+search:
+  operations: ["+", "*", "-", "/", "s", "c", "e", "l"]
+  max_tokens: 50
+  n_iterations: 100000
+  population_size: 500
+
+evaluation:
+  metric: r_squared
+  constant_optimization: true
+  bfgs_max_iter: 100

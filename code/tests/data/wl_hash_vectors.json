@@ -1,0 +1,323 @@
+[
+  {
+    "case": "VAR_empty",
+    "label_value": "var",
+    "children_hashes": [],
+    "expected_uint64": 7567199770864868670
+  },
+  {
+    "case": "ADD_empty",
+    "label_value": "+",
+    "children_hashes": [],
+    "expected_uint64": 12638127826927718602
+  },
+  {
+    "case": "MUL_empty",
+    "label_value": "*",
+    "children_hashes": [],
+    "expected_uint64": 12638128926439346813
+  },
+  {
+    "case": "SUB_empty",
+    "label_value": "-",
+    "children_hashes": [],
+    "expected_uint64": 12638121229857949336
+  },
+  {
+    "case": "DIV_empty",
+    "label_value": "/",
+    "children_hashes": [],
+    "expected_uint64": 12638123428881205758
+  },
+  {
+    "case": "SIN_empty",
+    "label_value": "s",
+    "children_hashes": [],
+    "expected_uint64": 12638206991764949794
+  },
+  {
+    "case": "COS_empty",
+    "label_value": "c",
+    "children_hashes": [],
+    "expected_uint64": 12638189399578898418
+  },
+  {
+    "case": "EXP_empty",
+    "label_value": "e",
+    "children_hashes": [],
+    "expected_uint64": 12638182802509129152
+  },
+  {
+    "case": "LOG_empty",
+    "label_value": "l",
+    "children_hashes": [],
+    "expected_uint64": 12638192698113783051
+  },
+  {
+    "case": "SQRT_empty",
+    "label_value": "r",
+    "children_hashes": [],
+    "expected_uint64": 12638208091276578005
+  },
+  {
+    "case": "POW_empty",
+    "label_value": "^",
+    "children_hashes": [],
+    "expected_uint64": 12638247673695193601
+  },
+  {
+    "case": "ABS_empty",
+    "label_value": "a",
+    "children_hashes": [],
+    "expected_uint64": 12638187200555641996
+  },
+  {
+    "case": "NEG_empty",
+    "label_value": "g",
+    "children_hashes": [],
+    "expected_uint64": 12638185001532385574
+  },
+  {
+    "case": "INV_empty",
+    "label_value": "i",
+    "children_hashes": [],
+    "expected_uint64": 12638195996648667684
+  },
+  {
+    "case": "CONST_empty",
+    "label_value": "k",
+    "children_hashes": [],
+    "expected_uint64": 12638198195671924106
+  },
+  {
+    "case": "VAR_one_child",
+    "label_value": "var",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 15989823204485417952
+  },
+  {
+    "case": "ADD_one_child",
+    "label_value": "+",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 3525542324496172340
+  },
+  {
+    "case": "MUL_one_child",
+    "label_value": "*",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 10307175578733816407
+  },
+  {
+    "case": "SUB_one_child",
+    "label_value": "-",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 1850182492157271134
+  },
+  {
+    "case": "DIV_one_child",
+    "label_value": "/",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 9985334984300073376
+  },
+  {
+    "case": "SIN_one_child",
+    "label_value": "s",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 9564029344323565676
+  },
+  {
+    "case": "COS_one_child",
+    "label_value": "c",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 12706983233888947420
+  },
+  {
+    "case": "EXP_one_child",
+    "label_value": "e",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 2312695506396265894
+  },
+  {
+    "case": "LOG_one_child",
+    "label_value": "l",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 6613563856709880313
+  },
+  {
+    "case": "SQRT_one_child",
+    "label_value": "r",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 14468832203253069039
+  },
+  {
+    "case": "POW_one_child",
+    "label_value": "^",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 12607091233430023875
+  },
+  {
+    "case": "ABS_one_child",
+    "label_value": "a",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 8548438572043611786
+  },
+  {
+    "case": "NEG_one_child",
+    "label_value": "g",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 15470917271028005640
+  },
+  {
+    "case": "INV_one_child",
+    "label_value": "i",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 3072275105754593442
+  },
+  {
+    "case": "CONST_one_child",
+    "label_value": "k",
+    "children_hashes": [
+      12638198195671924106
+    ],
+    "expected_uint64": 18391925292427778804
+  },
+  {
+    "case": "SIN_highbit_child",
+    "label_value": "s",
+    "children_hashes": [
+      9223372036854775815
+    ],
+    "expected_uint64": 8813173105192486981
+  },
+  {
+    "case": "ADD_highbit_child",
+    "label_value": "+",
+    "children_hashes": [
+      9223372036854775815
+    ],
+    "expected_uint64": 317411332803708397
+  },
+  {
+    "case": "MUL_highbit_child",
+    "label_value": "*",
+    "children_hashes": [
+      9223372036854775815
+    ],
+    "expected_uint64": 15992659496227962682
+  },
+  {
+    "case": "VAR_highbit_child",
+    "label_value": "var",
+    "children_hashes": [
+      9223372036854775815
+    ],
+    "expected_uint64": 8192123755727004889
+  },
+  {
+    "case": "ADD_2_children",
+    "label_value": "+",
+    "children_hashes": [
+      7567199770864868670,
+      12638127826927718602
+    ],
+    "expected_uint64": 6712553760383672039
+  },
+  {
+    "case": "ADD_3_children",
+    "label_value": "+",
+    "children_hashes": [
+      7567199770864868670,
+      12638127826927718602,
+      12638128926439346813
+    ],
+    "expected_uint64": 16893418887149847536
+  },
+  {
+    "case": "ADD_5_children",
+    "label_value": "+",
+    "children_hashes": [
+      7567199770864868670,
+      12638121229857949336,
+      12638123428881205758,
+      12638127826927718602,
+      12638128926439346813
+    ],
+    "expected_uint64": 4586735153719786177
+  },
+  {
+    "case": "MUL_2_children",
+    "label_value": "*",
+    "children_hashes": [
+      7567199770864868670,
+      12638127826927718602
+    ],
+    "expected_uint64": 15205684399708055624
+  },
+  {
+    "case": "MUL_3_children",
+    "label_value": "*",
+    "children_hashes": [
+      7567199770864868670,
+      12638127826927718602,
+      12638128926439346813
+    ],
+    "expected_uint64": 2728487718038562871
+  },
+  {
+    "case": "MUL_5_children",
+    "label_value": "*",
+    "children_hashes": [
+      7567199770864868670,
+      12638121229857949336,
+      12638123428881205758,
+      12638127826927718602,
+      12638128926439346813
+    ],
+    "expected_uint64": 14314865450006778774
+  },
+  {
+    "case": "ADD_max64_child",
+    "label_value": "+",
+    "children_hashes": [
+      18446744073709551615
+    ],
+    "expected_uint64": 14027138837611545218
+  },
+  {
+    "case": "MUL_two_highbit_children",
+    "label_value": "*",
+    "children_hashes": [
+      9223372036854775815,
+      9223372036854775816
+    ],
+    "expected_uint64": 6328730450078695410
+  }
+]

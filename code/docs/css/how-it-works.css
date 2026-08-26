@@ -1,0 +1,236 @@
+/* ============================================================
+   How It Works Page
+   ============================================================ */
+
+.hiw-header {
+  text-align: center;
+  padding: var(--space-3xl) 0 var(--space-2xl);
+}
+
+.hiw-header h1 {
+  margin-bottom: var(--space-md);
+}
+
+.hiw-header p {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+/* Intro section */
+.hiw-intro {
+  max-width: 900px;
+  margin: 0 auto var(--space-3xl);
+}
+
+.hiw-intro p {
+  margin-bottom: var(--space-md);
+}
+
+/* Section dividers */
+.hiw-section {
+  max-width: 960px;
+  margin: 0 auto var(--space-3xl);
+}
+
+.hiw-section h2 {
+  margin-bottom: var(--space-lg);
+}
+
+.hiw-section h3 {
+  margin-bottom: var(--space-md);
+}
+
+/* Instruction table — grouped for 31 tokens */
+.instruction-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-lg) 0;
+}
+
+.instruction-table th {
+  background: var(--bg-surface);
+  padding: var(--space-sm) var(--space-md);
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.instruction-table td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.instruction-table .instr-char {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-lg);
+}
+
+/* Group header row within instruction table */
+.instruction-table .group-header td {
+  background: var(--bg-secondary);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-primary);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-default);
+}
+
+/* S2D walkthrough table */
+.walkthrough-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin: var(--space-lg) 0;
+}
+
+.walkthrough-table th {
+  background: var(--bg-surface);
+  padding: var(--space-sm) var(--space-md);
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+}
+
+.walkthrough-table td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+
+.walkthrough-table .token-cell {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  white-space: nowrap;
+}
+
+/* Architecture figure */
+.figure-container {
+  text-align: center;
+  margin: var(--space-2xl) 0;
+}
+
+.figure-container img {
+  max-width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+}
+
+.figure-container figcaption {
+  margin-top: var(--space-sm);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Concept cards (core idea section) */
+.concept-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+  margin: var(--space-xl) 0;
+}
+
+@media (min-width: 768px) {
+  .concept-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.concept-card {
+  padding: var(--space-xl);
+}
+
+.concept-card__icon {
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-sm);
+}
+
+.concept-card__title {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.concept-card__text {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Step log */
+.step-log {
+  background: var(--bg-code);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.8;
+}
+
+/* String display panel */
+.string-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  padding: var(--space-md);
+}
+
+/* Demo input */
+.demo-input {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-lg);
+}
+
+.demo-input__field {
+  flex: 1;
+  min-width: 200px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-code);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.1em;
+  transition: border-color var(--transition-fast);
+}
+
+.demo-input__field:focus {
+  border-color: var(--accent-primary);
+}
+
+/* Math display blocks (KaTeX targets rendered by the page script) */
+.hiw-section .math-display {
+  display: block;
+  margin: var(--space-md) 0;
+  text-align: center;
+  overflow-x: auto;
+}

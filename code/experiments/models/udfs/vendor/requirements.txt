@@ -1,0 +1,10 @@
+matplotlib
+networkx
+numpy
+scipy
+stopit
+sympy
+torch
+tqdm
+scikit-learn
+zss

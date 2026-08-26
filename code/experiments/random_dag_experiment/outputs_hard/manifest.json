@@ -1,0 +1,325 @@
+{
+  "experiment": "random_dag_experiment_preview",
+  "seed": 42,
+  "perm_samples_per_cell": 200,
+  "operator_sets": {
+    "poly": {
+      "binary": [
+        "ADD",
+        "MUL"
+      ],
+      "unary": [
+        "NEG"
+      ]
+    },
+    "poly_trig": {
+      "binary": [
+        "ADD",
+        "MUL"
+      ],
+      "unary": [
+        "NEG",
+        "SIN",
+        "COS"
+      ]
+    },
+    "full": {
+      "binary": [
+        "ADD",
+        "MUL"
+      ],
+      "unary": [
+        "NEG",
+        "SIN",
+        "COS",
+        "EXP",
+        "LOG",
+        "INV"
+      ]
+    }
+  },
+  "cells": [
+    {
+      "cell_id": 101,
+      "k": 18,
+      "k_actual": 15,
+      "m": 2,
+      "op_set": "poly_trig",
+      "role": "k=18, m=2, poly+trig",
+      "metrics": {
+        "n_total_nodes": 17,
+        "n_edges": 22,
+        "n_vars_used": 2,
+        "max_in_degree": 3,
+        "max_out_degree": 6,
+        "depth": 7,
+        "n_perm_samples": 200,
+        "n_unique_canon": 1,
+        "n_distinct_fingerprints": 200,
+        "estimated_RF": 1.0,
+        "canon_invariant": true,
+        "k_factorial": 1307674368000,
+        "canonical_len": 78,
+        "label_histogram": {
+          "VAR": 2,
+          "NEG": 2,
+          "ADD": 3,
+          "COS": 5,
+          "SIN": 2,
+          "MUL": 3
+        }
+      },
+      "canonical_string": "V*V+pv*v*vcvcvgpvcnv+nvgPVsPVcNV+NVcNCnnnnvsPncPPncpppcNNNNNNNpcppppCPPppppppC",
+      "sympy_expression": "-cos(x_0*(x_0 + x_1)) - cos(sin(x_1) + sin(cos(x_1)) + cos(x_1**2*cos(x_1)))",
+      "latex_expression": "- \\cos{\\left(x_{0} \\left(x_{0} + x_{1}\\right) \\right)} - \\cos{\\left(\\sin{\\left(x_{1} \\right)} + \\sin{\\left(\\cos{\\left(x_{1} \\right)} \\right)} + \\cos{\\left(x_{1}^{2} \\cos{\\left(x_{1} \\right)} \\right)} \\right)}",
+      "figure": "figures/cell101_k18_m2_poly_trig.png"
+    },
+    {
+      "cell_id": 102,
+      "k": 18,
+      "k_actual": 15,
+      "m": 3,
+      "op_set": "poly",
+      "role": "k=18, m=3, pure poly",
+      "metrics": {
+        "n_total_nodes": 18,
+        "n_edges": 25,
+        "n_vars_used": 3,
+        "max_in_degree": 3,
+        "max_out_degree": 5,
+        "depth": 8,
+        "n_perm_samples": 200,
+        "n_unique_canon": 1,
+        "n_distinct_fingerprints": 200,
+        "estimated_RF": 1.0,
+        "canon_invariant": true,
+        "k_factorial": 1307674368000,
+        "canonical_len": 86,
+        "label_histogram": {
+          "VAR": 3,
+          "ADD": 4,
+          "NEG": 7,
+          "MUL": 4
+        }
+      },
+      "canonical_string": "V*V*V*V+Vgpv+vgnv+nvgnv+PVgNV*NpCppppvgpvgpvgppcNNNnnCnnnnnncncNcNnnCNpppcNnnnnnnCNNpC",
+      "sympy_expression": "x_0*x_2*(x_0 + x_1 + x_2) + x_0*(x_0*x_1 - x_2) - x_0 + x_2",
+      "latex_expression": "x_{0} x_{2} \\left(x_{0} + x_{1} + x_{2}\\right) + x_{0} \\left(x_{0} x_{1} - x_{2}\\right) - x_{0} + x_{2}",
+      "figure": "figures/cell102_k18_m3_poly.png"
+    },
+    {
+      "cell_id": 103,
+      "k": 22,
+      "k_actual": 17,
+      "m": 2,
+      "op_set": "poly",
+      "role": "k=22, m=2, pure poly",
+      "metrics": {
+        "n_total_nodes": 19,
+        "n_edges": 32,
+        "n_vars_used": 2,
+        "max_in_degree": 3,
+        "max_out_degree": 9,
+        "depth": 7,
+        "n_perm_samples": 200,
+        "n_unique_canon": 1,
+        "n_distinct_fingerprints": 200,
+        "estimated_RF": 1.0,
+        "canon_invariant": true,
+        "k_factorial": 355687428096000,
+        "canonical_len": 103,
+        "label_histogram": {
+          "VAR": 2,
+          "ADD": 6,
+          "MUL": 6,
+          "NEG": 5
+        }
+      },
+      "canonical_string": "V*V*V*V*V*V+V+V+Vgpv+vgpvgpv+nvgnv+PVgnnnv*nnncNNNppCNNCncNcNNcNcNNpcNNNncPPPPnnncPnnnCPcPnnCNNNcNNNnnc",
+      "sympy_expression": "-x_0**2*x_1*(x_0 + x_1) + x_0*x_1*(x_0*x_1 + x_0)",
+      "latex_expression": "- x_{0}^{2} x_{1} \\left(x_{0} + x_{1}\\right) + x_{0} x_{1} \\left(x_{0} x_{1} + x_{0}\\right)",
+      "figure": "figures/cell103_k22_m2_poly.png"
+    },
+    {
+      "cell_id": 104,
+      "k": 22,
+      "k_actual": 17,
+      "m": 3,
+      "op_set": "poly_trig",
+      "role": "k=22, m=3, poly+trig",
+      "metrics": {
+        "n_total_nodes": 20,
+        "n_edges": 26,
+        "n_vars_used": 3,
+        "max_in_degree": 5,
+        "max_out_degree": 6,
+        "depth": 7,
+        "n_perm_samples": 200,
+        "n_unique_canon": 1,
+        "n_distinct_fingerprints": 200,
+        "estimated_RF": 1.0,
+        "canon_invariant": true,
+        "k_factorial": 355687428096000,
+        "canonical_len": 83,
+        "label_histogram": {
+          "VAR": 3,
+          "NEG": 6,
+          "MUL": 3,
+          "SIN": 3,
+          "ADD": 2,
+          "COS": 3
+        }
+      },
+      "canonical_string": "V*V*VgVgVgVgpvspv+v+nvsnvsnv*nvgPCnnvgnvcPPpppCNNNNCNCNNVcNNVcNnnCNpppppCpcPPPnCPPC",
+      "sympy_expression": "-x_0**2*sin(x_2)*sin(sin(x_0*x_1 - x_0 + x_1 + cos(x_0)))*cos(x_1 + cos(x_0))",
+      "latex_expression": "- x_{0}^{2} \\sin{\\left(x_{2} \\right)} \\sin{\\left(\\sin{\\left(x_{0} x_{1} - x_{0} + x_{1} + \\cos{\\left(x_{0} \\right)} \\right)} \\right)} \\cos{\\left(x_{1} + \\cos{\\left(x_{0} \\right)} \\right)}",
+      "figure": "figures/cell104_k22_m3_poly_trig.png"
+    },
+    {
+      "cell_id": 105,
+      "k": 26,
+      "k_actual": 24,
+      "m": 2,
+      "op_set": "poly_trig",
+      "role": "k=26, m=2, poly+trig",
+      "metrics": {
+        "n_total_nodes": 26,
+        "n_edges": 30,
+        "n_vars_used": 2,
+        "max_in_degree": 3,
+        "max_out_degree": 4,
+        "depth": 13,
+        "n_perm_samples": 200,
+        "n_unique_canon": 1,
+        "n_distinct_fingerprints": 200,
+        "estimated_RF": 1.0,
+        "canon_invariant": true,
+        "k_factorial": 620448401733239439360000,
+        "canonical_len": 110,
+        "label_histogram": {
+          "VAR": 2,
+          "NEG": 4,
+          "SIN": 5,
+          "ADD": 4,
+          "COS": 9,
+          "MUL": 2
+        }
+      },
+      "canonical_string": "V*V+VcVcpv*v+vcpv+nvcnv+nvsnvsnvsnvgnvgPVsPVcPVgNVcNVcNppppCNNNNVcNVgNCNNVsNVcNppCNNpCPppppppppppppCPPPPPPPPnc",
+      "sympy_expression": "sin(sin(sin(cos(x_0**2 + cos(sin(cos(x_0)))) - cos(sin(x_1*cos(x_1 + cos(x_0)))) + cos(cos(cos(x_1))))))",
+      "latex_expression": "\\sin{\\left(\\sin{\\left(\\sin{\\left(\\cos{\\left(x_{0}^{2} + \\cos{\\left(\\sin{\\left(\\cos{\\left(x_{0} \\right)} \\right)} \\right)} \\right)} - \\cos{\\left(\\sin{\\left(x_{1} \\cos{\\left(x_{1} + \\cos{\\left(x_{0} \\right)} \\right)} \\right)} \\right)} + \\cos{\\left(\\cos{\\left(\\cos{\\left(x_{1} \\right)} \\right)} \\right)} \\right)} \\right)} \\right)}",
+      "figure": "figures/cell105_k26_m2_poly_trig.png"
+    },
+    {
+      "cell_id": 106,
+      "k": 26,
+      "k_actual": 23,
+      "m": 4,
+      "op_set": "full",
+      "role": "k=26, m=4, full alphabet",
+      "metrics": {
+        "n_total_nodes": 27,
+        "n_edges": 31,
+        "n_vars_used": 4,
+        "max_in_degree": 3,
+        "max_out_degree": 5,
+        "depth": 11,
+        "n_perm_samples": 200,
+        "n_unique_canon": 1,
+        "n_distinct_fingerprints": 200,
+        "estimated_RF": 1.0,
+        "canon_invariant": true,
+        "k_factorial": 25852016738884976640000,
+        "canonical_len": 131,
+        "label_histogram": {
+          "VAR": 4,
+          "COS": 4,
+          "MUL": 3,
+          "EXP": 3,
+          "SIN": 3,
+          "NEG": 5,
+          "ADD": 3,
+          "LOG": 1,
+          "INV": 1
+        }
+      },
+      "canonical_string": "V+nv*nvenvgnvgnv+nvgnvsnvenv*nvcnnv+vsvsnvgnvcnv*nvcnnvcnnvgnvenvlnnviNNcPnncNNNNNpppcNNNNppppppcNNNNNNnncNNNNnnnnnncPPPPPPPPnnnCnC",
+      "sympy_expression": "cos(exp(-sin(exp(x_1*x_2*(x_0 + x_1 + x_3)) + log(exp(-x_1 - 1/x_2))))*cos(cos(sin(x_1))**2))",
+      "latex_expression": "\\cos{\\left(e^{- \\sin{\\left(e^{x_{1} x_{2} \\left(x_{0} + x_{1} + x_{3}\\right)} + \\log{\\left(e^{- x_{1} - \\frac{1}{x_{2}}} \\right)} \\right)}} \\cos{\\left(\\cos^{2}{\\left(\\sin{\\left(x_{1} \\right)} \\right)} \\right)} \\right)}",
+      "figure": "figures/cell106_k26_m4_full.png"
+    },
+    {
+      "cell_id": 107,
+      "k": 22,
+      "k_actual": 20,
+      "m": 4,
+      "op_set": "full",
+      "role": "k=22, m=4, full alphabet",
+      "metrics": {
+        "n_total_nodes": 24,
+        "n_edges": 25,
+        "n_vars_used": 4,
+        "max_in_degree": 4,
+        "max_out_degree": 2,
+        "depth": 8,
+        "n_perm_samples": 200,
+        "n_unique_canon": 1,
+        "n_distinct_fingerprints": 200,
+        "estimated_RF": 1.0,
+        "canon_invariant": true,
+        "k_factorial": 2432902008176640000,
+        "canonical_len": 92,
+        "label_histogram": {
+          "VAR": 4,
+          "ADD": 2,
+          "LOG": 3,
+          "SIN": 2,
+          "NEG": 3,
+          "INV": 2,
+          "EXP": 3,
+          "MUL": 1,
+          "COS": 4
+        }
+      },
+      "canonical_string": "V+pvcvgpv*vipvcpvcPVePVlPPVlncPVsNVgNVgNVsNVlNV+nnvcnvinveNNncNVeNnnnnnnnnCNNNnCNNnnnnnnnnnC",
+      "sympy_expression": "x_2*exp(1/cos(cos(x_1)))*log(-x_3)*cos(x_0 + exp(cos(x_3))) + log(sin(sin(1/x_2)))",
+      "latex_expression": "x_{2} e^{\\frac{1}{\\cos{\\left(\\cos{\\left(x_{1} \\right)} \\right)}}} \\log{\\left(- x_{3} \\right)} \\cos{\\left(x_{0} + e^{\\cos{\\left(x_{3} \\right)}} \\right)} + \\log{\\left(\\sin{\\left(\\sin{\\left(\\frac{1}{x_{2}} \\right)} \\right)} \\right)}",
+      "figure": "figures/cell107_k22_m4_full.png"
+    },
+    {
+      "cell_id": 108,
+      "k": 30,
+      "k_actual": 25,
+      "m": 3,
+      "op_set": "poly_trig",
+      "role": "k=30, m=3, poly+trig (XL)",
+      "metrics": {
+        "n_total_nodes": 28,
+        "n_edges": 37,
+        "n_vars_used": 3,
+        "max_in_degree": 6,
+        "max_out_degree": 6,
+        "depth": 10,
+        "n_perm_samples": 200,
+        "n_unique_canon": 1,
+        "n_distinct_fingerprints": 200,
+        "estimated_RF": 1.0,
+        "canon_invariant": true,
+        "k_factorial": 15511210043330985984000000,
+        "canonical_len": 140,
+        "label_histogram": {
+          "VAR": 3,
+          "ADD": 6,
+          "SIN": 4,
+          "NEG": 4,
+          "COS": 7,
+          "MUL": 4
+        }
+      },
+      "canonical_string": "Vgpv*v*v+v+vgvspv+vcvcvcpvgnvsnvsnv+nvsnv+PV+NVcNVgNpCnnnnv*nvcnnvcnnnnnvcnnnv*PPncPPPCPPppppppppcNNpppppcNNcPpppCPPPPCPCPPPPCPPPnnCNNNNnnnC",
+      "sympy_expression": "sin(sin(sin(x_0)) + cos(x_1) - cos(x_1*x_2 + (x_1 + x_2)*(x_2 + cos(cos(x_1)))) + cos(sin(x_2))) + cos(x_1*cos(x_1))",
+      "latex_expression": "\\sin{\\left(\\sin{\\left(\\sin{\\left(x_{0} \\right)} \\right)} + \\cos{\\left(x_{1} \\right)} - \\cos{\\left(x_{1} x_{2} + \\left(x_{1} + x_{2}\\right) \\left(x_{2} + \\cos{\\left(\\cos{\\left(x_{1} \\right)} \\right)}\\right) \\right)} + \\cos{\\left(\\sin{\\left(x_{2} \\right)} \\right)} \\right)} + \\cos{\\left(x_{1} \\cos{\\left(x_{1} \\right)} \\right)}",
+      "figure": "figures/cell108_k30_m3_poly_trig.png"
+    }
+  ]
+}

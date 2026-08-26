@@ -1,0 +1,138 @@
+"""Hill climbing search for symbolic regression using IsalSR strings.
+
+Multi-restart hill climbing: start from random string, apply mutations,
+canonicalize after each (MANDATORY per advisor), keep improvements.
+
+Dependencies: numpy.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+import numpy as np
+
+from isalsr.core.canonical import CanonicalTimeoutError, pruned_canonical_string
+from isalsr.core.node_types import OperationSet
+from isalsr.core.string_to_dag import StringToDAG
+from isalsr.evaluation.fitness import evaluate_expression
+from isalsr.search.operators import insertion_mutation, point_mutation
+from isalsr.search.random_search import random_isalsr_string
+
+# Default timeout (seconds) per canonicalization call.
+_CANON_TIMEOUT: float = 5.0
+
+log = logging.getLogger(__name__)
+
+
+def hill_climbing(
+    x_data: np.ndarray[Any, np.dtype[Any]],
+    y_true: np.ndarray[Any, np.dtype[Any]],
+    num_variables: int,
+    allowed_ops: OperationSet,
+    n_iterations: int = 1000,
+    max_tokens: int = 50,
+    n_restarts: int = 10,
+    seed: int = 42,
+    use_canonical: bool = True,
+) -> list[dict[str, object]]:
+    """Multi-restart hill climbing in the IsalSR string space.
+
+    When ``use_canonical=True`` (default), strings are canonicalized
+    (pruned 6-tuple variant with timeout) after every mutation.
+    When ``use_canonical=False``, no canonicalization (baseline for
+    WITH vs WITHOUT comparison).
+
+    Args:
+        x_data: Input matrix (N, m).
+        y_true: Target vector (N,).
+        num_variables: Number of input variables.
+        allowed_ops: Allowed operations.
+        n_iterations: Mutations per restart.
+        max_tokens: Maximum tokens per string.
+        n_restarts: Number of restarts.
+        seed: Random seed.
+        use_canonical: If True, canonicalize after every mutation.
+
+    Returns:
+        Sorted list of dicts with keys: 'string', 'r2', 'nrmse', 'mse'.
+    """
+    rng = np.random.default_rng(seed)
+    results: list[dict[str, object]] = []
+
+    for _restart in range(n_restarts):
+        # Initialize with random string (canonicalized if use_canonical).
+        current = _init_canonical(num_variables, max_tokens, allowed_ops, rng, use_canonical)
+        if current is None:
+            continue
+        current_metrics = _eval_string(current, num_variables, allowed_ops, x_data, y_true)
+        if current_metrics is None:
+            continue
+
+        for _step in range(n_iterations):
+            # Apply random mutation.
+            mutation_fn = rng.choice([point_mutation, insertion_mutation])  # type: ignore[arg-type]
+            try:
+                mutated = mutation_fn(current, allowed_ops, rng)
+                dag = StringToDAG(mutated, num_variables, allowed_ops).run()
+                if dag.node_count <= num_variables:
+                    continue
+                if use_canonical:
+                    canon = pruned_canonical_string(dag, timeout=_CANON_TIMEOUT)
+                else:
+                    from isalsr.core.dag_to_string import DAGToString
+
+                    canon = DAGToString(dag).run()
+                metrics = _eval_string(canon, num_variables, allowed_ops, x_data, y_true)
+                if metrics is not None and metrics["r2"] > current_metrics["r2"]:
+                    current = canon
+                    current_metrics = metrics
+            except CanonicalTimeoutError:
+                continue  # Skip DAGs too expensive to canonicalize.
+            except Exception:  # noqa: BLE001
+                continue
+
+        results.append({"string": current, **current_metrics})
+
+    results.sort(key=lambda d: -float(d.get("r2", -1e10)))  # type: ignore[arg-type]
+    return results
+
+
+def _init_canonical(
+    num_variables: int,
+    max_tokens: int,
+    allowed_ops: OperationSet,
+    rng: np.random.Generator,
+    use_canonical: bool = True,
+) -> str | None:
+    """Generate a random string (canonicalized if use_canonical), retrying on failure."""
+    for _ in range(100):
+        raw = random_isalsr_string(num_variables, max_tokens, allowed_ops, rng)
+        try:
+            dag = StringToDAG(raw, num_variables, allowed_ops).run()
+            if dag.node_count <= num_variables:
+                continue
+            if use_canonical:
+                return pruned_canonical_string(dag, timeout=_CANON_TIMEOUT)
+            from isalsr.core.dag_to_string import DAGToString
+
+            return DAGToString(dag).run()
+        except (CanonicalTimeoutError, Exception):  # noqa: BLE001
+            continue
+    return None
+
+
+def _eval_string(
+    string: str,
+    num_variables: int,
+    allowed_ops: OperationSet,
+    x_data: np.ndarray[Any, np.dtype[Any]],
+    y_true: np.ndarray[Any, np.dtype[Any]],
+) -> dict[str, float] | None:
+    """Evaluate a canonical string and return metrics, or None on failure."""
+    try:
+        dag = StringToDAG(string, num_variables, allowed_ops).run()
+        return evaluate_expression(dag, x_data, y_true)
+    except Exception:  # noqa: BLE001
+        return None

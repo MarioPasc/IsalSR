@@ -1,0 +1,22 @@
+# Feynman equations benchmark configuration for IsalSR
+# Reference: Udrescu & Tegmark (2020). AI Feynman.
+experiment:
+  name: feynman
+  description: "Feynman physics equations benchmark"
+  seed: 42
+  n_runs: 10
+
+data:
+  source: "feynman"
+  train_ratio: 0.8
+
+search:
+  operations: ["+", "*", "-", "/", "s", "c", "e", "l", "r", "^"]
+  max_tokens: 80
+  n_iterations: 200000
+  population_size: 1000
+
+evaluation:
+  metric: r_squared
+  constant_optimization: true
+  bfgs_max_iter: 200

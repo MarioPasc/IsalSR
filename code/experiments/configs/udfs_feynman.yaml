@@ -1,0 +1,60 @@
+# UDFS experiment on Feynman physics benchmarks
+# Reference: isalsr_experimental_design.md, data_benchmarking_design.md
+# Feynman data: SRBench uses up to 10K; we use 1000/250 (conservative step)
+experiment:
+  name: udfs_feynman
+  method: udfs
+  n_seeds: 30
+
+benchmarks:
+  feynman:
+    problems: all
+    train_size: 1000      # 6.25x from Liu2025 (160); toward SRBench std (10K)
+    test_size: 250        # 20% holdout from 1250 total
+
+udfs:
+  # F-20 (2026-08-05): was 7 here and 5 in every other suite, on the rationale
+  # "Feynman problems have up to 3 variables; more calc nodes needed". Set to 5
+  # for uniformity. `n_calc_nodes` is a hard cap on the number of intermediate
+  # nodes (dag_search.py:594), i.e. on representable expression size, so a
+  # per-suite value confounds the suite with the reachable search space -- the
+  # A4b defect, in UDFS. Two reasons for levelling DOWN rather than up:
+  #   (i) the original rationale is inverted against the portfolio -- the 5-var
+  #       suites (hard, cherrypicked, roundoff) already run at 5, so the suite
+  #       with the FEWEST variables had the largest cap;
+  #   (ii) UDFS saturates its 12 h budget on 100 % of runs (C1, n=600, mean =
+  #       median = max = 12.00 h). Raising the cap enlarges the enumeration
+  #       space without enlarging the budget, so UDFS would cover a smaller
+  #       fraction of it and results would likely degrade portfolio-wide.
+  # Carry: these 10 Feynman problems ran at 7 in C1, so they are NOT
+  # like-for-like against C1 and join the §7 continuity exclusions.
+  n_calc_nodes: 5
+  max_orders: 200000
+  max_time: 43200
+  processes: 1
+  mode: hierarchical
+  k: 2
+  stop_thresh: 1.0e-10
+  use_tan: false
+  # Informational only: to_dag_regressor_kwargs() does not forward this field and
+  # DAGRegressor has no such parameter. The search always enumerates the vendor's
+  # own table (vendor/DAG_search/config.py, NODE_ARITY): binary {+, *, sub_l,
+  # sub_r, div_l, div_r}, unary {id, inv, neg, sin, cos, exp, log, sqrt}, no pow.
+  # The list below records that fixed set and is identical in every UDFS config.
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log", "sqrt", "neg", "inv"]
+  snapshot_frequency: 1000
+  # Shadow sketches OFF for the campaign (audit.md §7.3, Mario 2026-08-04).
+  # They cost 17.6 % of Bingo's wall clock / 0.03 % of UDFS's, are paid by the
+  # isalsr arm alone inside a fixed budget, and would penalise exactly the arm
+  # carrying the headline claim.  The fixed-order numbers come from the Stage D
+  # trace cell and the D3 replay instead.  Read by the isalsr/hash runners via
+  # config.get("shadow_hash"); UDFSConfig.from_dict filters it out of the
+  # dataclass, so it perturbs no host parameter.
+  shadow_hash: false
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/isalsr/results

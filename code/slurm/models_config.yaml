@@ -1,0 +1,206 @@
+# IsalSR Model-Based Experiments for Picasso HPC
+# ================================================
+#
+# Central config for experiments/models/ pipeline.
+# Separate from slurm/config.yaml (which targets experiments/scripts/).
+#
+# Each experiment runs paired comparisons: baseline vs IsalSR.
+# Parallelization: one array task per (problem, seed) pair.
+# Array size = n_problems * n_seeds.
+#
+# Time limits: 12h algorithm + 3-5h buffer.
+# Dataset sizes increased (Nguyen: 240 train, Feynman: 1000 train)
+# per data_benchmarking_design.md — more data = slightly more eval time.
+
+# Paths
+repo_dir: /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR
+results_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/models
+conda_env: isalsr
+
+# SLURM defaults
+constraint: cpu
+account: tic_163_uma
+
+experiments:
+  # =========================================================
+  # UDFS on Nguyen (12 problems x 30 seeds = 360 tasks/group)
+  # =========================================================
+  udfs_nguyen_baseline:
+    enabled: false
+    method: udfs
+    benchmark: nguyen
+    variant: baseline
+    config: experiments/configs/udfs_nguyen.yaml
+    n_seeds: 30
+    n_problems: 12
+    time_limit: "15:00:00"    # 12h algorithm + 3h buffer
+    cpus: 1
+    mem_gb: 8
+
+  udfs_nguyen_isalsr:
+    enabled: false
+    method: udfs
+    benchmark: nguyen
+    variant: isalsr
+    config: experiments/configs/udfs_nguyen.yaml
+    n_seeds: 30
+    n_problems: 12
+    time_limit: "17:00:00"    # 12h algorithm + 5h canon overhead buffer
+    cpus: 1
+    mem_gb: 8
+
+  # =========================================================
+  # Bingo on Nguyen (12 problems x 30 seeds = 360 tasks/group)
+  # =========================================================
+  bingo_nguyen_baseline:
+    enabled: true
+    method: bingo
+    benchmark: nguyen
+    variant: baseline
+    config: experiments/configs/bingo_nguyen.yaml
+    n_seeds: 30
+    n_problems: 12
+    time_limit: "15:00:00"    # 12h evolution + 3h buffer
+    cpus: 1
+    mem_gb: 16
+
+  bingo_nguyen_isalsr:
+    enabled: true
+    method: bingo
+    benchmark: nguyen
+    variant: isalsr
+    config: experiments/configs/bingo_nguyen.yaml
+    n_seeds: 30
+    n_problems: 12
+    time_limit: "17:00:00"    # 12h evolution + 5h canon overhead buffer
+    cpus: 1
+    mem_gb: 128             # 64→128: heap fragmentation on hard problems + malloc_trim + PYTHONMALLOC=malloc
+
+  # =========================================================
+  # UDFS on Feynman (10 problems x 30 seeds = 300 tasks/group)
+  # =========================================================
+  udfs_feynman_baseline:
+    enabled: false
+    method: udfs
+    benchmark: feynman
+    variant: baseline
+    config: experiments/configs/udfs_feynman.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "15:00:00"    # 12h algorithm + 3h buffer
+    cpus: 1
+    mem_gb: 8
+
+  udfs_feynman_isalsr:
+    enabled: false
+    method: udfs
+    benchmark: feynman
+    variant: isalsr
+    config: experiments/configs/udfs_feynman.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "17:00:00"    # 12h algorithm + 5h canon overhead buffer
+    cpus: 1
+    mem_gb: 8
+
+  # =========================================================
+  # Bingo on Feynman (10 problems x 30 seeds = 300 tasks/group)
+  # =========================================================
+  bingo_feynman_baseline:
+    enabled: true
+    method: bingo
+    benchmark: feynman
+    variant: baseline
+    config: experiments/configs/bingo_feynman.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "15:00:00"    # 12h evolution + 3h buffer
+    cpus: 1
+    mem_gb: 16
+
+  bingo_feynman_isalsr:
+    enabled: true
+    method: bingo
+    benchmark: feynman
+    variant: isalsr
+    config: experiments/configs/bingo_feynman.yaml
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "17:00:00"    # 12h evolution + 5h canon overhead buffer
+    cpus: 1
+    mem_gb: 128             # 64→128: heap fragmentation on I.10.7/I.48.20 + malloc_trim + PYTHONMALLOC=malloc
+
+  # =========================================================
+  # Atlas-enabled IsalSR (uses precomputed canonical lookup)
+  # =========================================================
+  bingo_nguyen_isalsr_atlas:
+    enabled: false
+    method: bingo
+    benchmark: nguyen
+    variant: isalsr
+    config: experiments/configs/bingo_nguyen.yaml
+    atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
+    n_seeds: 30
+    n_problems: 12
+    time_limit: "15:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  bingo_feynman_isalsr_atlas:
+    enabled: false
+    method: bingo
+    benchmark: feynman
+    variant: isalsr
+    config: experiments/configs/bingo_feynman.yaml
+    atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "15:00:00"
+    cpus: 1
+    mem_gb: 32
+
+  udfs_nguyen_isalsr_atlas:
+    enabled: false
+    method: udfs
+    benchmark: nguyen
+    variant: isalsr
+    config: experiments/configs/udfs_nguyen.yaml
+    atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
+    n_seeds: 30
+    n_problems: 12
+    time_limit: "15:00:00"
+    cpus: 1
+    mem_gb: 8
+
+  udfs_feynman_isalsr_atlas:
+    enabled: false
+    method: udfs
+    benchmark: feynman
+    variant: isalsr
+    config: experiments/configs/udfs_feynman.yaml
+    atlas_dir: /mnt/home/users/tic_163_uma/mpascual/execs/isalsr/atlas/precomputed_cache
+    n_seeds: 30
+    n_problems: 10
+    time_limit: "15:00:00"
+    cpus: 1
+    mem_gb: 8
+
+  # =========================================================
+  # Debug: sequential test of all (method, benchmark) combos
+  # =========================================================
+  models_debug:
+    enabled: false
+    time_limit: "04:00:00"
+    cpus: 1
+    mem_gb: 8
+
+  # =========================================================
+  # Analysis (runs after ALL experiments complete)
+  # =========================================================
+  models_analyze:
+    enabled: true
+    methods: "udfs,bingo"
+    benchmarks: "nguyen,feynman"
+    time_limit: "02:00:00"
+    cpus: 1
+    mem_gb: 16
