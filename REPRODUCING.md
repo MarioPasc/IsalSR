@@ -97,8 +97,9 @@ point for a single cell.
    links the base's MPI and segfaults at interpreter teardown on older bases,
    *after* every test has passed, and left free the conda solver picks Intel
    MPI, which cannot initialise inside a container.
-3. Set the master script to `run` in the Reproducibility panel. It is at the
-   capsule root, not under a `code/` subdirectory — see above for why.
+3. Set the master script to `run` in the Reproducibility panel. On the
+   `codeocean` branch it arrives as `code/run`, i.e. `/code/run` in the capsule,
+   beside `pyproject.toml`.
 4. **Reproducible Run**.
 
 ### Why the package is built at run time
@@ -145,7 +146,7 @@ provenance and are unaffected.
 docker build -t isalsr -f environment/Dockerfile environment/
 docker run --rm --network none \
     -v "$PWD":/code -v "$PWD/results":/results \
-    -w /code isalsr /code/run   # from a codeocean-branch checkout
+    -w /code isalsr /code/run
 ```
 
 `--network none` is the point of the exercise: it proves the image is
