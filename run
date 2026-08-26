@@ -16,16 +16,20 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 # Locate the project root
 # --------------------------------------------------------------------------- #
-# This script lives at the REPOSITORY ROOT, deliberately, and not in a `code/`
-# directory.  Code Ocean's git import treats a top-level `code/` folder
-# specially: its contents become /code, and *everything else is filed under the
-# capsule root, which is not mounted during a Reproducible Run*.  A repository
-# that keeps its sources outside `code/` therefore arrives with the run script
-# present and the sources gone -- the run starts and instantly cannot find the
-# project.  With no `code/` folder to special-case, the whole repository lands
-# at /code, and this script sits beside pyproject.toml.
+# On `main` this script sits at the repository root, beside pyproject.toml, so
+# it can be run directly during development.  In the capsule it sits at
+# `code/run`, beside the same pyproject.toml, because the `codeocean` branch
+# moves the whole project under `code/`.
 #
-# The search still tolerates other layouts, and on failure reports what it
+# That move is not cosmetic.  Code Ocean's git import recognises only four
+# directory names -- code, data, environment, metadata -- and files their
+# *contents* into the matching capsule directories.  Anything outside them is
+# neither mounted during a Reproducible Run nor selectable as the master script.
+# So a layout with the sources at the repository root yields a capsule that
+# either cannot see its own code, or cannot start.  Both failure modes were
+# observed.  See tools/make_codeocean_branch.sh.
+#
+# The search below still tolerates other layouts, and on failure reports what it
 # actually saw rather than only that it failed.
 find_root() {
     local candidate found
