@@ -66,11 +66,19 @@ def fmt(x: float | None, digits: int = 2, *, signed: bool = False) -> str:
     return f"{x:{'+' if signed else ''}.{digits}f}"
 
 
-def fmt_p(p: float | None) -> str:
-    """A p-value with significance marks, in the manuscript's style."""
+def fmt_p(p: float | None, *, dagger: bool = False) -> str:
+    """A p-value with significance marks, in the manuscript's style.
+
+    ``dagger`` appends a dagger to the superscript; Table 3 uses it to mark a
+    two-sided p in a column whose other entries are one-sided. It goes inside
+    the same math group, because a trailing ``$^\\dagger$`` would meet the
+    closing ``$`` and open display math.
+    """
     if p is None or (isinstance(p, float) and math.isnan(p)):
         return "---"
-    mark = "{}^{***}" if p < 0.001 else "{}^{**}" if p < 0.01 else "{}^{*}" if p < 0.05 else ""
+    stars = "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else ""
+    sup = stars + (r"\dagger" if dagger else "")
+    mark = f"{{}}^{{{sup}}}" if sup else ""
     if p >= 0.01:
         return f"${p:.3f}{mark}$"
     exponent = math.floor(math.log10(p))
@@ -182,8 +190,29 @@ CONTRAST_LABEL = {
 }
 
 
+def primary_p(row: dict[str, Any]) -> str:
+    """The p a row's pre-registered alternative defines, formatted for Table 3.
+
+    For a two-sided contrast (``alternative == "two-sided"`` in the record, as
+    resolved from ``CPDT_CONTRAST_POLICY``) the pipeline also stores a one-sided
+    p taken in the direction of the observed mean difference. That value
+    describes the sample and is not the test, so it is never printed; the
+    two-sided p is, marked with a dagger because the column header says
+    one-sided.
+    """
+    if row["test"] == "descriptive_definitional_baseline":
+        return "---"
+    if row["alternative"] == "two-sided":
+        return fmt_p(row["p_two_sided"], dagger=True)
+    return fmt_p(row["p_one_sided"])
+
+
 def cpdt_summary(d: dict[str, Any]) -> str:
-    """The paired test across problems, both contrasts, both suite sizes."""
+    """The paired test across problems, both contrasts, both suite sizes.
+
+    Each row prints its primary p (see :func:`primary_p`); two-sided rows carry
+    a dagger, which the caption glosses.
+    """
     lines = [
         r"\setlength{\tabcolsep}{1.2pt}",
         r"\begin{tabular}{@{}llcrll@{}}",
@@ -199,7 +228,8 @@ def cpdt_summary(d: dict[str, Any]) -> str:
         for contrast, metric, label in CPDT_ROWS:
             r70 = pick(d["cpdt"], suite_size=70.0, method=method, contrast=contrast, metric=metric)
             r50 = pick(d["cpdt"], suite_size=50.0, method=method, contrast=contrast, metric=metric)
-            descriptive = r70["test"] == "descriptive_definitional_baseline"
+            if r70 is None or r50 is None:
+                raise SystemExit(f"cpdt.csv lacks {method}/{contrast}/{metric} at N=70 or N=50")
             row = " & ".join(
                 [
                     label,
@@ -207,8 +237,8 @@ def cpdt_summary(d: dict[str, Any]) -> str:
                     f"${fmt(r70['cohens_d'], 2, signed=True)}$ "
                     f"$[{fmt(r70['d_lo'], 2, signed=True)},{fmt(r70['d_hi'], 2, signed=True)}]$",
                     f"${fmt(r70['mean_delta'], 4, signed=True)}$",
-                    "---" if descriptive else fmt_p(r70["p_one_sided"]),
-                    "---" if descriptive else fmt_p(r50["p_one_sided"]),
+                    primary_p(r70),
+                    primary_p(r50),
                 ]
             )
             lines.append(f"    {row} \\\\")
