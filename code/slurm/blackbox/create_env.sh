@@ -27,6 +27,7 @@ ENV_PREFIX="${BBX_ENV_PREFIX:-${FSCRATCH}/conda_envs/isalsr}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REQS="${HERE}/env_requirements.txt"
 PYTHON_SPEC="python=3.11.15=h17756b0_1"   # C2: "3.11.15 (main, Jun 11 2026, 15:20:16) [GCC 14.3.0]"
+PIP_SPEC="pip=26.1.1"                     # latest `defaults` pip in W (2026-06-01 build); inert
 TORCH_SPEC="torch==2.12.0+cpu"            # see env_requirements.txt header ([amb] rule)
 TORCH_INDEX="https://download.pytorch.org/whl/cpu"
 FREEZE_OUT="${BBX_FREEZE_OUT:-${ENV_PREFIX}/bbx_pip_freeze.txt}"
@@ -41,7 +42,7 @@ export CONDA_PKGS_DIRS="${PKGS_TMP}"
 export PIP_NO_CACHE_DIR=1
 
 echo "== conda create ${PYTHON_SPEC} -> ${ENV_PREFIX}"
-conda create -y -p "${ENV_PREFIX}" --override-channels -c defaults "${PYTHON_SPEC}"
+conda create -y -p "${ENV_PREFIX}" --override-channels -c defaults "${PYTHON_SPEC}" "${PIP_SPEC}"
 conda activate "${ENV_PREFIX}"
 PY="${ENV_PREFIX}/bin/python"
 "${PY}" -VV

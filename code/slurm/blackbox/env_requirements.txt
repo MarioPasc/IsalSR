@@ -72,6 +72,10 @@ MarkupSafe==3.0.3        # [C2*]
 packaging==26.2          # [C2**]
 typing_extensions==4.15.0  # [C2**]
 Pygments==2.20.0         # [C2*]
+setuptools==81.0.0       # [con] stopit imports pkg_resources at module level (absent from
+                         #       setuptools >= 82) and C2 ran stopit; torch requires <82, so
+                         #       pip resolves the latest < 82 = 81.0.0. The conda `defaults`
+                         #       setuptools in W was 82.0.1 and is replaced by this pin.
 
 # --- tests (engine-equivalence tests run on the login node) -------------------
 pytest==9.0.3            # [amb] candidates {9.0.3, 9.1.0, 9.1.1}
