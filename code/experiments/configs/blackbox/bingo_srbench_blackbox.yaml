@@ -1,0 +1,54 @@
+# Bingo on SRBench's black-box track: 20 real-world PMLB datasets with d <= 5.
+#
+# Supplementary experiment for reviewer item R3.2 (minor revision).
+# Selection: experiments/scripts/blackbox/select_datasets.py (PLAN D6).
+# Data protocol: benchmarks/datasets/srbench_blackbox.py (SRBench v2.0: 75/25
+# split, training-fold standardisation of X and y, no subsampling).
+# Provenance: benchmarks/datasets/data/srbench_blackbox/PROVENANCE.md
+#
+# 🔴 HOST CONFIGURATION IS COPIED FROM experiments/configs/bingo_strogatz.yaml AND
+# MUST STAY IDENTICAL TO IT, max_evals included (lesson F-19: bingo_strogatz once
+# silently lacked it and inherited a 10x tighter budget).  The only intended
+# differences from C2 are the `benchmarks` block and `experiment.n_seeds: 10`
+# (PLAN D7).  Locked by tests/unit/test_srbench_blackbox_configs.py.
+#
+# This file lives in configs/blackbox/ on purpose: the C2 uniformity tests glob
+# configs/*.yaml non-recursively, so a 10-seed config here cannot perturb them.
+#
+# Seeds 1-10.  Each seed fixes both the train/test split and Bingo's RNG, as in
+# SRBench.
+
+experiment:
+  name: bingo_srbench_blackbox
+  method: bingo
+  n_seeds: 10
+
+benchmarks:
+  srbench_blackbox:
+    # The split is fixed by the protocol (75/25 of the published rows), so
+    # there is no train_size/test_size here; the orchestrator's dispatch for
+    # this suite ignores them.
+    problems: all
+
+bingo:
+  population_size: 500
+  stack_size: 32
+  operators: ["+", "-", "*", "/", "sin", "cos", "exp", "log", "sqrt", "pow"]
+  use_simplification: false
+  crossover_prob: 0.4
+  mutation_prob: 0.4
+  max_generations: 100000
+  max_time: 43200       # 12h algorithm budget (standard).
+  max_evals: 100000000
+  fitness_metric: "lm"
+  convergence_check_frequency: 50
+  snapshot_frequency: 50
+  # Shadow sketches OFF, as in every C2 campaign config (audit.md §7.3).
+  shadow_hash: false
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/results/review/srbench_blackbox
