@@ -42,6 +42,10 @@ from benchmarks.datasets.nguyen import NGUYEN_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.nguyen import generate_data as nguyen_generate_data  # noqa: E402
 from benchmarks.datasets.roundoff import ROUNDOFF_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.roundoff import generate_data as roundoff_generate_data  # noqa: E402
+from benchmarks.datasets.srbench_blackbox import SRBENCH_BLACKBOX_BENCHMARKS  # noqa: E402
+from benchmarks.datasets.srbench_blackbox import (  # noqa: E402
+    generate_data as srbench_blackbox_generate_data,
+)
 from benchmarks.datasets.strogatz import STROGATZ_BENCHMARKS  # noqa: E402
 from benchmarks.datasets.strogatz import generate_data as strogatz_generate_data  # noqa: E402
 from benchmarks.datasets.structural import STRUCTURAL_BENCHMARKS  # noqa: E402
@@ -92,6 +96,9 @@ _BENCHMARK_REGISTRY: dict[str, tuple[list[dict[str, Any]], Any]] = {
     # AI Feynman remainder.  See docs/md_files/changes/r31_extension_selection.md
     "strogatz": (STROGATZ_BENCHMARKS, strogatz_generate_data),
     "feynman_remainder": (FEYNMAN_REMAINDER_BENCHMARKS, feynman_remainder_generate_data),
+    # R3.2 (minor revision): SRBench's black-box track, real data with no ground
+    # truth. Supplementary only; never pooled with the 70 ground-truth problems.
+    "srbench_blackbox": (SRBENCH_BLACKBOX_BENCHMARKS, srbench_blackbox_generate_data),
 }
 
 
@@ -202,6 +209,11 @@ def _generate_benchmark_data(
             train_ratio=train_ratio,
             seed=seed,
         )
+    elif bench_name == "srbench_blackbox":
+        # Published real datasets (PMLB, SRBench black-box track): SRBench's
+        # 75/25 split and training-fold standardisation are fixed by the
+        # protocol, so ``train_size``/``test_size`` are ignored entirely.
+        return srbench_blackbox_generate_data(bench, seed=seed)
     else:
         raise ValueError(f"Cannot generate data for benchmark: {bench_name}")
 
