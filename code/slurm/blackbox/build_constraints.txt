@@ -1,0 +1,17 @@
+# Build-backend pins for the C++ extension (deploy.sh exports this file as
+# PIP_CONSTRAINT, which the isolated build environment inherits).
+#
+# C2 built its extension with `pip install -e . --force-reinstall --no-deps` and
+# build isolation, unpinned, so pip fetched the latest backend from PyPI.  The
+# C2 .so mtime is 2026-08-07T15:39:07Z (run_log hardware.native_module_mtime);
+# these are the latest stable releases at that instant (PyPI upload times):
+nanobind==2.14.0           # uploaded 2026-08-07T06:07:50
+scikit-build-core==1.0.3   # uploaded 2026-07-12T05:08:28
+ninja==1.13.0              # uploaded 2025-08-11T15:09:50
+# Picasso's /usr/bin/cmake is 3.28.3 (>= 3.18), so scikit-build-core uses it and
+# fetches no cmake wheel; none is pinned.
+#
+# The backend generates only the Python binding layer.  build_hash is the
+# FNV-1a of the compile-flag string (src/isalsr/core/native/src/probe.cpp), so
+# it certifies the flags, not the backend; pinning the backend removes the one
+# build input the hash does not cover.

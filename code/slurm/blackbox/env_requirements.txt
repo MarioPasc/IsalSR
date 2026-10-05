@@ -1,0 +1,80 @@
+# Pinned pip dependencies of the Picasso conda env `isalsr` for the SRBench
+# black-box campaign (R3.2).  Installed by create_env.sh; every `name==version`
+# line is re-checked by check_env.py before any cell runs.
+#
+# Goal: the environment of the main campaign (C2, tag campaign/c2, Aug 2026).
+# C2's env was deleted from Picasso and no `pip freeze` of it survives.  Two
+# facts are on record:
+#   * python 3.11.15 "(main, Jun 11 2026, 15:20:16) [GCC 14.3.0]" (every C2
+#     run_log, hardware.python_version) = conda `defaults` build h17756b0_1,
+#     uploaded 2026-06-11T15:34:58Z (`conda search python==3.11.15 --info`);
+#   * numpy 2.4.6 in that env (docs/md_files/changes/c4_fingerprint_findings.md,
+#     arch probe run with the Picasso isalsr env during C2 preparation).
+# The other pins are reconstructed from PyPI release history (T01b log §3.2):
+#   [C2]   on record;
+#   [C2*]  the only stable release available at any time between the python
+#          build (2026-06-11) and the end of C2 (2026-08-14): an unpinned pip
+#          install made while C2's interpreter existed could resolve nothing else;
+#   [C2**] the only stable release inside W = [2026-06-11T15:34:58Z,
+#          2026-06-21T20:56:16Z), the interval in which an unpinned install
+#          resolves numpy to 2.4.6 (numpy 2.5.0 appeared at W's end), assuming
+#          one install session;
+#   [amb]  more than one candidate in W: the workstation version when it is a
+#          candidate, otherwise the candidate current at W's start.  Deviation.
+#   [con]  forced by another pin's requirement.
+# torch is installed separately (CPU wheel index) by create_env.sh.
+
+# --- scientific stack --------------------------------------------------------
+numpy==2.4.6             # [C2]
+scipy==1.17.1            # [amb] candidates {1.17.1, 1.18.0 (2026-06-19)}; workstation = 1.17.1
+sympy==1.14.0            # [C2*]
+mpmath==1.3.0            # [con] sympy 1.14.0 requires mpmath<1.4
+networkx==3.6.1          # [C2*]
+pandas==3.0.3            # [C2**]
+scikit-learn==1.9.0      # [C2*]  (workstation: 1.8.0)
+h5py==3.16.0             # [C2*]
+joblib==1.5.3            # [C2*]
+threadpoolctl==3.6.0     # [C2*]
+statsmodels==0.14.6      # [C2*]  imported by the orchestrator (analyzer), by no arm
+patsy==1.0.2             # [C2*]
+scikit-posthocs==0.14.0  # [C2*]  analysis only, imported lazily
+
+# --- host solvers --------------------------------------------------------------
+bingo-nasa==0.5.7        # [C2*]  sole stable release 2026-02-19 .. today
+smcpy==0.1.13            # [C2**]
+dill==0.4.1              # [C2*]
+mpi4py==4.1.2            # [C2*]  import-time dependency of bingo; 1 process, no MPI call
+pybind11==3.0.4          # [C2**]
+pybind11-global==3.0.4   # [C2**]
+stopit==1.1.2            # [C2*]
+zss==1.2.0               # [C2*]
+tqdm==4.68.2             # [amb] candidates {4.68.2, 4.68.3}
+PyYAML==6.0.3            # [C2*]
+
+# --- smcpy's plotting imports (bingo -> smcpy) -------------------------------
+matplotlib==3.10.9       # [amb] candidates {3.10.9, 3.11.0}
+seaborn==0.13.2          # [C2*]
+contourpy==1.3.3         # [C2*]
+cycler==0.12.1           # [C2*]
+fonttools==4.63.0        # [C2*]
+kiwisolver==1.5.0        # [C2*]
+pillow==12.2.0           # [C2**]
+pyparsing==3.3.2         # [C2*]
+
+# --- support (torch / pytest / matplotlib dependencies) -----------------------
+python-dateutil==2.9.0.post0  # [C2*]
+six==1.17.0              # [C2*]
+sortedcontainers==2.4.0  # [C2*]
+filelock==3.29.3         # [amb] candidates {3.29.3, 3.29.4}
+fsspec==2026.4.0         # [amb] candidates {2026.4.0, 2026.6.0}
+Jinja2==3.1.6            # [C2*]
+MarkupSafe==3.0.3        # [C2*]
+packaging==26.2          # [C2**]
+typing_extensions==4.15.0  # [C2**]
+Pygments==2.20.0         # [C2*]
+
+# --- tests (engine-equivalence tests run on the login node) -------------------
+pytest==9.0.3            # [amb] candidates {9.0.3, 9.1.0, 9.1.1}
+hypothesis==6.155.2      # [amb] candidates {6.155.2 .. 6.155.7}
+iniconfig==2.3.0         # [C2*]
+pluggy==1.6.0            # [C2*]
