@@ -74,7 +74,9 @@ def _body_rows(tex: str) -> list[list[str]]:
     return out
 
 
-def _expected(rows: list[dict[str, Any]], method: str, contrast: str, metric: str) -> list[str]:
+def _expected(
+    rows: list[dict[str, Any]], method: str, contrast: str, metric: str
+) -> list[dict[str, Any]]:
     cells = []
     for n in (70.0, 50.0):
         (rec,) = [
@@ -112,9 +114,12 @@ def test_every_row_prints_its_primary_p(cpdt_data: dict[str, Any]) -> None:
                 if alternative == "descriptive":
                     assert printed == "---"
                     continue
-                key = "p_two_sided" if alternative == "two-sided" else "p_one_sided"
-                stripped = printed.replace(DAGGER, "")
-                assert stripped == fmt_p(rec[key]), (method, contrast, metric, printed)
+                two_sided = alternative == "two-sided"
+                key = "p_two_sided" if two_sided else "p_one_sided"
+                # Compare the whole cell: stripping the dagger out of a cell with
+                # no stars would leave an empty superscript, not the plain form.
+                expected = fmt_p(rec[key], dagger=two_sided)
+                assert printed == expected, (method, contrast, metric, printed)
 
 
 def test_two_sided_rows_carry_the_dagger_and_only_they(cpdt_data: dict[str, Any]) -> None:
