@@ -1,0 +1,30 @@
+# SRBench black-box campaign packaging (read by launcher.sh).  TAB-separated.
+# Columns: method  arm  problems(':'-list | all)  bundle  wall(D-HH:MM:SS)  mem_GB  throttle  tag
+#
+# Derivation (T01 log §3.8; scratch estimate.py):
+#  * UDFS: never meets stop_thresh on noisy data, so every cell runs its full
+#    12 h (C2: 100 % of UDFS cells on the 1000-row suites ran 12.00 h).  B = 1, wall 16 h
+#    = C2 MIN_WALL_H.  Each task > 12 h, which clears the SCBI 2 h floor.
+#  * Bingo stops at max_evals = 1e8 (or 12 h).  Per-dataset duration = 1e8 / eval rate.
+#    The rate comes from a 30 s local probe per dataset, calibrated by
+#    k = C2 Picasso median / local estimate on I.15.10 and R1:
+#    k_baseline = 3.38, k_dedup = 2.91 (the max of the two problems).  The dedup arms add a
+#    measured wrapper overhead per Bingo evaluation: 29.8 us (hash), 42.4 us (isalsr).
+#    Estimated cells: baseline 1.0-11.4 h (12 datasets < 2 h), hash 3.3-12 h, isalsr 4.3-12 h.
+#  * Bingo baseline, the 12 datasets estimated < 2 h: B = 3, i.e. 3.1-5.9 h per task.
+#    Wall from C2's wall_hours(B=3, cell_h=1.95) = max(16, ceil(min(3*12.5, 1.4*3*1.95 + 12.5))) = 21 h.
+#    Deadline cutoff 21 - 12.5 = 8.5 h.  A misestimate cannot cause a TIMEOUT: a cell
+#    starts only if its full 12 h + 0.5 h fits, and any deferred cell is run by the sweep array.
+#  * Everything else: B = 1, wall 16 h.
+#  * Memory as C2 (c2_slot_plan.MEM_GB): UDFS 16 GB, Bingo 32 GB.
+#  * Throttle = the array's task count, so no throttle: 1,120 tasks at most, against C2's
+#    2,016 slots.  Peak memory 600*16 + 520*32 GB = 26.2 TB, inside the 50 TB per-user QOS.
+#
+# Totals: 1,200 cells, 1,120 tasks, 7 arrays (+1 sweep array for the B = 3 row).
+udfs	baseline	all	1	0-16:00:00	16	200	all
+udfs	hash	all	1	0-16:00:00	16	200	all
+udfs	isalsr	all	1	0-16:00:00	16	200	all
+bingo	baseline	1027_ESL:1096_FacultySalaries:192_vineyard:210_cloud:228_elusage:485_analcatdata_vehicle:519_vinnie:523_analcatdata_neavote:663_rabe_266:678_visualizing_environmental:687_sleuth_ex1605:712_chscase_geyser1	3	0-21:00:00	32	40	short
+bingo	baseline	1029_LEV:1030_ERA:529_pollen:556_analcatdata_apnea2:557_analcatdata_apnea1:690_visualizing_galaxy:banana:titanic	1	0-16:00:00	32	80	long
+bingo	hash	all	1	0-16:00:00	32	200	all
+bingo	isalsr	all	1	0-16:00:00	32	200	all

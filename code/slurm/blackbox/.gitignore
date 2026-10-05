@@ -1,0 +1,3 @@
+# Written into the deployed tree by deploy.sh; never committed.  Ignoring it
+# keeps the deployed tree's `git status --porcelain` empty (SP-1).
+BBX_DEPLOY.json

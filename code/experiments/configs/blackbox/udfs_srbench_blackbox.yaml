@@ -1,0 +1,58 @@
+# UDFS on SRBench's black-box track: 20 real-world PMLB datasets with d <= 5.
+#
+# Supplementary experiment for reviewer item R3.2 (minor revision).
+# Selection: experiments/scripts/blackbox/select_datasets.py (PLAN D6).
+# Data protocol: benchmarks/datasets/srbench_blackbox.py (SRBench v2.0: 75/25
+# split, training-fold standardisation of X and y, no subsampling).
+# Provenance: benchmarks/datasets/data/srbench_blackbox/PROVENANCE.md
+#
+# 🔴 HOST CONFIGURATION IS COPIED FROM experiments/configs/udfs_strogatz.yaml AND
+# MUST STAY IDENTICAL TO IT.  The only intended differences from C2 are the
+# `benchmarks` block and `experiment.n_seeds: 10` (PLAN D7: SRBench runs 10
+# trials; the inferential unit of the test across problems is the dataset).
+# Locked by tests/unit/test_srbench_blackbox_configs.py.
+#
+# This file lives in configs/blackbox/ on purpose: the C2 uniformity tests
+# (test_budget_uniformity.py, test_shadow_hash_config.py, c2_slot_plan.py) glob
+# configs/*.yaml non-recursively, so a 10-seed config here cannot perturb them.
+#
+# Seeds 1-10.  Each seed fixes both the train/test split and UDFS's
+# DAGRegressor.random_state, as in SRBench.
+
+experiment:
+  name: udfs_srbench_blackbox
+  method: udfs
+  n_seeds: 10
+
+benchmarks:
+  srbench_blackbox:
+    # The split is fixed by the protocol (75/25 of the published rows), so
+    # there is no train_size/test_size here; the orchestrator's dispatch for
+    # this suite ignores them.
+    problems: all
+
+udfs:
+  n_calc_nodes: 5
+  max_orders: 200000
+  max_time: 43200       # 12h algorithm budget (standard).
+  processes: 1
+  mode: hierarchical
+  k: 2
+  stop_thresh: 1.0e-10
+  use_tan: false
+  # Informational only: to_dag_regressor_kwargs() does not forward this field and
+  # DAGRegressor has no such parameter. The search always enumerates the vendor's
+  # own table (vendor/DAG_search/config.py, NODE_ARITY): binary {+, *, sub_l,
+  # sub_r, div_l, div_r}, unary {id, inv, neg, sin, cos, exp, log, sqrt}, no pow.
+  # The list below records that fixed set and is identical in every UDFS config.
+  operator_set: ["+", "*", "-", "/", "sin", "cos", "exp", "log", "sqrt", "neg", "inv"]
+  snapshot_frequency: 1000
+  # Shadow sketches OFF, as in every C2 campaign config (audit.md §7.3).
+  shadow_hash: false
+
+isalsr:
+  canonicalization_timeout: 60.0
+  use_fast_canonical: true
+
+output:
+  base_dir: /media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/results/review/srbench_blackbox
