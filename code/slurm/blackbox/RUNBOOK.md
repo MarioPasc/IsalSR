@@ -10,73 +10,82 @@ Every command below is meant to be copied and pasted. `W$` runs on the workstati
 
 ```
 export FSCRATCH=/mnt/home/users/tic_163_uma/mpascual/fscratch   # exported: the smoke check reads it from Python
-C2=$FSCRATCH/repos/IsalSR          # C2 tree; its editable install provides isalsr + engine. NEVER modified.
-BBX=$FSCRATCH/repos/IsalSR_bbx     # this campaign's experiments/ benchmarks/ slurm/ (no src/)
+REPO=$FSCRATCH/repos/IsalSR        # the whole repository, with .git; the project is $REPO/code
+ENV=$FSCRATCH/conda_envs/isalsr    # conda env; editable install of $REPO/code + the C2-built engine
 RES=$FSCRATCH/results/isalsr/srbench_blackbox
 ```
 
 ## 0. Why the deployment looks like this (read once)
 
-- The conda env `isalsr` on Picasso has an **editable** install of the C2 tree
-  (`pip install -e .` in `$C2`, `slurm/c2_smoke/deploy.sh`). Through `pyproject`
-  `wheel.packages = ["src/isalsr", "experiments", "benchmarks"]`, that install
-  redirects **all three** packages to `$C2`, ahead of `PYTHONPATH` and the cwd. A
-  separate tree run "from its cwd" would therefore execute C2's orchestrator,
-  which has no `srbench_blackbox` suite.
-- `slurm/blackbox/pyboot/sitecustomize.py` (on `PYTHONPATH`, with
-  `ISALSR_BBX_ROOT=$BBX`) pins `experiments` and `benchmarks` to `$BBX`. It
-  leaves `isalsr` and the C++ engine on the C2 install. No rebuild, no
-  reinstall: the canonicaliser is C2's by construction, and the gate checks it.
-- Each task runs `slurm/blackbox/worker.sh`. It runs the gate (`check_env.py`:
-  three module paths, build hash, deployed SHA-256s, printed into the task log),
-  then `exec`s **C2's own worker** `slurm/c2_smoke/worker.sh` (byte-identical to
-  tag `campaign/c2`). That worker provides local scratch, per-cell copy-back,
-  the deadline rule, `--ledger --postprocess skip` and `PYTHONMALLOC=malloc`.
-- The C2 tree's `src/isalsr` must be byte-identical to tag `campaign/c2`
-  (`2dd56fd`). Pre-flight P1 checks this against the working tree, so an
-  uncommitted edit fails it too.
+- C2's Picasso tree and env were deleted after the main campaign (found 5 Oct 2026), so this
+  campaign **rebuilds both the way C2 was built** and proves the rebuild equivalent (T01b log):
+  - `create_env.sh` creates `$ENV` with C2's interpreter build (`python=3.11.15=h17756b0_1`,
+    the build every C2 `run_log` names) and the pip versions of `env_requirements.txt`, each
+    tagged with its provenance: on record for C2, forced by PyPI release history, or (where C2's
+    version cannot be recovered) a disclosed choice.
+  - `deploy.sh` rsyncs the repository **with `.git`** to `$REPO`, verifies SP-1 from the remote
+    side, and builds the extension with C2's recipe (`slurm/c2_smoke/deploy.sh`: GCC 13.2.0
+    module, `pip install -e . --force-reinstall --no-deps` with build isolation, then
+    `verify_build.py`). `build_hash` must be `298fc1188bf1b051`, C2's.
+- One tree serves everything: the env's editable install maps `isalsr`, `experiments` and
+  `benchmarks` to `$REPO/code` (pyproject `wheel.packages`), and the engine `.so` lives in the
+  env's site-packages. The `pyboot/` import shim of T01's two-tree design is **not used**; it
+  stays in the repository only as a tool for testing code in isolated git worktrees, and the
+  gate fails if it is active.
+- **P1** (arm identity): every file that can decide what an arm computes (all of `isalsr`
+  except `viz`, `CMakeLists.txt`, `pyproject.toml`, all of `experiments/models`, the cell
+  decoder, C2's worker and the two C2 configs the black-box configs copy) is byte-identical to
+  tag `campaign/c2` (`2dd56fd`), apart from six listed differences, each with the reason it
+  cannot change an arm (`code_identity.py`, `EXPECTED`). Checked on the workstation by
+  `deploy.sh` (recorded in `BBX_DEPLOY.json`) and again on the deployed `.git` by `preflight.sh`.
+- Each task runs `slurm/blackbox/worker.sh`. It runs the gate (`check_env.py`: three module
+  paths, engine and build hash, deployed SHA-256s, the P1 verdict, C2's python and every pinned
+  version, all printed into the task log), then `exec`s **C2's own worker**
+  `slurm/c2_smoke/worker.sh` (byte-identical to tag `campaign/c2`). That worker provides local
+  scratch, per-cell copy-back, the deadline rule, `--ledger --postprocess skip` and
+  `PYTHONMALLOC=malloc`, and records SP-1 (HEAD) per task.
 
-## 1. Deploy (workstation)
+## 1. Environment (once) and deploy (workstation)
 
+The env is created once, on the login node, from the deployed tree; it is never modified
+afterwards (`create_env.sh` refuses an existing env). First deploy without building, then
+create the env, then build:
 ```bash
-W$ python -m pytest tests/unit -q -x        # must pass on the merged branch
-W$ git status --porcelain                   # must be empty (deploy.sh refuses otherwise)
-W$ bash slurm/blackbox/deploy.sh            # rsync experiments/ benchmarks/ slurm/ -> $BBX, writes BBX_DEPLOY.json
+W$ python -m pytest tests/unit -q -x               # must pass on the merged branch
+W$ git status --porcelain                          # must be empty (deploy.sh refuses otherwise)
+W$ bash slurm/blackbox/deploy.sh --no-build        # rsync + SP-1 + P1 + BBX_DEPLOY.json
+W$ ssh picasso "bash -l /mnt/home/users/tic_163_uma/mpascual/fscratch/repos/IsalSR/code/slurm/blackbox/create_env.sh"   # once
+W$ bash slurm/blackbox/deploy.sh                   # same, plus the C2-recipe build + verify_build.py
 ```
+Every later deploy is the last line only. Never deploy while an array of this campaign runs
+(C2 defect 10: a deploy is a code edit).
 
 ## 2. Pre-flight (login node; submits nothing)
 
 ```bash
-P$ cd $BBX && bash slurm/blackbox/preflight.sh
+P$ cd $REPO/code && bash slurm/blackbox/preflight.sh
 ```
 It must end with `PRE-FLIGHT PASS`. It checks:
-- **P1.** `$C2/src/isalsr` is identical to `campaign/c2`. It also prints C2 HEAD and status.
-- **P2.** `isalsr.__file__` lies under `$C2/src/isalsr`. `experiments.models.orchestrator` and
-  `benchmarks.datasets.srbench_blackbox` lie under `$BBX`. The engine is `cpp` with
-  `build_hash == 298fc1188bf1b051`. The deployed files match `BBX_DEPLOY.json`.
+- **P1.** HEAD equals the deployed commit, the tree is clean, and `code_identity.py` passes on
+  the deployed `.git`.
+- **P2.** `isalsr.__file__` lies under `$REPO/code/src/isalsr`; `experiments.models.orchestrator`
+  and `benchmarks.datasets.srbench_blackbox` under `$REPO/code`; `_native` in `$ENV`'s
+  site-packages; engine `cpp` with `build_hash == 298fc1188bf1b051`; the deployed files match
+  `BBX_DEPLOY.json`; python is C2's build; every pin of `env_requirements.txt` (and torch) holds.
 - **P3.** The 20 datasets load (SHA-256 vs manifest) and split for seeds 1-10.
 - **P4.** `launcher.sh --dry-run` covers 1,200 cells.
+- **P5.** `verify_build.py`; the cpp-vs-python differential tests
+  (`test_native_{build,canonical,s2d,datastructures}.py`, `test_equivalence_gate.py`) and the
+  black-box protocol tests; C2's equivalence gate `experiments/scripts/equivalence_gate.py
+  --gate all --backend-a python --backend-b cpp` on its full corpus (the Stage-B4 invocation).
+  Reports go to `$REPO/code/build/bbx_preflight/`.
 
-Spot-check by hand, and paste the output into the campaign log:
-```bash
-P$ cd /tmp && conda activate isalsr && \
-   PYTHONPATH=$BBX/slurm/blackbox/pyboot ISALSR_BBX_ROOT=$BBX \
-   python -c "import isalsr, experiments.models.orchestrator as o, benchmarks.datasets.srbench_blackbox as b; \
-              from isalsr.core import backends; print(isalsr.__file__); print(o.__file__); print(b.__file__); \
-              print(backends.build_info()['build_hash'])"
-```
-Expected output: `$C2/src/isalsr/__init__.py`, then `$BBX/experiments/models/orchestrator.py`, then
-`$BBX/benchmarks/datasets/srbench_blackbox.py`, then `298fc1188bf1b051`.
-
-If P1 fails because `$C2` is not at the tag, **do not touch `$C2`**. Record
-`git -C $C2 log -1 --oneline`, `git -C $C2 status --short` and
-`git -C $C2 diff --stat 2dd56fd -- src/isalsr`, and stop: the campaign must not run
-on a different canonicaliser.
+If P1 fails, **do not edit the deployed tree**: fix the cause locally, commit, redeploy.
 
 ## 3. Smoke array (6 cells, about 30 min including queue)
 
 ```bash
-P$ cd $BBX && bash slurm/blackbox/launcher.sh --smoke
+P$ cd $REPO/code && bash slurm/blackbox/launcher.sh --smoke
 ```
 This submits 6 arrays x 1 task: one per (host, arm), on `banana` (n = 5300, the largest) at
 seed 1, with `--max-time 120` and a 30 min wall. Results go to
@@ -107,8 +116,8 @@ P$ ls $S/bbx_provenance.json
 ```
 Pass criteria:
 - 6 rows `COMPLETED 0:0`.
-- Every task log shows the same three `BBX ..._file` paths (C2 / bbx / bbx), `build_hash=298fc1188bf1b051` and
-  `BBX gate: PASS`.
+- Every task log shows the same `BBX ..._file` paths (all under `$REPO/code`, `_native` under `$ENV`),
+  `build_hash=298fc1188bf1b051` and `BBX gate: PASS`.
 - 6 `PASS` lines.
 - The provenance stamp exists.
 
@@ -119,8 +128,8 @@ one cell, deferred one by the deadline rule and verified its copy-back. See the 
 ## 4. Full submission
 
 ```bash
-P$ cd $BBX && bash slurm/blackbox/launcher.sh --dry-run     # inspect: 1,200 cells
-P$ cd $BBX && bash slurm/blackbox/launcher.sh               # submits; writes job_ids.txt (+ sweep_job_ids.txt)
+P$ cd $REPO/code && bash slurm/blackbox/launcher.sh --dry-run     # inspect: 1,200 cells
+P$ cd $REPO/code && bash slurm/blackbox/launcher.sh               # submits; writes job_ids.txt (+ sweep_job_ids.txt)
 ```
 The launcher runs the gate on the login node first and writes `$RES/bbx_provenance.json`, which holds
 the deploy record, the resolved module paths, the engine build info and the library versions. Packaging is set by
@@ -161,7 +170,7 @@ number of failed cells, which must stay 0.
 
 When `squeue` shows no `bbx*` job and the health probe reads 200/200 six times:
 ```bash
-P$ cd /tmp && conda activate isalsr && PYTHONPATH=$BBX/slurm/blackbox/pyboot ISALSR_BBX_ROOT=$BBX \
+P$ cd /tmp && conda activate isalsr && \
    python -m experiments.models.orchestrator --postprocess ledger --output-dir $RES   # status_ledger.csv
 W$ mkdir -p /media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/results/review/srbench_blackbox
 W$ rsync -az --info=progress2 picasso:$RES/ /media/mpascual/Sandisk2TB/research/ISAL/completed/isalsr/results/review/srbench_blackbox/

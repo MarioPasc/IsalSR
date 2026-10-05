@@ -14,7 +14,7 @@
 # identical budget.  Cells a chunk could not start are picked up by a sweep
 # array (same partition, afterany), exactly as in C2.
 #
-# Usage (from $FSCRATCH/repos/IsalSR_bbx on the login node):
+# Usage (from $FSCRATCH/repos/IsalSR/code on the login node):
 #   bash slurm/blackbox/launcher.sh --dry-run     # print every sbatch command
 #   bash slurm/blackbox/launcher.sh --smoke       # 6 cells: banana seed 1, 6 arrays x 1 task, 120 s
 #   bash slurm/blackbox/launcher.sh               # the 1,200-cell campaign
@@ -24,8 +24,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FSCRATCH="${ISALSR_FSCRATCH:-/mnt/home/users/tic_163_uma/mpascual/fscratch}"
+# The deployed tree's code/ directory (T01b layout: $FSCRATCH/repos/IsalSR/code).
 BBX_ROOT="${BBX_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
-C2_TREE="${BBX_C2_TREE:-${FSCRATCH}/repos/IsalSR}"
 ACCOUNT="${BBX_ACCOUNT:-tic_163_uma}"
 CONSTRAINT="${BBX_CONSTRAINT:-sr}"        # AMD EPYC, the C2 node class (timing + data bit-identity)
 SEEDS="1-10"                              # PLAN D7: SRBench's 10 trials; seed = split + host RNG
@@ -54,14 +54,12 @@ fi
 RESULTS_ROOT="${BBX_RESULTS_DIR:-${FSCRATCH}/results/isalsr/${ROOT_NAME}}"
 LOGS_DIR="${BBX_LOGS_DIR:-${FSCRATCH}/execs/isalsr/${ROOT_NAME}/logs}"
 
-# ---- Python with the black-box import shim ----------------------------------
+# ---- Python of the env whose editable install is this tree --------------------
 if [[ -z "${BBX_PYTHON:-}" ]]; then
     eval "$(conda shell.bash hook 2>/dev/null)" || true
     conda activate isalsr 2>/dev/null || true
     BBX_PYTHON="${CONDA_PREFIX:-}/bin/python"
 fi
-export ISALSR_BBX_ROOT="${BBX_ROOT}"
-export PYTHONPATH="${BBX_ROOT}/slurm/blackbox/pyboot${PYTHONPATH:+:${PYTHONPATH}}"
 py() { (cd "${BBX_ROOT}" && "${BBX_PYTHON}" "$@"); }
 
 config_for() { echo "${BBX_ROOT}/experiments/configs/blackbox/$1_srbench_blackbox.yaml"; }
@@ -79,15 +77,18 @@ wall_to_s() { awk -F'[-:]' '{print (($1*24)+$2)*3600 + $3*60 + $4}' <<<"$1"; }
 
 # ---- Gate + provenance stamp (not in --dry-run: the cluster paths must exist) --
 if [[ "${MODE}" != "dry" ]]; then
+    # bingo imports mpi4py, whose import dlopen()s libmpi (C2 worker's module list).
+    for mod in openmpi_gcc/5.0.9_gcc7 openmpi_gcc/5.0.9_gcc15 openmpi_gcc/5.0.9_gcc14; do
+        module load "$mod" 2>/dev/null && break
+    done
     mkdir -p "${LOGS_DIR}" "${RESULTS_ROOT}"
-    py "${BBX_ROOT}/slurm/blackbox/check_env.py" --c2-tree "${C2_TREE}" --bbx-root "${BBX_ROOT}" \
+    py "${BBX_ROOT}/slurm/blackbox/check_env.py" --code-root "${BBX_ROOT}" \
         --write-stamp "${RESULTS_ROOT}/bbx_provenance.json" \
         || { echo "FATAL: BBX gate failed on the login node; nothing submitted" >&2; exit 1; }
 fi
 
 echo "BBX launcher -- mode ${MODE}"
-echo "  bbx root:   ${BBX_ROOT}"
-echo "  C2 tree:    ${C2_TREE}"
+echo "  code root:  ${BBX_ROOT}"
 echo "  results:    ${RESULTS_ROOT}"
 echo "  logs:       ${LOGS_DIR}"
 echo "  seeds:      ${SEEDS}   max_time: ${MAX_TIME}s   constraint: ${CONSTRAINT}"
@@ -129,7 +130,7 @@ while IFS=$'\t' read -r METHOD ARM PROBLEMS BUNDLE WALL MEM THROTTLE TAG; do
     JOB_NAME="bbx_${METHOD:0:1}${ARM:0:1}_${TAG}"
     PROBLEMS_EXPORT=""
     [[ "${PROBLEMS}" != "all" ]] && PROBLEMS_EXPORT="${PROBLEMS//,/:}"
-    EXPORTS="ALL,ISALSR_REPO_DIR=${BBX_ROOT},BBX_C2_TREE=${C2_TREE},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=srbench_blackbox,C2_CONFIG=${CONFIG},C2_SEEDS=${SEED_SPEC//,/:},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT},C2_BUNDLE=${BUNDLE},C2_START_CUTOFF_S=${CUTOFF_S},C2_USE_LOCALSCRATCH=1,C2_PROBLEMS=${PROBLEMS_EXPORT}"
+    EXPORTS="ALL,ISALSR_REPO_DIR=${BBX_ROOT},C2_METHOD=${METHOD},C2_ARM=${ARM},C2_SUITE=srbench_blackbox,C2_CONFIG=${CONFIG},C2_SEEDS=${SEED_SPEC//,/:},C2_MAX_TIME=${MAX_TIME},C2_RESULTS_DIR=${RESULTS_ROOT},C2_BUNDLE=${BUNDLE},C2_START_CUTOFF_S=${CUTOFF_S},C2_USE_LOCALSCRATCH=1,C2_PROBLEMS=${PROBLEMS_EXPORT}"
     SB_ARGS=(
         --array="1-${N_TASKS}%${THROTTLE}"
         --job-name="${JOB_NAME}"
