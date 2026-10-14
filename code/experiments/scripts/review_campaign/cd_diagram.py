@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -64,8 +65,8 @@ LEGEND_ENTRIES = (
 LEGEND_STEP = 4.6
 
 
-def strip_legend(tex_path: Path) -> None:
-    """Remove the per-panel legend and recompile.
+def strip_legend(source: str) -> str:
+    """Remove the per-panel legend.
 
     Both panels carry the same three entries, so printing them twice spends
     roughly a quarter of each panel's width on a duplicate. The legend is drawn
@@ -73,12 +74,35 @@ def strip_legend(tex_path: Path) -> None:
     """
     lines = [
         line
-        for line in tex_path.read_text(encoding="utf-8").splitlines()
+        for line in source.splitlines()
         if "\\addlegendentry" not in line
         and "legend style" not in line
         and "legend cell align" not in line
     ]
-    source = "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n"
+
+
+def restrict_rank_axis(source: str, n_groups: int) -> str:
+    """Limit the rank axis to the mean ranks a group can take.
+
+    critdd pads the axis to [0.5, n + 0.5], so it labels 0.5 and n + 0.5, two
+    values no mean rank can take. The axis now spans [1, n] with a tick every
+    half rank.
+    """
+    ticks = ",".join(f"{1 + 0.5 * i:g}" for i in range(2 * n_groups - 1))
+    source = re.sub(r"xmin=\{[^}]*\}", "xmin={1}", source)
+    source = re.sub(r"xmax=\{[^}]*\}", f"xmax={{{n_groups}}}", source)
+    # Push the row labels clear of a marker sitting on rank 1.
+    return source.replace(
+        "\\begin{axis}[",
+        f"\\begin{{axis}}[\n  xtick={{{ticks}}},\n  yticklabel style={{xshift=-5pt}},",
+        1,
+    )
+
+
+def finish_panel(tex_path: Path, n_groups: int) -> None:
+    """Strip the legend, restrict the rank axis and recompile one panel."""
+    source = restrict_rank_axis(strip_legend(tex_path.read_text(encoding="utf-8")), n_groups)
     tex_path.write_text(source, encoding="utf-8")
     _tikz_to_pdf(source, tex_path.with_suffix(""))
 
@@ -134,7 +158,7 @@ def main() -> None:
             # shape carries nothing and the two legends stay identical.
             mark_override="mark=o, mark size=4pt",
         )
-        strip_legend(out_dir / f"cd_2d_{method}.tex")
+        finish_panel(out_dir / f"cd_2d_{method}.tex", len(ARMS))
 
     write_legend(out_dir / "cd_legend")
 

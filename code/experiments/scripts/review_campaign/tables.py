@@ -252,7 +252,7 @@ def phi_by_host(d: dict[str, Any]) -> str:
         r"\setlength{\tabcolsep}{4pt}",
         r"\begin{tabular}{@{}lrrrrl@{}}",
         r"\toprule",
-        r"Host & $N/10^3$ & $\rho$ & $\rho_{\mathrm{ser}}$ & $\Delta r$"
+        r"Host & $N$ & $\rho$ & $\rho_{\mathrm{ser}}$ & $\Delta r$"
         r" & $\phi$ $[\min, \max]$ \\",
         r"\midrule",
     ]
@@ -265,7 +265,8 @@ def phi_by_host(d: dict[str, Any]) -> str:
         row = " & ".join(
             [
                 HOST_LABEL[method],
-                f"${n_is / 1000:,.0f}$".replace(",", "{,}"),
+                # Printed in full: a header scaled by a power of ten is read both ways.
+                f"${n_is:,.0f}$".replace(",", "{,}"),
                 f"${fmt(s['isalsr']['rho_over_problems']['mean'], 3)}$",
                 f"${fmt(s['hash']['rho_over_problems']['mean'], 3)}$",
                 f"${fmt(100 * dr['mean'], 1)}\\%$",
