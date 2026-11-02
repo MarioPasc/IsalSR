@@ -17,14 +17,19 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - name: System dependencies (Graphviz for isalsr.viz)
         run: sudo apt-get update && sudo apt-get install -y graphviz
+      # matplotlib < 3.11: the paper figures' layout is tuned to 3.10's font
+      # metrics (the capsule pins 3.10.8). Under 3.11 the fitted node glyphs of
+      # the S2D trace come out at 5.81 pt, below the 6 pt print floor that
+      # test_node_glyphs_are_print_legible guards, so the figure tests run
+      # against the renderer the figures were designed for.
       - name: Install (builds the C++ engine)
-        run: python -m pip install "./code[dev,search,eval,sympy,networkx,viz]"
+        run: python -m pip install "./code[dev,search,eval,sympy,networkx,viz]" "matplotlib<3.11"
       - name: The C++ engine is active
         run: python -c "import isalsr, sys; print(isalsr.build_info()); sys.exit(isalsr.engine() != 'cpp')"
       - name: Lint and types

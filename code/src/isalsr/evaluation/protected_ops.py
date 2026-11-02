@@ -20,7 +20,10 @@ _MAX_VALUE = 1e15
 
 def protected_log(x: np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any, np.dtype[Any]]:
     """Protected logarithm: log(|x| + epsilon)."""
-    return np.log(np.abs(x) + 1e-10)  # type: ignore[no-any-return]
+    # A typed local rather than `type: ignore`: numpy < 2.5 types ufunc calls as
+    # Any, numpy >= 2.5 as an array, and an ignore is unused under one of them.
+    out: np.ndarray[Any, np.dtype[Any]] = np.log(np.abs(x) + 1e-10)
+    return out
 
 
 def protected_div(
@@ -33,7 +36,8 @@ def protected_div(
 
 def protected_sqrt(x: np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any, np.dtype[Any]]:
     """Protected square root: sqrt(|x|)."""
-    return np.sqrt(np.abs(x))  # type: ignore[no-any-return]
+    out: np.ndarray[Any, np.dtype[Any]] = np.sqrt(np.abs(x))
+    return out
 
 
 def protected_exp(x: np.ndarray[Any, np.dtype[Any]]) -> np.ndarray[Any, np.dtype[Any]]:

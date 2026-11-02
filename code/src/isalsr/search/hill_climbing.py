@@ -71,8 +71,10 @@ def hill_climbing(
             continue
 
         for _step in range(n_iterations):
-            # Apply random mutation.
-            mutation_fn = rng.choice([point_mutation, insertion_mutation])  # type: ignore[arg-type]
+            # Apply random mutation. Indexing by rng.integers(2) draws the same
+            # stream as rng.choice over the two functions, and type-checks under
+            # every numpy version (choice over callables does not).
+            mutation_fn = (point_mutation, insertion_mutation)[int(rng.integers(2))]
             try:
                 mutated = mutation_fn(current, allowed_ops, rng)
                 dag = StringToDAG(mutated, num_variables, allowed_ops).run()
