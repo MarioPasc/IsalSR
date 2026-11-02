@@ -1,5 +1,35 @@
 cmake_minimum_required(VERSION 3.18)
-project(isalsr_native LANGUAGES CXX)
+# LANGUAGES NONE: the C++ engine is an accelerator, not a requirement.
+# isalsr.core.backends falls back to the pure-Python engine when
+# isalsr.core._native is absent, and the two produce identical strings, so a
+# machine without a usable toolchain still gets a working install instead of
+# a failed `pip install`.  Every `return()` below installs the Python package
+# alone.
+project(isalsr_native LANGUAGES NONE)
+
+option(ISALSR_BUILD_NATIVE "Build the C++ engine isalsr.core._native" ON)
+if(NOT ISALSR_BUILD_NATIVE)
+    message(STATUS "ISALSR_BUILD_NATIVE=OFF: installing the pure-Python engine only")
+    return()
+endif()
+
+include(CheckLanguage)
+check_language(CXX)
+if(NOT CMAKE_CXX_COMPILER)
+    message(WARNING "No C++ compiler found: installing the pure-Python engine only. "
+                    "Install a C++17 compiler (GCC >= 11 or Clang) and reinstall for the C++ engine.")
+    return()
+endif()
+enable_language(CXX)
+
+# The engine is built and tested with GCC and Clang.  MSVC is untested, so a
+# Windows source build installs the pure-Python engine rather than risk a
+# failed install.
+if(MSVC)
+    message(WARNING "MSVC is not a supported compiler for the C++ engine: "
+                    "installing the pure-Python engine only.")
+    return()
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,8 +49,15 @@ endif()
 #
 # Local override: -DISALSR_NATIVE_MARCH=ON swaps x86-64-v3 for native.
 # Use this on the workstation for profiling; do NOT submit to SLURM.
+#
+# ISALSR_MARCH sets the x86-64 level.  Keep the default to reproduce the
+# paper's build hash; the PyPI wheels use x86-64-v2 so that they import on
+# CPUs without AVX2 instead of dying with SIGILL.  -march is an x86 flag:
+# other architectures (aarch64, Apple silicon) build for the compiler's
+# default target.
 # -----------------------------------------------------------------------
 option(ISALSR_NATIVE_MARCH "Replace -march=x86-64-v3 with -march=native" OFF)
+set(ISALSR_MARCH "x86-64-v3" CACHE STRING "Value of -march= on x86-64")
 
 # -----------------------------------------------------------------------
 # Sanitizer support (development only — never combine with Release/LTO)
@@ -31,7 +68,12 @@ option(ISALSR_ENABLE_SANITIZERS "Enable Address + Undefined sanitizers" OFF)
 # Python + nanobind
 # NOTE: find_package must come before nanobind_add_module.
 # -----------------------------------------------------------------------
-find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(Python 3.11 COMPONENTS Interpreter Development.Module)
+if(NOT Python_Development.Module_FOUND)
+    message(WARNING "Python development headers not found: installing the pure-Python "
+                    "engine only (on Debian/Ubuntu: apt install python3-dev).")
+    return()
+endif()
 find_package(nanobind CONFIG REQUIRED)
 
 # -----------------------------------------------------------------------
@@ -78,12 +120,14 @@ if(ISALSR_ENABLE_SANITIZERS)
         -fsanitize=address,undefined)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     if(ISALSR_NATIVE_MARCH)
-        target_compile_options(_native PRIVATE
-            -O3 -march=native -DNDEBUG -fno-plt -funroll-loops)
+        set(_isalsr_march -march=native)
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+        set(_isalsr_march -march=${ISALSR_MARCH})
     else()
-        target_compile_options(_native PRIVATE
-            -O3 -march=x86-64-v3 -DNDEBUG -fno-plt -funroll-loops)
+        set(_isalsr_march "")
     endif()
+    target_compile_options(_native PRIVATE
+        -O3 ${_isalsr_march} -DNDEBUG -fno-plt -funroll-loops)
 
     # LTO / IPO: applied to _native target only (not to nanobind-static).
     include(CheckIPOSupported)

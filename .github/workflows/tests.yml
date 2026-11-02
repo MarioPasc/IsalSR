@@ -1,0 +1,42 @@
+# Library tests on every push and pull request: Python 3.11-3.13, both engines.
+#
+# This covers the installable library (isalsr/). The full research suite, which
+# also exercises the UDFS and Bingo integrations with pinned dependencies, runs
+# in the Code Ocean capsule (code/run; see REPRODUCING.md).
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  library:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: System dependencies (Graphviz for isalsr.viz)
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+      - name: Install (builds the C++ engine)
+        run: python -m pip install "./code[dev,search,eval,sympy,networkx,viz]"
+      - name: The C++ engine is active
+        run: python -c "import isalsr, sys; print(isalsr.build_info()); sys.exit(isalsr.engine() != 'cpp')"
+      - name: Lint and types
+        working-directory: code
+        run: |
+          python -m ruff check src/ tests/
+          python -m mypy src/isalsr/
+      - name: Library tests, C++ engine
+        working-directory: code
+        run: python -m pytest $(python tools/library_tests.py) -q -p no:cacheprovider -o addopts=
+      - name: Library tests, Python engine
+        working-directory: code
+        env:
+          ISALSR_ENGINE: python
+        run: python -m pytest $(python tools/library_tests.py) -q -p no:cacheprovider -o addopts=

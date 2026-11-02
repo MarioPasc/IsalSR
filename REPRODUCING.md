@@ -38,9 +38,11 @@ Two consequences of the move, both deliberate:
 - `pyproject.toml` is at `code/pyproject.toml`, so installing from a checkout is
   `pip install -e code/`, and from the URL it is
   `pip install "git+https://github.com/MarioPasc/IsalSR#subdirectory=code"`.
-- The project no longer declares a `readme`: the canonical `README.md` is at the
-  repository root, outside the project directory, and PEP 621 requires that path
-  to be inside it. A second copy under `code/` would drift.
+- PEP 621 requires the `readme` inside the project directory, so `code/README.md`
+  is the package's own README (the PyPI page: install, quick start, citation),
+  not a copy of the repository README at the root. The wheel ships only the
+  `isalsr` library; the tests import `experiments/` and `benchmarks/` from the
+  checkout through pytest's `pythonpath = ["."]`, which `run` relies on too.
 
 `docs/` stays at the root while the code that reads it moved, so the two roots
 are now different directories. `code/experiments/scripts/docs_root.py` resolves
@@ -136,6 +138,18 @@ only skip. `run` deselects them with `-m "not manuscript"` rather than
 letting 170 skips accumulate in the report, where they would read as untested
 behaviour instead of out-of-scope tooling. Run them locally with the manuscript
 mounted; `python -m pytest tests/` still collects them by default.
+
+Two tests carry `pytest.mark.external_data` and are deselected the same way
+(`-m "not manuscript and not external_data"`): they read inputs that are part of
+the repository but not of the capsule.
+`test_review_campaign_verify.py::test_load_inventory_reads_the_seventy_problem_suite`
+reads the generated benchmark inventory under `docs/`, which stays at the
+repository root; `test_blackbox_analysis.py::test_real_corpus_is_complete_and_single_provenance`
+reads the black-box campaign results. Both pass in a full checkout.
+
+Tests marked `graphviz` need the Graphviz `dot` program. The capsule installs it,
+so they run there; a plain `pip install` lacks it, and there they skip with that
+reason.
 
 `experiments/scripts/stage_d_certify.py` writes a campaign manifest whose
 `build.git_commit` comes from `git rev-parse HEAD`. In a checkout without `.git`

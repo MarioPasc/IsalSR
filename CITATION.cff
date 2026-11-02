@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the article below."
+title: "IsalSR: Instruction Set and Language for Symbolic Regression"
+version: 1.0.0
+license: MIT
+repository-code: "https://github.com/MarioPasc/IsalSR"
+url: "https://mariopasc.github.io/IsalSR/"
+authors:
+  - family-names: "López-Rubio"
+    given-names: "Ezequiel"
+    affiliation: "Universidad de Málaga"
+  - family-names: "Pascual-González"
+    given-names: "Mario"
+    affiliation: "Universidad de Málaga"
+  - family-names: "Thurnhofer-Hemsi"
+    given-names: "Karl"
+    affiliation: "Universidad de Málaga"
+preferred-citation:
+  type: article
+  title: "Representation of Directed Acyclic Graphs by Sequences of Instructions for Symbolic Regression"
+  authors:
+    - family-names: "López-Rubio"
+      given-names: "Ezequiel"
+    - family-names: "Pascual-González"
+      given-names: "Mario"
+    - family-names: "Thurnhofer-Hemsi"
+      given-names: "Karl"
+  journal: "IEEE Transactions on Pattern Analysis and Machine Intelligence"
+  year: 2026
+  notes: "Accepted for publication. Add the DOI when the Early Access version appears."

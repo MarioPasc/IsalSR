@@ -355,6 +355,7 @@ def test_macros_file_defines_each_name_once() -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.external_data
 @pytest.mark.skipif(not DEFAULT_CORPUS.is_dir(), reason="black-box corpus not on this machine")
 def test_real_corpus_is_complete_and_single_provenance() -> None:
     report = audit.run_audit(DEFAULT_CORPUS)
