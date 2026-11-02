@@ -37,18 +37,12 @@ def isalsr_strings(draw: st.DrawFn, num_variables: int = 1, max_tokens: int = 6)
 @settings(max_examples=50, deadline=15000)
 def test_fast_canonical_idempotent_wl_only(string: str) -> None:
     """fast_canonical(S2D(fast_canonical(S2D(w)))) == fast_canonical(S2D(w))."""
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return
-    try:
-        canon1 = fast_canonical_string(dag1, mode="wl_only")
-        dag2 = StringToDAG(canon1, num_variables=1).run()
-        canon2 = fast_canonical_string(dag2, mode="wl_only")
-    except Exception:  # noqa: BLE001
-        return
+    canon1 = fast_canonical_string(dag1, mode="wl_only")
+    dag2 = StringToDAG(canon1, num_variables=1).run()
+    canon2 = fast_canonical_string(dag2, mode="wl_only")
     assert canon1 == canon2
 
 
@@ -56,17 +50,11 @@ def test_fast_canonical_idempotent_wl_only(string: str) -> None:
 @settings(max_examples=50, deadline=15000)
 def test_fast_canonical_roundtrip_wl_only(string: str) -> None:
     """S2D(fast_canonical_string(D)) is isomorphic to D."""
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return
-    try:
-        canon = fast_canonical_string(dag1, mode="wl_only")
-        dag2 = StringToDAG(canon, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    canon = fast_canonical_string(dag1, mode="wl_only")
+    dag2 = StringToDAG(canon, num_variables=1).run()
     assert dag1.is_isomorphic(dag2)
 
 
@@ -79,18 +67,12 @@ def test_fast_canonical_roundtrip_wl_only(string: str) -> None:
 @settings(max_examples=50, deadline=15000)
 def test_fast_canonical_idempotent_wl_tiebreak(string: str) -> None:
     """Idempotency for wl_tiebreak mode."""
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return
-    try:
-        canon1 = fast_canonical_string(dag1, mode="wl_tiebreak")
-        dag2 = StringToDAG(canon1, num_variables=1).run()
-        canon2 = fast_canonical_string(dag2, mode="wl_tiebreak")
-    except Exception:  # noqa: BLE001
-        return
+    canon1 = fast_canonical_string(dag1, mode="wl_tiebreak")
+    dag2 = StringToDAG(canon1, num_variables=1).run()
+    canon2 = fast_canonical_string(dag2, mode="wl_tiebreak")
     assert canon1 == canon2
 
 
@@ -98,17 +80,11 @@ def test_fast_canonical_idempotent_wl_tiebreak(string: str) -> None:
 @settings(max_examples=50, deadline=15000)
 def test_fast_canonical_roundtrip_wl_tiebreak(string: str) -> None:
     """Round-trip for wl_tiebreak mode."""
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return
-    try:
-        canon = fast_canonical_string(dag1, mode="wl_tiebreak")
-        dag2 = StringToDAG(canon, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    canon = fast_canonical_string(dag1, mode="wl_tiebreak")
+    dag2 = StringToDAG(canon, num_variables=1).run()
     assert dag1.is_isomorphic(dag2)
 
 
@@ -121,18 +97,12 @@ def test_fast_canonical_roundtrip_wl_tiebreak(string: str) -> None:
 @settings(max_examples=50, deadline=15000)
 def test_fast_canonical_idempotent_tuple_only(string: str) -> None:
     """Idempotency for tuple_only mode."""
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return
-    try:
-        canon1 = fast_canonical_string(dag1, mode="tuple_only")
-        dag2 = StringToDAG(canon1, num_variables=1).run()
-        canon2 = fast_canonical_string(dag2, mode="tuple_only")
-    except Exception:  # noqa: BLE001
-        return
+    canon1 = fast_canonical_string(dag1, mode="tuple_only")
+    dag2 = StringToDAG(canon1, num_variables=1).run()
+    canon2 = fast_canonical_string(dag2, mode="tuple_only")
     assert canon1 == canon2
 
 
@@ -140,17 +110,11 @@ def test_fast_canonical_idempotent_tuple_only(string: str) -> None:
 @settings(max_examples=50, deadline=15000)
 def test_fast_canonical_roundtrip_tuple_only(string: str) -> None:
     """Round-trip for tuple_only mode."""
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return
-    try:
-        canon = fast_canonical_string(dag1, mode="tuple_only")
-        dag2 = StringToDAG(canon, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    canon = fast_canonical_string(dag1, mode="tuple_only")
+    dag2 = StringToDAG(canon, num_variables=1).run()
     assert dag1.is_isomorphic(dag2)
 
 
@@ -163,17 +127,11 @@ def test_fast_canonical_roundtrip_tuple_only(string: str) -> None:
 @settings(max_examples=30, deadline=15000)
 def test_fast_canonical_2var_roundtrip(string: str) -> None:
     """Multi-variable round-trip with default mode."""
-    try:
-        dag1 = StringToDAG(string, num_variables=2).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=2).run()
     if dag1.node_count <= 2:
         return
-    try:
-        canon = fast_canonical_string(dag1, mode="wl_only")
-        dag2 = StringToDAG(canon, num_variables=2).run()
-    except Exception:  # noqa: BLE001
-        return
+    canon = fast_canonical_string(dag1, mode="wl_only")
+    dag2 = StringToDAG(canon, num_variables=2).run()
     assert dag1.is_isomorphic(dag2)
 
 
@@ -190,10 +148,7 @@ def test_all_modes_same_equivalence_classes(string: str) -> None:
     If mode A says D ~ D' (same canonical), then mode B must also say D ~ D'.
     We test this by generating a random permutation and checking all modes agree.
     """
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     k = dag1.node_count - len(dag1.var_nodes())
     if k < 2:
         return
@@ -202,17 +157,10 @@ def test_all_modes_same_equivalence_classes(string: str) -> None:
     rng = np.random.default_rng(42)
     perm = list(range(k))
     rng.shuffle(perm)
-    try:
-        dag2 = permute_internal_nodes(dag1, perm)
-    except Exception:  # noqa: BLE001
-        return
+    dag2 = permute_internal_nodes(dag1, perm)
 
     # All modes should agree: original and permuted have the same canonical
     for mode in ["wl_only", "wl_tiebreak", "tuple_only"]:
-        try:
-            c1 = fast_canonical_string(dag1, mode=mode)  # type: ignore[arg-type]
-            c2 = fast_canonical_string(dag2, mode=mode)  # type: ignore[arg-type]
-            assert c1 == c2, f"mode={mode}: permutation changed canonical"
-        except Exception:  # noqa: BLE001
-            # Timeout or conversion error — skip
-            pass
+        c1 = fast_canonical_string(dag1, mode=mode)  # type: ignore[arg-type]
+        c2 = fast_canonical_string(dag2, mode=mode)  # type: ignore[arg-type]
+        assert c1 == c2, f"mode={mode}: permutation changed canonical"

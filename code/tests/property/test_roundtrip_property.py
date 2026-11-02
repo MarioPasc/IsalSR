@@ -30,17 +30,11 @@ def isalsr_strings(draw: st.DrawFn, num_variables: int = 1, max_tokens: int = 8)
 @settings(max_examples=50, deadline=5000)
 def test_roundtrip_1var(string: str) -> None:
     """Round-trip property for 1-variable strings."""
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return  # Invalid string, skip.
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return  # VAR-only.
-    try:
-        string2 = DAGToString(dag1).run()
-        dag2 = StringToDAG(string2, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    string2 = DAGToString(dag1).run()
+    dag2 = StringToDAG(string2, num_variables=1).run()
     assert dag1.node_count == dag2.node_count
     assert dag1.edge_count == dag2.edge_count
     assert dag1.is_isomorphic(dag2)
@@ -50,15 +44,9 @@ def test_roundtrip_1var(string: str) -> None:
 @settings(max_examples=50, deadline=5000)
 def test_roundtrip_2var(string: str) -> None:
     """Round-trip property for 2-variable strings."""
-    try:
-        dag1 = StringToDAG(string, num_variables=2).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=2).run()
     if dag1.node_count <= 2:
         return
-    try:
-        string2 = DAGToString(dag1).run()
-        dag2 = StringToDAG(string2, num_variables=2).run()
-    except Exception:  # noqa: BLE001
-        return
+    string2 = DAGToString(dag1).run()
+    dag2 = StringToDAG(string2, num_variables=2).run()
     assert dag1.is_isomorphic(dag2)
