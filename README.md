@@ -82,25 +82,37 @@ expression DAGs tie at all.
 ## Install
 
 Core has **zero runtime dependencies** — Python standard library only. Two interchangeable
-engines compute the same canonical strings; **use the C++ one**.
+engines compute the same canonical strings; **use the C++ one**. The Python package lives in
+[`code/`](code/) (the layout Code Ocean requires); its own README is
+[`code/README.md`](code/README.md).
 
-### C++ engine (recommended)
+```bash
+pip install isalsr                                                     # from PyPI, once released
+pip install "git+https://github.com/MarioPasc/IsalSR#subdirectory=code"   # from GitHub
+
+python -c "import isalsr; print(isalsr.engine())"                      # -> cpp
+```
+
+The install compiles the C++ engine when a C++17 compiler is available (GCC ≥ 11 or Clang)
+and otherwise installs the pure-Python engine alone, so it never fails for lack of a
+toolchain. Python ≥ 3.11.
+
+### Development install
 
 ```bash
 conda create -n isalsr python=3.11 -y
 conda activate isalsr
-
-pip install nanobind ninja                # build-time only
-pip install -e ".[dev,native]" -v         # builds isalsr.core._native via CMake
-
-python -c "from isalsr.core import backends; print(backends.engine())"   # -> cpp
+pip install -e "./code[dev,native]" -v   # builds isalsr.core._native via CMake
 ```
 
-Requires **GCC ≥ 11**, cmake ≥ 3.18 and ninja. `CMakeLists.txt` targets `-march=x86-64-v3`
-(AVX2 + FMA), an architecture value GCC did not accept before 11; it is the lowest common
-denominator across the cluster nodes we run on, so one binary covers all of them. Set
-`CMAKE_ARGS="-DISALSR_NATIVE_MARCH=ON"` to build with `-march=native` instead when the
-binary does not need to be portable. Add `".[experiments]"` to run the SR campaigns.
+Requires **GCC ≥ 11**, cmake ≥ 3.18 and ninja. On x86-64, `CMakeLists.txt` targets
+`-march=x86-64-v3` (AVX2 + FMA), an architecture value GCC did not accept before 11; it is the
+lowest common denominator across the cluster nodes we run on, so one binary covers all of them,
+and it is the build the paper's numbers come from. Set `CMAKE_ARGS="-DISALSR_NATIVE_MARCH=ON"`
+to build with `-march=native` instead when the binary does not need to be portable, or
+`-DISALSR_MARCH=x86-64-v2` for CPUs without AVX2 (the PyPI wheels use it). Add
+`"./code[experiments]"` to run the SR campaigns, plus
+`pip install "critdd @ git+https://github.com/mirkobunse/critdd"` for the figure scripts.
 
 Full build guide, ISA-level rationale and the Picasso/SLURM recipe:
 [`docs/engineering/CPP_BUILD.md`](docs/engineering/CPP_BUILD.md).
@@ -108,11 +120,9 @@ Full build guide, ISA-level rationale and the Picasso/SLURM recipe:
 ### Pure Python engine
 
 ```bash
-conda create -n isalsr python=3.11 -y
-conda activate isalsr
-pip install -e ".[dev]"
+pip install -e "./code[dev]" -C cmake.define.ISALSR_BUILD_NATIVE=OFF
 
-python -c "from isalsr.core import backends; print(backends.engine())"   # -> python
+python -c "import isalsr; print(isalsr.engine())"   # -> python
 ```
 
 If the compiled extension is absent, every call falls back to Python transparently — which
@@ -202,18 +212,23 @@ Full tables, critical-difference diagrams and limitations:
 ## Repository
 
 ```
-src/isalsr/core/        S2D, D2S, canonical string, labeled DAG, CDLL — zero dependencies
-src/isalsr/core/native/ the C++17 engine (nanobind), same semantics, ~19x faster
-src/isalsr/adapters/    SymPy and NetworkX bridges
-src/isalsr/evaluation/  fitness metrics, protected operators, constant optimization
-experiments/models/     host-solver integration (Bingo, UDFS) and the analysis pipeline
-benchmarks/datasets/    the 70-problem suite
-docs/                   the companion website
-tests/                  unit, property and integration suites
+code/src/isalsr/core/        S2D, D2S, canonical string, labeled DAG, CDLL — zero dependencies
+code/src/isalsr/core/native/ the C++17 engine (nanobind), same semantics, ~19x faster
+code/src/isalsr/adapters/    SymPy and NetworkX bridges
+code/src/isalsr/evaluation/  fitness metrics, protected operators, constant optimization
+code/experiments/models/     host-solver integration (Bingo, UDFS) and the analysis pipeline
+code/benchmarks/datasets/    the 70-problem suite
+code/tests/                  unit, property and integration suites
+environment/, metadata/      the Code Ocean capsule (see REPRODUCING.md)
+docs/                        the companion website
 ```
 
+Only `isalsr` is distributed on PyPI; `experiments/` and `benchmarks/` run from a checkout.
+
 ```bash
-python -m pytest tests/unit -q       # fast, no external dependencies
+cd code
+python -m pytest tests -m "not manuscript" -q   # full suite (needs the experiments extra)
+python -m pytest $(python tools/library_tests.py) -q   # the library alone
 python -m ruff check src/ tests/
 python -m mypy src/isalsr/
 ```
@@ -227,7 +242,7 @@ python -m mypy src/isalsr/
   author  = {L{\'o}pez-Rubio, Ezequiel and Pascual-Gonz{\'a}lez, Mario and
              Thurnhofer-Hemsi, Karl},
   journal = {IEEE Transactions on Pattern Analysis and Machine Intelligence},
-  note    = {Under review},
+  note    = {Accepted for publication},
   year    = {2026}
 }
 ```

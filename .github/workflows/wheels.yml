@@ -1,0 +1,62 @@
+# Build the sdist and the binary wheels, and publish them to PyPI when a GitHub
+# release is published.  Publishing uses PyPI trusted publishing (OIDC): no API
+# token is stored.  One-time setup on pypi.org: add a trusted publisher for
+# project "isalsr" with owner MarioPasc, repository IsalSR, workflow wheels.yml
+# and environment "pypi".
+#
+# Wheels are built and tested by cibuildwheel from [tool.cibuildwheel] in
+# code/pyproject.toml: each wheel must import the C++ engine and pass the
+# canonical-string tests before it is uploaded.
+name: wheels
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the sdist
+        run: pipx run build --sdist code --outdir dist
+      - name: Check metadata
+        run: pipx run twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  wheels:
+    name: wheels (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux x86-64 and aarch64 (native runner); macOS Intel and Apple silicon.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pypa/cibuildwheel@v4.3.5
+        with:
+          package-dir: code
+          output-dir: wheelhouse
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  publish:
+    needs: [sdist, wheels]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1

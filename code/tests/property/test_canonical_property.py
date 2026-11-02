@@ -33,18 +33,12 @@ def test_canonical_is_idempotent_1var(string: str) -> None:
 
     Applying canonical twice gives the same result (idempotency).
     """
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return
-    try:
-        canon1 = canonical_string(dag1)
-        dag2 = StringToDAG(canon1, num_variables=1).run()
-        canon2 = canonical_string(dag2)
-    except Exception:  # noqa: BLE001
-        return
+    canon1 = canonical_string(dag1)
+    dag2 = StringToDAG(canon1, num_variables=1).run()
+    canon2 = canonical_string(dag2)
     assert canon1 == canon2
 
 
@@ -52,15 +46,9 @@ def test_canonical_is_idempotent_1var(string: str) -> None:
 @settings(max_examples=30, deadline=10000)
 def test_canonical_roundtrip_isomorphism_1var(string: str) -> None:
     """S2D(canonical_string(D)) is isomorphic to D."""
-    try:
-        dag1 = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag1 = StringToDAG(string, num_variables=1).run()
     if dag1.node_count <= 1:
         return
-    try:
-        canon = canonical_string(dag1)
-        dag2 = StringToDAG(canon, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    canon = canonical_string(dag1)
+    dag2 = StringToDAG(canon, num_variables=1).run()
     assert dag1.is_isomorphic(dag2)

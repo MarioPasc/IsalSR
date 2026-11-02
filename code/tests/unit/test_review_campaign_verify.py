@@ -498,6 +498,7 @@ def test_table_row_ids_reads_data_rows_only(tabular: str, expected: list[str]) -
     assert table_row_ids(tabular) == expected
 
 
+@pytest.mark.external_data
 def test_load_inventory_reads_the_seventy_problem_suite() -> None:
     """The authoritative suite is the generated inventory, not a literal in a test."""
     inventory = load_inventory(DEFAULT_INVENTORY)

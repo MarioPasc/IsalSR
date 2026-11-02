@@ -31,10 +31,7 @@ def isalsr_strings(draw: st.DrawFn, num_variables: int = 1, max_tokens: int = 10
 @settings(max_examples=100, deadline=5000)
 def test_dag_always_acyclic_1var(string: str) -> None:
     """Every DAG produced by S2D is acyclic (topological sort succeeds)."""
-    try:
-        dag = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return  # Invalid string, skip.
+    dag = StringToDAG(string, num_variables=1).run()
     # If topological sort raises, the DAG has a cycle (should never happen).
     order = dag.topological_sort()
     assert len(order) == dag.node_count
@@ -44,9 +41,6 @@ def test_dag_always_acyclic_1var(string: str) -> None:
 @settings(max_examples=100, deadline=5000)
 def test_dag_always_acyclic_2var(string: str) -> None:
     """Every 2-variable DAG produced by S2D is acyclic."""
-    try:
-        dag = StringToDAG(string, num_variables=2).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag = StringToDAG(string, num_variables=2).run()
     order = dag.topological_sort()
     assert len(order) == dag.node_count

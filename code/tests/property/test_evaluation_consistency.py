@@ -17,6 +17,7 @@ from hypothesis import strategies as st
 from isalsr.core.dag_evaluator import evaluate_dag
 from isalsr.core.node_types import OperationSet
 from isalsr.core.string_to_dag import StringToDAG
+from isalsr.errors import EvaluationError
 from isalsr.search.operators import detokenize, random_token
 
 
@@ -34,16 +35,13 @@ def isalsr_strings(draw: st.DrawFn, num_variables: int = 1, max_tokens: int = 8)
 @settings(max_examples=50, deadline=5000)
 def test_evaluation_always_finite_1var(string: str) -> None:
     """DAG evaluation always returns a finite value (protected ops work)."""
-    try:
-        dag = StringToDAG(string, num_variables=1).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag = StringToDAG(string, num_variables=1).run()
     if dag.node_count <= 1:
         return
     try:
         result = evaluate_dag(dag, {0: 1.5})
-    except Exception:  # noqa: BLE001
-        return  # Evaluation error (e.g., wrong arity) is acceptable.
+    except EvaluationError:
+        return  # Not a well-formed expression (arity, several outputs): documented.
     assert math.isfinite(result), f"Non-finite result: {result}"
 
 
@@ -51,14 +49,11 @@ def test_evaluation_always_finite_1var(string: str) -> None:
 @settings(max_examples=50, deadline=5000)
 def test_evaluation_always_finite_2var(string: str) -> None:
     """DAG evaluation always returns finite for 2-variable expressions."""
-    try:
-        dag = StringToDAG(string, num_variables=2).run()
-    except Exception:  # noqa: BLE001
-        return
+    dag = StringToDAG(string, num_variables=2).run()
     if dag.node_count <= 2:
         return
     try:
         result = evaluate_dag(dag, {0: 1.5, 1: -0.5})
-    except Exception:  # noqa: BLE001
-        return
+    except EvaluationError:
+        return  # Not a well-formed expression (arity, several outputs): documented.
     assert math.isfinite(result), f"Non-finite result: {result}"

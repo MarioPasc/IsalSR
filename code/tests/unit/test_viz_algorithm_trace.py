@@ -146,11 +146,13 @@ def _count_crossings(dag: LabeledDAG, layout: dict[int, tuple[float, float]]) ->
     return total
 
 
+@pytest.mark.graphviz
 def test_graphviz_layout_covers_every_node(example_dag: LabeledDAG) -> None:
     pos = graphviz_layout(example_dag)
     assert set(pos) == set(range(example_dag.node_count))
 
 
+@pytest.mark.graphviz
 def test_graphviz_layout_is_centred(example_dag: LabeledDAG) -> None:
     """Centring lets panels share one pair of axis limits."""
     pos = graphviz_layout(example_dag)
@@ -161,6 +163,7 @@ def test_graphviz_layout_is_centred(example_dag: LabeledDAG) -> None:
 
 
 @pytest.mark.parametrize(("rankdir", "wider"), [("LR", True), ("BT", False)])
+@pytest.mark.graphviz
 def test_graphviz_layout_rankdir_controls_aspect(
     example_dag: LabeledDAG, rankdir: str, wider: bool
 ) -> None:
@@ -172,6 +175,7 @@ def test_graphviz_layout_rankdir_controls_aspect(
     assert (w > h) is wider
 
 
+@pytest.mark.graphviz
 def test_graphviz_layout_removes_crossings(example_dag: LabeledDAG) -> None:
     """dot's crossing reduction beats the built-in node-ID ordering.
 
@@ -189,6 +193,7 @@ def test_graphviz_layout_empty_dag() -> None:
     assert graphviz_layout(LabeledDAG(4)) == {}
 
 
+@pytest.mark.graphviz
 def test_graphviz_routes_every_edge(example_dag: LabeledDAG) -> None:
     """Edges follow dot's node-avoiding splines, so every edge needs a route."""
     _pos, routes = graphviz_layout_and_routes(example_dag, rankdir="LR")
@@ -196,6 +201,7 @@ def test_graphviz_routes_every_edge(example_dag: LabeledDAG) -> None:
     assert set(routes) == expected
 
 
+@pytest.mark.graphviz
 def test_graphviz_routes_are_cubic_bezier_sequences(example_dag: LabeledDAG) -> None:
     """Graphviz emits 1 + 3k control points; anything else would draw wrongly."""
     _pos, routes = graphviz_layout_and_routes(example_dag, rankdir="LR")
@@ -204,6 +210,7 @@ def test_graphviz_routes_are_cubic_bezier_sequences(example_dag: LabeledDAG) -> 
         assert (len(pts) - 1) % 3 == 0, f"edge {key} has {len(pts)} control points"
 
 
+@pytest.mark.graphviz
 def test_edge_routes_clear_intervening_nodes(example_dag: LabeledDAG) -> None:
     """A routed edge must not pass through a node it is not incident to.
 
@@ -312,6 +319,7 @@ def test_trace_rejects_label_count_mismatch(
 
 
 @pytest.mark.parametrize("direction", [STRING_TO_DAG, DAG_TO_STRING])
+@pytest.mark.graphviz
 def test_figure_has_three_panels_per_column(
     example_dag: LabeledDAG, example_trace: list[Snapshot], direction: str
 ) -> None:
@@ -348,6 +356,7 @@ def _solid_token_counts(fig: object) -> list[int]:
     ]
 
 
+@pytest.mark.graphviz
 def test_string_to_dag_empties_the_string(
     example_dag: LabeledDAG, example_trace: list[Snapshot]
 ) -> None:
@@ -371,6 +380,7 @@ def test_string_to_dag_empties_the_string(
     assert counts[-1] == 0
 
 
+@pytest.mark.graphviz
 def test_dag_to_string_fills_the_string(example_dag: LabeledDAG) -> None:
     """D2S produces the string, so its solid token count must rise to full."""
     from isalsr.core.dag_to_string import DAGToString
@@ -392,6 +402,7 @@ def test_dag_to_string_fills_the_string(example_dag: LabeledDAG) -> None:
     assert counts[-1] == len(tokenize_string(EXAMPLE))
 
 
+@pytest.mark.graphviz
 def test_figure_background_is_transparent(
     example_dag: LabeledDAG, example_trace: list[Snapshot]
 ) -> None:
@@ -408,6 +419,7 @@ def test_figure_background_is_transparent(
         assert ax.patch.get_alpha() == 0.0
 
 
+@pytest.mark.graphviz
 def test_figure_size_matches_layout(example_dag: LabeledDAG, example_trace: list[Snapshot]) -> None:
     lay = AlgorithmTraceLayout(fig_width=7.16)
     fig = make_algorithm_trace_figure(
@@ -421,6 +433,7 @@ def test_figure_size_matches_layout(example_dag: LabeledDAG, example_trace: list
     assert tuple(fig.get_size_inches()) == pytest.approx(lay.figsize)
 
 
+@pytest.mark.graphviz
 def test_node_glyphs_are_print_legible(
     example_dag: LabeledDAG, example_trace: list[Snapshot]
 ) -> None:

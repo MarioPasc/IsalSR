@@ -77,12 +77,14 @@ def test_centred_translates_bounding_box_to_origin() -> None:
 
 
 @pytest.mark.parametrize("mode", [BY_VIEW, BY_ROW])
+@pytest.mark.graphviz
 def test_grid_has_three_panels_per_slot(rows: list[ExpressionRow], mode: str) -> None:
     """Rows are padded to the widest row, so the axes count is rows x cols x 3."""
     fig = make_expression_grid_figure(rows, band_mode=mode)
     assert len(fig.axes) == 2 * 2 * 3
 
 
+@pytest.mark.graphviz
 def test_grid_background_is_transparent(rows: list[ExpressionRow]) -> None:
     fig = make_expression_grid_figure(rows)
     assert fig.patch.get_alpha() == 0.0
@@ -100,12 +102,14 @@ def test_grid_rejects_unknown_band_mode(rows: list[ExpressionRow]) -> None:
         make_expression_grid_figure(rows, band_mode="diagonal")
 
 
+@pytest.mark.graphviz
 def test_grid_size_matches_layout(rows: list[ExpressionRow]) -> None:
     lay = ExpressionGridLayout()
     fig = make_expression_grid_figure(rows, layout=lay)
     assert tuple(fig.get_size_inches()) == pytest.approx(lay.figsize(len(rows)))
 
 
+@pytest.mark.graphviz
 def test_every_dag_panel_shares_one_scale(rows: list[ExpressionRow]) -> None:
     """Panels must share limits, or cell size would read as expression size."""
     fig = make_expression_grid_figure(rows)
@@ -115,6 +119,7 @@ def test_every_dag_panel_shares_one_scale(rows: list[ExpressionRow]) -> None:
     assert len(lims) == 1
 
 
+@pytest.mark.graphviz
 def test_node_glyphs_share_one_fitted_size(rows: list[ExpressionRow]) -> None:
     """One size across the grid, and never larger than the requested ceiling."""
     lay = ExpressionGridLayout()
@@ -138,6 +143,7 @@ def test_cell_without_dag_draws_a_note() -> None:
     assert "undecodable" in texts
 
 
+@pytest.mark.graphviz
 def test_alert_nodes_add_a_ring(rows: list[ExpressionRow]) -> None:
     """A flagged node must be drawn differently from an unflagged one."""
     from matplotlib.patches import Circle
@@ -159,6 +165,7 @@ def test_alert_nodes_add_a_ring(rows: list[ExpressionRow]) -> None:
     assert n_circles(frozenset({1})) == n_circles(frozenset()) + 1
 
 
+@pytest.mark.graphviz
 def test_by_view_bands_each_row_separately(rows: list[ExpressionRow]) -> None:
     """A view band must not span the gap between two rows of the grid."""
     from matplotlib.patches import FancyBboxPatch
@@ -169,6 +176,7 @@ def test_by_view_bands_each_row_separately(rows: list[ExpressionRow]) -> None:
     assert len(bands) == 6
 
 
+@pytest.mark.graphviz
 def test_by_row_bands_each_row_once(rows: list[ExpressionRow]) -> None:
     from matplotlib.patches import FancyBboxPatch
 

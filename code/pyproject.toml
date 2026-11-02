@@ -12,32 +12,71 @@ ninja.version = ">=1.10"
 build-dir = "build/{wheel_tag}"
 # wheel.packages must list the Python source tree; the .so is installed
 # into isalsr/core/ by CMake's install() rule, not by this list.
-wheel.packages = ["src/isalsr", "experiments", "benchmarks"]
+# Only the library is distributed.  experiments/ and benchmarks/ are the
+# paper's research code: they live in the repository (and the Code Ocean
+# capsule), run from a checkout, and would otherwise land in site-packages as
+# top-level packages with generic names that collide with other projects.
+wheel.packages = ["src/isalsr"]
 # The C++ sources live inside the package tree (src/isalsr/core/native/) so
 # that the whole extension travels with the checkout, but only the compiled
 # .so belongs in a wheel — ship no .cpp/.hpp.
 wheel.exclude = ["isalsr/core/native/**"]
+# The sdist carries what a source build needs (library, C++ engine, CMake),
+# not the 5 MB research tree, the cluster scripts, or a test suite that
+# imports that research tree.
+sdist.exclude = [
+    "experiments/", "benchmarks/", "slurm/", "tests/", "build/", ".hypothesis/",
+    "run", "scaffold.sh",
+]
 
 [tool.scikit-build.cmake.define]
 CMAKE_BUILD_TYPE = "Release"
 
+# Single source of truth for the version: isalsr.__version__.
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "src/isalsr/__init__.py"
+
 [project]
 name = "isalsr"
-version = "1.0.0"
-description = "Instruction Set and Language for Symbolic Regression"
-# No `readme` key: the canonical README.md lives at the repository root, which is
-# outside this project directory, and PEP 621 requires the path to be inside it.
-# The root is where GitHub renders it and where the Pages site links from, and
-# the alternative -- a second copy here -- would drift. The package is not
-# published to PyPI, so the long description is unused.
+dynamic = ["version"]
+description = "Isomorphism-invariant instruction strings for the labeled DAGs of symbolic regression"
+# PEP 621 requires the readme inside the project directory, so this is the
+# package's own README (install, quick start, citation); the repository
+# README at the root describes the project and the paper's experiments.
+readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 authors = [
-    {name = "Ezequiel Lopez-Rubio", email = "ezeqlr@lcc.uma.es"},
-    {name = "Mario Pascual Gonzalez", email = "mpascual@uma.es"},
+    {name = "Ezequiel López-Rubio", email = "ezeqlr@lcc.uma.es"},
+    {name = "Mario Pascual-González", email = "mpascual@uma.es"},
+    {name = "Karl Thurnhofer-Hemsi", email = "karlkhader@uma.es"},
+]
+keywords = [
+    "symbolic regression", "directed acyclic graph", "graph isomorphism",
+    "canonical form", "Weisfeiler-Leman", "search-space reduction",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Typing :: Typed",
 ]
 # Core has zero dependencies
 dependencies = []
+
+[project.urls]
+Homepage = "https://mariopasc.github.io/IsalSR/"
+Repository = "https://github.com/MarioPasc/IsalSR"
+Issues = "https://github.com/MarioPasc/IsalSR/issues"
 
 [project.optional-dependencies]
 networkx = ["networkx>=3.0"]
@@ -78,28 +117,28 @@ experiments = [
     "scikit-posthocs>=0.9",
     "seaborn>=0.12",
     "torch",
-    "critdd @ git+https://github.com/mirkobunse/critdd",
+    # critdd (critical-difference diagrams) is not on PyPI, and PyPI rejects
+    # packages whose metadata names a direct URL dependency.  Install it
+    # separately for the figure scripts:
+    #   pip install "critdd @ git+https://github.com/mirkobunse/critdd"
+    # (environment/postInstall pins the commit the paper's figures used).
 ]
 all = ["isalsr[networkx,sympy,eval,search,viz,bench,dev,experiments]"]
 
-[tool.setuptools.packages.find]
-where = ["src", "."]
-include = ["isalsr*", "experiments*"]
-
-# ------------------------------------------------------------------
-# C++ extension optional extra.
-# The .so is built by CMake; this extra only pulls in the build deps
-# needed to *rebuild* from source (not to use a pre-built wheel).
-# ------------------------------------------------------------------
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The project directory on sys.path: the tests import the research code
+# (experiments/, benchmarks/) from the checkout, since the wheel ships only
+# the library.
+pythonpath = ["."]
 addopts = "-v --tb=short"
 markers = [
     "unit: Unit tests (no external deps)",
     "integration: Integration tests (external libs)",
     "property: Property-based tests (hypothesis)",
     "slow: Long-running tests",
+    "graphviz: Needs the Graphviz 'dot' binary (a system program); skipped where it is absent",
+    "external_data: Reads inputs kept outside code/ (the docs/ tree at the repository root, or the campaign results); deselected in the Code Ocean capsule",
     "manuscript: Checks the LaTeX manuscript against the code; needs the manuscript checkout, which is not part of this repository",
 ]
 
@@ -164,3 +203,27 @@ select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM"]
 # ANN: benchmark/experiment scripts use dynamic typing for flexibility
 "benchmarks/**/*.py" = ["E402", "ANN"]
 "experiments/**/*.py" = ["E402", "ANN"]
+
+# ------------------------------------------------------------------
+# Release wheels (cibuildwheel; .github/workflows/wheels.yml).
+# ------------------------------------------------------------------
+[tool.cibuildwheel]
+build = "cp311-* cp312-* cp313-*"
+# Windows: MSVC is not a supported compiler for the C++ engine (CMakeLists.txt),
+# so Windows installs from the sdist and gets the pure-Python engine.
+skip = "*-musllinux_* *_i686 *-win*"
+test-sources = ["tests", "pyproject.toml", "README.md"]
+test-requires = ["pytest", "hypothesis", "numpy"]
+# Against the installed wheel: the C++ engine must be compiled in, and the
+# canonical-string theorem, the frozen corpus and the property tests must pass.
+test-command = [
+    "python -c \"import isalsr, sys; sys.exit(0 if isalsr.engine() == 'cpp' else 'C++ engine missing from the wheel')\"",
+    "python -m pytest tests/unit/test_canonical_theorem.py tests/unit/test_public_api.py tests/property -q -p no:cacheprovider -o addopts=",
+]
+
+[tool.cibuildwheel.linux]
+# x86-64-v2 for distribution (no AVX2 requirement); ignored on aarch64.
+environment = { SKBUILD_CMAKE_DEFINE = "ISALSR_MARCH=x86-64-v2" }
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0", SKBUILD_CMAKE_DEFINE = "ISALSR_MARCH=x86-64-v2" }

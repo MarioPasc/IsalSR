@@ -172,8 +172,8 @@ def canonical_string(dag: LabeledDAG, *, timeout: float | None = None) -> str:
         canonical_string(D1) == canonical_string(D2)  iff  D1 ~ D2
 
     WARNING: For DAGs with many internal nodes, the unpruned search can be
-    extremely slow (factorial branching). Prefer ``pruned_canonical_string``
-    for production use.
+    extremely slow (factorial branching). Prefer ``fast_canonical_string``,
+    the canonical form the paper's results use, for production use.
 
     Args:
         dag: The labeled DAG to canonicalize.
@@ -187,8 +187,6 @@ def canonical_string(dag: LabeledDAG, *, timeout: float | None = None) -> str:
     num_vars = len(dag.var_nodes())
     if dag.node_count == num_vars and dag.edge_count == 0:
         return ""
-    # Normalize CONST creation edges to x_1 before canonical computation.
-    # This eliminates redundancy from arbitrary CONST creation sources.
     # CONST normalisation is NOT applied here (removed 2026-07-29, T07).
     # It made the canonical string a function of normalize(D) rather than of D,
     # and `normalize_const_creation` is not isomorphism-equivariant, so two
@@ -206,16 +204,23 @@ def pruned_canonical_string(dag: LabeledDAG, *, timeout: float | None = None) ->
     """Compute an approximate canonical IsalSR string with 6-tuple pruning.
 
     At each V/v branch point, only candidates sharing the maximum
-    6-component structural tuple are explored (grouped by label to avoid
-    invalid cross-label pruning). This dramatically reduces the branching
-    factor while producing the correct result in the vast majority of cases.
+    6-component structural tuple are explored (grouped by label). This
+    dramatically reduces the branching factor while producing the
+    shortest-then-lexmin string in the vast majority of cases.
 
     Mathematical justification:
         The 6-tuple tau(v) = (|in_N1|, |out_N1|, ..., |out_N3|) is an
-        automorphism-invariant descriptor. Candidates with the max tuple
-        within the same label group form an equivalence class under
-        automorphism. In most cases (empirically >99.97%), label-aware
-        pruning produces the same optimal string as exhaustive search.
+        isomorphism-invariant descriptor, so pruning by it keeps the result an
+        isomorphism invariant. Equal tuples need not be automorphic, however,
+        so pruning can discard the branch that leads to the shortest-then-lexmin
+        string: optimality, not invariance, is what can be lost.
+        On the paper's benchmark DAGs (empirically >99.97%),
+        label-aware pruning produces the same optimal string as exhaustive
+        search. On random expression DAGs it differs more often -- 88 of 800
+        (k <= 5 internal nodes, 1-3 variables, SUB/DIV/POW included; release
+        audit, 2026-11-01) -- while remaining an isomorphism invariant on that
+        corpus (0 violations in 3,546 pairs checked by brute force). It is a
+        canonical form, but not always the shortest-then-lexmin one.
 
     Known limitation:
         In rare cases (0.028% empirically -- 8/28890 in our benchmarks),

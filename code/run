@@ -181,13 +181,15 @@ status=0
 # `-m "not manuscript"` deselects the two modules that check the LaTeX
 # manuscript against the code.  The manuscript is not part of this repository,
 # so those tests can only skip here; deselecting them keeps the report free of
-# skips that would otherwise read as untested behaviour.
+# skips that would otherwise read as untested behaviour.  `external_data` is the
+# same case for inputs that are part of the repository but not of the capsule:
+# the docs/ tree, which stays at the repository root, and the campaign results.
 run_suite() {
     local label="$1"; shift
     echo "== test suite (${label} engine) =="
     if env "$@" "${PYTHON}" -m pytest tests/ \
             -p no:cacheprovider \
-            -m "not manuscript" \
+            -m "not manuscript and not external_data" \
             --junitxml="${RESULTS}/pytest-${label}.xml" \
             -rfEs -q \
             > "${RESULTS}/pytest-${label}.log" 2>&1; then

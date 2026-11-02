@@ -1,0 +1,1502 @@
+[
+ {
+  "input": "pNPPCv*CNVlPVkWnNP",
+  "m": 1,
+  "canonical": "V*Vkpvl"
+ },
+ {
+  "input": "PvrNPpvgv^CvlVg",
+  "m": 2,
+  "canonical": "Vrpv^vgvgvl"
+ },
+ {
+  "input": "V^v/V/V-ve",
+  "m": 3,
+  "canonical": "V-V/V/V^Ve"
+ },
+ {
+  "input": "v+ncCWWWcWv-cC",
+  "m": 1,
+  "canonical": "V+pv-"
+ },
+ {
+  "input": "V-VkvgVanpVaNvcCvavevlV*V^NN",
+  "m": 2,
+  "canonical": "V-VaVaVaVcVeVgVkVlpppv*v^"
+ },
+ {
+  "input": "v*Wvkv*v/PCV-Pv^v-n",
+  "m": 3,
+  "canonical": "V*V*V-V/V^Vkpv-c"
+ },
+ {
+  "input": "v+CCcV-nV^VaPVkv-vkpvapvgWv-",
+  "m": 1,
+  "canonical": "V+V-V^Vapvkpv-vkpvapv-vg"
+ },
+ {
+  "input": "V/vcv^NCVkPnviNv+WviNv-vs",
+  "m": 2,
+  "canonical": "V/V^Vcnnv+v-vivivkvs"
+ },
+ {
+  "input": "CviPnv/VrVev-V+Cv*pnv^Vkv+V/",
+  "m": 3,
+  "canonical": "Vipv+v/vevkvrNV*V+V-V/V^c"
+ },
+ {
+  "input": "VkvlVgv*Pvgvkve",
+  "m": 1,
+  "canonical": "V*VeVgVgVkVkVl"
+ },
+ {
+  "input": "PvlVeV/Pv/pvrvsVac",
+  "m": 2,
+  "canonical": "V/Vlpv/venvrvsNVac"
+ },
+ {
+  "input": "WVeVanCpNNVg",
+  "m": 3,
+  "canonical": "VaVenvg"
+ },
+ {
+  "input": "v-VgV/CNCWVaWVg",
+  "m": 1,
+  "canonical": "V-V/Vgppvavg"
+ },
+ {
+  "input": "Vev+V*pvkvenvcv+npcnWv*",
+  "m": 2,
+  "canonical": "V*V+VepvevkPV+VcNNV*NNnnc"
+ },
+ {
+  "input": "PviPccnVgVav^PV-N",
+  "m": 3,
+  "canonical": "Vinv^nv-nnvavgC"
+ },
+ {
+  "input": "cPVlvkVlC",
+  "m": 1,
+  "canonical": "VkVlVl"
+ },
+ {
+  "input": "CV+nWNVkvkVgNNPcPpCvkPP",
+  "m": 2,
+  "canonical": "V+Vkppvgvkvk"
+ },
+ {
+  "input": "nCCv^viW",
+  "m": 3,
+  "canonical": "nv^viC"
+ },
+ {
+  "input": "npv-Viv-PvgcVeWnCV/Vs",
+  "m": 1,
+  "canonical": "V-V-VgVipv/vevsNNc"
+ },
+ {
+  "input": "NVlveVsc",
+  "m": 2,
+  "canonical": "VepvlvsC"
+ },
+ {
+  "input": "pVgVkWWcvsV/v/VlVaWcVkV*Venv^",
+  "m": 3,
+  "canonical": "V*V/VaVeVgVkVkVlpv/vscPV^"
+ },
+ {
+  "input": "vavkPpVicNvrvaNPVsPNCp",
+  "m": 1,
+  "canonical": "VaVkpvavivrnnvs"
+ },
+ {
+  "input": "nPnvgV+VicCWv+CCWWcn",
+  "m": 2,
+  "canonical": "V+Vgpv+viC"
+ },
+ {
+  "input": "VccVkV*",
+  "m": 3,
+  "canonical": "V*VcVk"
+ },
+ {
+  "input": "NnVrVaN",
+  "m": 1,
+  "canonical": "VaVr"
+ },
+ {
+  "input": "CnV-vipVgVaNc",
+  "m": 2,
+  "canonical": "V-VaVgpviNNpc"
+ },
+ {
+  "input": "WVlcpV+PVep",
+  "m": 3,
+  "canonical": "V+Vlpve"
+ },
+ {
+  "input": "veVsvsC",
+  "m": 1,
+  "canonical": "VeVsVs"
+ },
+ {
+  "input": "vlNWvivrv*vsN",
+  "m": 2,
+  "canonical": "V*ViVlVrVs"
+ },
+ {
+  "input": "v+PVkvaVk",
+  "m": 3,
+  "canonical": "V+Vapvkvk"
+ },
+ {
+  "input": "WveVcvsv-CVev+vlcvgv^PVcv-vsCvc",
+  "m": 1,
+  "canonical": "V+V-V-V^VcVcVeVeVgVlVsVsnnnnnvc"
+ },
+ {
+  "input": "vepNNvl",
+  "m": 2,
+  "canonical": "Vepvl"
+ },
+ {
+  "input": "v*pVaVkPVicWvcP",
+  "m": 3,
+  "canonical": "V*VaVkpvcvi"
+ },
+ {
+  "input": "VanCpVi",
+  "m": 1,
+  "canonical": "VaVi"
+ },
+ {
+  "input": "V/vrV/CPVkVlPWvavlVgV+",
+  "m": 2,
+  "canonical": "V/V/VaVlVrpvkvlpv+vg"
+ },
+ {
+  "input": "vrcv-v/pWvaWPvinpNvgvrvrVa",
+  "m": 3,
+  "canonical": "V-V/VaVrpvavgvivrvr"
+ },
+ {
+  "input": "pnNvsVepvsPvavrccnPNCvr",
+  "m": 1,
+  "canonical": "VeVsnvavrvsnnvrNNC"
+ },
+ {
+  "input": "cv-pviP",
+  "m": 2,
+  "canonical": "V-pvi"
+ },
+ {
+  "input": "VrvsCV+vgN",
+  "m": 3,
+  "canonical": "V+VgVrVs"
+ },
+ {
+  "input": "nNvgVanvrccvgV+CPV-V+WPWve",
+  "m": 1,
+  "canonical": "V+VaVgnv+v-PPVeVgVr"
+ },
+ {
+  "input": "veV-VivlcP",
+  "m": 2,
+  "canonical": "V-VeViVl"
+ },
+ {
+  "input": "nviV^Vg",
+  "m": 3,
+  "canonical": "V^Vgppvi"
+ },
+ {
+  "input": "vlVeCNveCVkWVrNcPWVsv/vaC",
+  "m": 1,
+  "canonical": "V/VaVeVeVlVrnnnvkvsNc"
+ },
+ {
+  "input": "pVgVsVlvcV/Cv*veVcVsvcWP",
+  "m": 2,
+  "canonical": "V/VcVgVlVsVspv*vcvcveC"
+ },
+ {
+  "input": "V+VivkV^cVivcNvgv/CCvsvs",
+  "m": 3,
+  "canonical": "V+V/V^VcVgViViVkVsVs"
+ },
+ {
+  "input": "nV/nv+cW",
+  "m": 1,
+  "canonical": "V/pv+"
+ },
+ {
+  "input": "CVaVsNvkPv^pCvev^V+p",
+  "m": 2,
+  "canonical": "V^VaVkVspv^veNNV+C"
+ },
+ {
+  "input": "vevecPVgV-V*V-cv*VrnV+v-v-vi",
+  "m": 3,
+  "canonical": "V*VeVepv*v+v-v-vgvrCppv-v-vi"
+ },
+ {
+  "input": "vkV*pNNN",
+  "m": 1,
+  "canonical": "V*Vk"
+ },
+ {
+  "input": "WPcV*WpPNWVkVkv+VkCva",
+  "m": 2,
+  "canonical": "pv*vkvkvkCPV+Va"
+ },
+ {
+  "input": "NVev/pCNvacv-PcnWN",
+  "m": 3,
+  "canonical": "V/pv-vaveNNCnC"
+ },
+ {
+  "input": "v/WPv/v/Va",
+  "m": 1,
+  "canonical": "V/V/V/nva"
+ },
+ {
+  "input": "NcNPCV/VcnViVgv-vkV^VrcV*vg",
+  "m": 2,
+  "canonical": "pv*v-v/v^vcvgvgvivkvrC"
+ },
+ {
+  "input": "v*WccP",
+  "m": 3,
+  "canonical": "V*"
+ },
+ {
+  "input": "PNvrVeC",
+  "m": 1,
+  "canonical": "VeVr"
+ },
+ {
+  "input": "vgViv*vsCpVrNvanppC",
+  "m": 2,
+  "canonical": "V*VgViVrVspvaNNppC"
+ },
+ {
+  "input": "v^Vlnv*",
+  "m": 3,
+  "canonical": "V^Vlnv*"
+ },
+ {
+  "input": "VgveVacv*pVk",
+  "m": 1,
+  "canonical": "V*VaVeVgVk"
+ },
+ {
+  "input": "V+vgVkV+nvkWpVg",
+  "m": 2,
+  "canonical": "V+V+VgVgVkppvk"
+ },
+ {
+  "input": "viVivsWviWvs",
+  "m": 3,
+  "canonical": "ViViViVsVs"
+ },
+ {
+  "input": "V+PVlv+",
+  "m": 1,
+  "canonical": "V+V+pvl"
+ },
+ {
+  "input": "VkCNvcpPWcveN",
+  "m": 2,
+  "canonical": "VcVkpveNNc"
+ },
+ {
+  "input": "VcCCv/vevcVivcnvgPcWp",
+  "m": 3,
+  "canonical": "V/VcVcVcVeVinnnvgPc"
+ },
+ {
+  "input": "V+WvgWVrnpvrViv/V/PV-Vrvavc",
+  "m": 1,
+  "canonical": "V+V/V/VaVcVgViVrVrpv-vr"
+ },
+ {
+  "input": "viVkpVen",
+  "m": 2,
+  "canonical": "VeViVk"
+ },
+ {
+  "input": "NvgPVev*C",
+  "m": 3,
+  "canonical": "V*Vgnve"
+ },
+ {
+  "input": "vkVaVkvlv/v^vePCPvaVgPNnp",
+  "m": 1,
+  "canonical": "V/V^VaVaVeVkVkVlppppvg"
+ },
+ {
+  "input": "WVavicCnVcv-v/CV*vgVcVrv/Vlva",
+  "m": 2,
+  "canonical": "V*VaVcVcViVlVrnnnv-v/v/vavg"
+ },
+ {
+  "input": "Vsv+PPcPNV+vcNVrVlVi",
+  "m": 3,
+  "canonical": "V+VcVsppv+Cnvivlvr"
+ },
+ {
+  "input": "v*vscVin",
+  "m": 1,
+  "canonical": "V*ViVs"
+ },
+ {
+  "input": "VcPvrvrPcviviWV*NPVrV^C",
+  "m": 2,
+  "canonical": "VcViViVrVrppv*v^vr"
+ },
+ {
+  "input": "v+V*pv+VkVsv+",
+  "m": 3,
+  "canonical": "V*V+VkVspv+v+"
+ },
+ {
+  "input": "v/veCv^Vev^V^V-vkv-vkV-",
+  "m": 1,
+  "canonical": "V-V-V-V/V^V^V^VeVeVkVk"
+ },
+ {
+  "input": "vev+PpNVeCVcnV*vg",
+  "m": 2,
+  "canonical": "V*V+VcVeVeVgpC"
+ },
+ {
+  "input": "vevaVsCViNVsv+vkVsVepV+V-VrvivgVa",
+  "m": 3,
+  "canonical": "V+VaVeViVkVspvgviNNNV+V-VaVeVrVsVs"
+ },
+ {
+  "input": "pVsV/vcViV-vePWVsvcP",
+  "m": 1,
+  "canonical": "V-V/VcVcVeViVsnvs"
+ },
+ {
+  "input": "V^NnV*NWv+V*vgviv/V/vsvscPc",
+  "m": 2,
+  "canonical": "V^nv*v+v/vgvivsvsPPV*V/"
+ },
+ {
+  "input": "VrVsVrvaV^V*vkcVaNv/PV/cv-NVrVa",
+  "m": 3,
+  "canonical": "V*V-V/V^VaVaVkVrVrVspppppv/nvavr"
+ },
+ {
+  "input": "ppv+Vkcp",
+  "m": 1,
+  "canonical": "V+Vk"
+ },
+ {
+  "input": "pNVcvsCnpvavcV/n",
+  "m": 2,
+  "canonical": "pv/vavcvcvs"
+ },
+ {
+  "input": "nPPc",
+  "m": 3,
+  "canonical": ""
+ },
+ {
+  "input": "WPv^CVkWvrVlWV/cvsvcp",
+  "m": 1,
+  "canonical": "V/V^VcVkVlVrVs"
+ },
+ {
+  "input": "Vlv/ViVgCv-NWCV-pvlV-v/",
+  "m": 2,
+  "canonical": "V-V/VgViVlpv/vlpv-v-"
+ },
+ {
+  "input": "pV*vcnnV/vgnVcVc",
+  "m": 3,
+  "canonical": "V*V/VcVcVgpvc"
+ },
+ {
+  "input": "VaCVicVlNvavgN",
+  "m": 1,
+  "canonical": "VaVaVgViVl"
+ },
+ {
+  "input": "PvkvepvrvrncVs",
+  "m": 2,
+  "canonical": "VeVkpvrvrvs"
+ },
+ {
+  "input": "vsnv-V/vlPV/nCccWV*",
+  "m": 3,
+  "canonical": "V/Vspv*v/vlNV-nC"
+ },
+ {
+  "input": "VeCcV^VaWVgPV/pCV^",
+  "m": 1,
+  "canonical": "V^VaVeVgnnv/v^"
+ },
+ {
+  "input": "VsCnCNv*nV^N",
+  "m": 2,
+  "canonical": "Vsnv*v^"
+ },
+ {
+  "input": "v-V*ViWv+cnCVsnViPN",
+  "m": 3,
+  "canonical": "V*V+V-ViViVs"
+ },
+ {
+  "input": "npV*W",
+  "m": 1,
+  "canonical": "V*"
+ },
+ {
+  "input": "nv^vgCPPV/VavcVcv^viV*cVcVsCn",
+  "m": 2,
+  "canonical": "pv^v^vcvgviCnnv*v/vavcvcvs"
+ },
+ {
+  "input": "vrvlCVivsviVsvgnCVsvlNVsNCc",
+  "m": 3,
+  "canonical": "VgViViVlVrVsVsVsnvsPPPVlnc"
+ },
+ {
+  "input": "VlV-VlPVaCnvsCvs",
+  "m": 1,
+  "canonical": "V-VlVlnvsvsPPVaC"
+ },
+ {
+  "input": "cV+pVeV+",
+  "m": 2,
+  "canonical": "V+V+Ve"
+ },
+ {
+  "input": "vcPWcnPPPV-",
+  "m": 3,
+  "canonical": "V-VcpC"
+ },
+ {
+  "input": "VkVsCvaVgnPnVeWpCviVlPWv/",
+  "m": 1,
+  "canonical": "VaVgVkVsppv/vipvevlPPPPc"
+ },
+ {
+  "input": "V^VlNV-vgcv/",
+  "m": 2,
+  "canonical": "V/V^VgVlnv-"
+ },
+ {
+  "input": "pWvaVgVlv/V*nvkn",
+  "m": 3,
+  "canonical": "V*VgVlpv/vaPVk"
+ },
+ {
+  "input": "cvcV^cv-pvcV*cNVi",
+  "m": 1,
+  "canonical": "V*V-V^VcpviNVc"
+ },
+ {
+  "input": "nvlV*vkcpvrvgWv-Pcv-cNv*",
+  "m": 2,
+  "canonical": "V*pvkvlcpv*v-v-vgvrPPc"
+ },
+ {
+  "input": "V+vrPVrV/nVcvsnPVkVsVlnPCp",
+  "m": 3,
+  "canonical": "V+Vrpv/vcvrpvkvlvsNVs"
+ },
+ {
+  "input": "ncvaNv-CcnWPcNV-veW",
+  "m": 1,
+  "canonical": "V-Vapvepv-"
+ },
+ {
+  "input": "vrVrVkVlncnvcv^C",
+  "m": 2,
+  "canonical": "VkVlVrVrppv^vc"
+ },
+ {
+  "input": "ViV^v-pNWV*v+cNcV/vg",
+  "m": 3,
+  "canonical": "V-V^Vipv*v+vgPV/ppcPPPC"
+ },
+ {
+  "input": "VkcVlV^NvkPvkVsVs",
+  "m": 1,
+  "canonical": "V^VkVkVkVlppvsvs"
+ },
+ {
+  "input": "VkvaV/v*v^vsnCVavrpnpVaVivcv^",
+  "m": 2,
+  "canonical": "V*V/V^VaVaVaViVkVsnvrPPPPPV^Vc"
+ },
+ {
+  "input": "v*WVsPvrv*",
+  "m": 3,
+  "canonical": "V*V*VrVs"
+ },
+ {
+  "input": "VaCV+V^v^vaVc",
+  "m": 1,
+  "canonical": "V+V^V^VaVaVc"
+ },
+ {
+  "input": "Nvgnv+nnvkv+C",
+  "m": 2,
+  "canonical": "Vgpv+vkpv+"
+ },
+ {
+  "input": "V*nPv/v-cnVivkvicV/Cv-VkvrV+",
+  "m": 3,
+  "canonical": "V*pv+v/vivkNV-V/Cppv-vivkvrPPPPPPc"
+ },
+ {
+  "input": "PWV+vkCWnVg",
+  "m": 1,
+  "canonical": "V+VgVk"
+ },
+ {
+  "input": "pvsVanv-v*cvlveWpVev+v^Wpc",
+  "m": 2,
+  "canonical": "VaVepv+v^vsnv*v-vevlc"
+ },
+ {
+  "input": "CVkppP",
+  "m": 3,
+  "canonical": "Vk"
+ },
+ {
+  "input": "Vev/npvanV/cnvgVgV*",
+  "m": 1,
+  "canonical": "V*V/V/VaVeVgppvg"
+ },
+ {
+  "input": "V*VrpCCnViPCvaV^WvcV-VsVi",
+  "m": 2,
+  "canonical": "V*VaVcViVrpv-v^vivsC"
+ },
+ {
+  "input": "pveNcVrv^NV*Vgv+nV^",
+  "m": 3,
+  "canonical": "pv+v^vepvrnv*v^vgNnnnnc"
+ },
+ {
+  "input": "CWv/CvaviVrNnCVcWvkv-Nv+pW",
+  "m": 1,
+  "canonical": "V/VaViVrnv+v-vcvk"
+ },
+ {
+  "input": "vgVevlnnWPnvaW",
+  "m": 2,
+  "canonical": "VeVgVlnnva"
+ },
+ {
+  "input": "V^V^pnncP",
+  "m": 3,
+  "canonical": "V^V^"
+ },
+ {
+  "input": "V/ppVs",
+  "m": 1,
+  "canonical": "V/Vs"
+ },
+ {
+  "input": "NPWCV/V/VaV-v*NNp",
+  "m": 2,
+  "canonical": "V*V-V/V/Va"
+ },
+ {
+  "input": "v^vlCvlV^v+pViVkvsWVlWvepVkVcvi",
+  "m": 3,
+  "canonical": "V+V^V^VcViVkVkVlVlVlpvevspvi"
+ },
+ {
+  "input": "V+WCv^",
+  "m": 1,
+  "canonical": "V+V^"
+ },
+ {
+  "input": "v+Vsvcv/VcV/WvlpV-Cnve",
+  "m": 2,
+  "canonical": "V+V-V/V/VcVcVeVlVspC"
+ },
+ {
+  "input": "Wvcv+pnv^vi",
+  "m": 3,
+  "canonical": "V+V^VcVi"
+ },
+ {
+  "input": "nVrVlvkvlVe",
+  "m": 1,
+  "canonical": "VeVkVlVlVr"
+ },
+ {
+  "input": "nvaVcVsvrcVaCv+CvrV/cN",
+  "m": 2,
+  "canonical": "V/VaVcVspv+vavrvrc"
+ },
+ {
+  "input": "vaWVaV^nv-VlvsNcv^VrCNpv-VaVe",
+  "m": 3,
+  "canonical": "V^VaVaVlnvrnv-vavePPPV-V^VspC"
+ },
+ {
+  "input": "vcV/NVs",
+  "m": 1,
+  "canonical": "V/Vcpvs"
+ },
+ {
+  "input": "v^vrV/WVencv^nVc",
+  "m": 2,
+  "canonical": "V/V^VcVeVrnnv^"
+ },
+ {
+  "input": "V+Vlv-Nv+NpVgvev*",
+  "m": 3,
+  "canonical": "V+V+V-Vlpv*veNVg"
+ },
+ {
+  "input": "vkcvgVicvcPWV-n",
+  "m": 1,
+  "canonical": "VcVgViVknv-"
+ },
+ {
+  "input": "VacNvaVcPViPpvcC",
+  "m": 2,
+  "canonical": "VaVapvcCpvcpvi"
+ },
+ {
+  "input": "VrpCvlVcViV-PnV*",
+  "m": 3,
+  "canonical": "V-VcViVrpvlCnv*"
+ },
+ {
+  "input": "VaNcWvgCv+",
+  "m": 1,
+  "canonical": "V+VaVg"
+ },
+ {
+  "input": "NVaVlvlCNVcviCCpPnV+va",
+  "m": 2,
+  "canonical": "VaViVlpv+vavlcnvcc"
+ },
+ {
+  "input": "PViWvspPWPCv+VsV/vlnNN",
+  "m": 3,
+  "canonical": "Vspvinv+vlNV/VsC"
+ },
+ {
+  "input": "vkVaWVcv*vcViVlV-Nv^vgn",
+  "m": 1,
+  "canonical": "V*V-V^VaVcVcVgViVkVl"
+ },
+ {
+  "input": "vrpNp",
+  "m": 2,
+  "canonical": "Vr"
+ },
+ {
+  "input": "veVipVsVeV*npv^",
+  "m": 3,
+  "canonical": "V*VeVeViVspv^"
+ },
+ {
+  "input": "cpv^Pv*vacviVeVsCpNPVeNvk",
+  "m": 1,
+  "canonical": "V*V^VaVippvevevsPPVk"
+ },
+ {
+  "input": "PnV-VeWncCNv/Nv*v+CWvc",
+  "m": 2,
+  "canonical": "pv-venv*v+v/vc"
+ },
+ {
+  "input": "PvlPvlPv+NpveVkNViPvsN",
+  "m": 3,
+  "canonical": "V+VlVlpvevspvknvi"
+ },
+ {
+  "input": "nv^venv-pVaV/P",
+  "m": 1,
+  "canonical": "V/V^VaVenv-"
+ },
+ {
+  "input": "ppPvlVcPvkV+nvicv*WPWPviP",
+  "m": 2,
+  "canonical": "VkVlpvcpv*vivipv+Nnnc"
+ },
+ {
+  "input": "cV+cCv/P",
+  "m": 3,
+  "canonical": "V+V/"
+ },
+ {
+  "input": "WVsVspnv^VaV*v-VcWVgv/vr",
+  "m": 1,
+  "canonical": "V*V-V/V^VaVcVgVrVsVs"
+ },
+ {
+  "input": "VcvkNveV*Vlv*v*v/CViPpP",
+  "m": 2,
+  "canonical": "V*V*V/VcVeVknv*vivl"
+ },
+ {
+  "input": "VcPpnVlPviWVcVkN",
+  "m": 3,
+  "canonical": "VcVipvlpvcvk"
+ },
+ {
+  "input": "CvcvgC",
+  "m": 1,
+  "canonical": "VcVg"
+ },
+ {
+  "input": "veviCvcV+V*CCvlV-VcvknV^V-Vg",
+  "m": 2,
+  "canonical": "V*V+V-V-V^VcVcVeVgViVkVl"
+ },
+ {
+  "input": "v-V/nv+nNVgVsNViV+WVrVaVc",
+  "m": 3,
+  "canonical": "V-V/nv+vgvsnv+vavcvivr"
+ },
+ {
+  "input": "pVaV+Pv+VePCV+V*V+c",
+  "m": 1,
+  "canonical": "V+V+Vapv*v+v+NVe"
+ },
+ {
+  "input": "CVsvlNvev+VaWVlvl",
+  "m": 2,
+  "canonical": "V+VeVlVlVsnnvavl"
+ },
+ {
+  "input": "v^v*Vcv-CpvsnVlnCPv*VccVa",
+  "m": 3,
+  "canonical": "V*V*V-V^VcVlVsnvavcPC"
+ },
+ {
+  "input": "WvaPVsP",
+  "m": 1,
+  "canonical": "Vapvs"
+ },
+ {
+  "input": "WvcnNvav-",
+  "m": 2,
+  "canonical": "Vcnv-va"
+ },
+ {
+  "input": "vsVlpP",
+  "m": 3,
+  "canonical": "VlVs"
+ },
+ {
+  "input": "vcV^VgPNNcv-V^",
+  "m": 1,
+  "canonical": "V-V^VcVgnv^"
+ },
+ {
+  "input": "V-WnV/V+PWV/VepNVgppv-",
+  "m": 2,
+  "canonical": "V+V-V-V/pv/venvg"
+ },
+ {
+  "input": "nVkVlvlvkvav^NVkNv-vkVsVkvaPC",
+  "m": 3,
+  "canonical": "VkVlnvknvkvsPPV-V^VaVaVkVkVlpc"
+ },
+ {
+  "input": "v^CVcCVlV/V-VlVe",
+  "m": 1,
+  "canonical": "V-V/V^VcVeVlVl"
+ },
+ {
+  "input": "CPv+V-VrvsVrW",
+  "m": 2,
+  "canonical": "V+Vspv-vrvr"
+ },
+ {
+  "input": "pVgv*NpVicvln",
+  "m": 3,
+  "canonical": "Vgpv*pvlpviNnnc"
+ },
+ {
+  "input": "CVevcv^pVaWPvicVrcCWNVlv-N",
+  "m": 1,
+  "canonical": "V^VaVcVenv-vivrnvl"
+ },
+ {
+  "input": "ViCv/NV^v-pWWviv-viv-nWv/v/",
+  "m": 2,
+  "canonical": "V-V/Vipv-v-viviPV/V/ppv^"
+ },
+ {
+  "input": "VlnCv*V/viv*",
+  "m": 3,
+  "canonical": "V/Vlnv*v*vi"
+ },
+ {
+  "input": "V^VkvenCCvipv*pV+WppV*pVeW",
+  "m": 1,
+  "canonical": "V*V*V+V^VeVeVknnvi"
+ },
+ {
+  "input": "CVlvkViV*",
+  "m": 2,
+  "canonical": "V*ViVkVl"
+ },
+ {
+  "input": "pV+cCviCnnVc",
+  "m": 3,
+  "canonical": "V+Vcpvic"
+ },
+ {
+  "input": "vccCv*Wv*nWv+v-C",
+  "m": 1,
+  "canonical": "V*V*Vcppv+v-"
+ },
+ {
+  "input": "v-ncVa",
+  "m": 2,
+  "canonical": "V-Va"
+ },
+ {
+  "input": "V*Vavrv-V^vsv*nnVlVkNcVeVe",
+  "m": 3,
+  "canonical": "V*V*V-V^VaVkVlVrVsnnnnveveNC"
+ },
+ {
+  "input": "NNpVrvlVsVrv^CvipPv^v-c",
+  "m": 1,
+  "canonical": "V^ViVlVrVrVsnnv-v^"
+ },
+ {
+  "input": "NcnV-Wv^VavcVlViWppve",
+  "m": 2,
+  "canonical": "pv-v^vavcvivlCPVe"
+ },
+ {
+  "input": "VeVepWPpncVen",
+  "m": 3,
+  "canonical": "VeVepve"
+ },
+ {
+  "input": "VaPvsvaPPPvcWVcV^VgPcvgVl",
+  "m": 1,
+  "canonical": "V^VaVaVcVcVgVgVsppvl"
+ },
+ {
+  "input": "PViViVe",
+  "m": 2,
+  "canonical": "pvevivi"
+ },
+ {
+  "input": "NVlPvevcVecviNV^pCWvc",
+  "m": 3,
+  "canonical": "VcVeVeVipvcpvlNV^nnC"
+ },
+ {
+  "input": "cnCvl",
+  "m": 1,
+  "canonical": "Vl"
+ },
+ {
+  "input": "CvrCCWVlncV^Vkva",
+  "m": 2,
+  "canonical": "V^VkVlVrnnva"
+ },
+ {
+  "input": "VlVaPCvicVaNnvaCNV-NnveP",
+  "m": 3,
+  "canonical": "V-VaViVlpvacNNVancNVe"
+ },
+ {
+  "input": "NviNvecVgvcVkvknvsVavgnvsVc",
+  "m": 1,
+  "canonical": "VcVeViVknvgvsnnvsnnvavcvgvk"
+ },
+ {
+  "input": "Wv+viCv*VkvcPpcWNWNV-V+",
+  "m": 2,
+  "canonical": "V*V+VcViVknnnv+v-"
+ },
+ {
+  "input": "v*NNcWWvkC",
+  "m": 3,
+  "canonical": "V*VkppC"
+ },
+ {
+  "input": "pnVcv-VavcvrvsVkv-nVa",
+  "m": 1,
+  "canonical": "V-V-VaVaVcVcVkVrVs"
+ },
+ {
+  "input": "NvsPNVcvgV-VcpCVaP",
+  "m": 2,
+  "canonical": "VgVspv-vavcvc"
+ },
+ {
+  "input": "Pv/vaV+cNcn",
+  "m": 3,
+  "canonical": "V+V/VapCPppC"
+ },
+ {
+  "input": "vsnVlPvlNv+pnnv*vePVevkN",
+  "m": 1,
+  "canonical": "VlVsnv+vlnnv*vevkPPVe"
+ },
+ {
+  "input": "V^v+Vrcv*cccp",
+  "m": 2,
+  "canonical": "V*V+V^Vr"
+ },
+ {
+  "input": "vlvgv^c",
+  "m": 3,
+  "canonical": "V^VgVl"
+ },
+ {
+  "input": "V^Cpvcvkv/nV*vkpV^pvc",
+  "m": 1,
+  "canonical": "V*V^V^pvcNV/VcVkppvk"
+ },
+ {
+  "input": "vcnV^vevaWVkPV-vgv/N",
+  "m": 2,
+  "canonical": "V^VcVkpv-ppv/vavevg"
+ },
+ {
+  "input": "V+cNCPWV*nVivsWV^v+va",
+  "m": 3,
+  "canonical": "V*V+V^Vipppv+vavs"
+ },
+ {
+  "input": "vcpViVlNC",
+  "m": 1,
+  "canonical": "VcViVlPnc"
+ },
+ {
+  "input": "CCV^Vlv^NpVrvsVav*Wv-V+Vi",
+  "m": 2,
+  "canonical": "V^V^Vlpv*v-vspv+vavivr"
+ },
+ {
+  "input": "pNPvacv/V-PNvivaV*nPv-",
+  "m": 3,
+  "canonical": "V*V-pv/vavavicPPV-"
+ },
+ {
+  "input": "CV*NnCVeva",
+  "m": 1,
+  "canonical": "V*pvave"
+ },
+ {
+  "input": "cv^VrvlncWV^Vavk",
+  "m": 2,
+  "canonical": "V^V^VaVlVrnnvk"
+ },
+ {
+  "input": "WnV+NcPNWv*Wv-v+V/vrVkVcv*v^",
+  "m": 3,
+  "canonical": "V+nv/vcvkPPV*V*V+V-V^VrC"
+ },
+ {
+  "input": "Nv+vgV/vrcWvlv-cv-",
+  "m": 1,
+  "canonical": "V+V-V-V/VgVlVr"
+ },
+ {
+  "input": "v^v/CViNV/ccNWCCCvkPvc",
+  "m": 2,
+  "canonical": "V/V^VcViVknnv/"
+ },
+ {
+  "input": "PVcVePCcVsvgv^vinVrn",
+  "m": 3,
+  "canonical": "V^VgVipvcvepvrvsc"
+ },
+ {
+  "input": "PVlcVaV/VicV^cP",
+  "m": 1,
+  "canonical": "V/V^VaViVl"
+ },
+ {
+  "input": "v-Cv+v+pcWvaCviVanCPVcnVlVl",
+  "m": 2,
+  "canonical": "V+V+V-VaVipvacnvcvlvlNpc"
+ },
+ {
+  "input": "V*vlWViV*V*cpVrP",
+  "m": 3,
+  "canonical": "V*V*V*ViVlVr"
+ },
+ {
+  "input": "v+v/cVcveW",
+  "m": 1,
+  "canonical": "V+V/VcVe"
+ },
+ {
+  "input": "vsVavgV-VeWN",
+  "m": 2,
+  "canonical": "V-VaVeVgVs"
+ },
+ {
+  "input": "v/vlvlnvgvev/nvinWv*",
+  "m": 3,
+  "canonical": "V/VlVlnnv/vevgnnnvinv*"
+ },
+ {
+  "input": "V^VgVivkVkvsPpCVcVg",
+  "m": 1,
+  "canonical": "V^VgViVkVkVspvcvg"
+ },
+ {
+  "input": "V-V*pV/V*VcVkvkPV/VspvsPpV*",
+  "m": 2,
+  "canonical": "V*V*V-V/VcVkpv*vknv/vsppppvs"
+ },
+ {
+  "input": "pv*V*Vgv^nV/CWviVrN",
+  "m": 3,
+  "canonical": "V*V/VgVrpv*v^nviC"
+ },
+ {
+  "input": "PV^cnVsWv/nWVc",
+  "m": 1,
+  "canonical": "V^VcVspv/"
+ },
+ {
+  "input": "vsCWv^VkvlV-VkV/PviCv+",
+  "m": 2,
+  "canonical": "V+V-V/V^ViVkVkVlVspc"
+ },
+ {
+  "input": "CV-PvcvsWpCV*vlCv*cVkWVsV*",
+  "m": 3,
+  "canonical": "V-VcVspv*v*v*vkvlvs"
+ },
+ {
+  "input": "pNPWvrveNWV-Vi",
+  "m": 1,
+  "canonical": "VeVrpv-vi"
+ },
+ {
+  "input": "WviV^Wvl",
+  "m": 2,
+  "canonical": "V^ViVl"
+ },
+ {
+  "input": "nv-VgV^nPv+Vin",
+  "m": 3,
+  "canonical": "V^Vgpvipv-nv+"
+ },
+ {
+  "input": "VrV-Vanvlv+nVkCNViWPWv*n",
+  "m": 1,
+  "canonical": "V+V-VaVkVrpv*ppvlpviPPnnc"
+ },
+ {
+  "input": "PNnVsC",
+  "m": 2,
+  "canonical": "VspC"
+ },
+ {
+  "input": "VcpV/n",
+  "m": 3,
+  "canonical": "V/Vc"
+ },
+ {
+  "input": "VeviWVsVcVk",
+  "m": 1,
+  "canonical": "VcVeViVkVs"
+ },
+ {
+  "input": "cV-vavrWCWCV*VrWveVsVc",
+  "m": 2,
+  "canonical": "V*V-VaVcVeVrVrVs"
+ },
+ {
+  "input": "VsV-Wvgv/pVavk",
+  "m": 3,
+  "canonical": "V-V/VaVgVspvk"
+ },
+ {
+  "input": "NVgv-cpVeV-pV/Pv^v+Vev^N",
+  "m": 1,
+  "canonical": "V-V-V/VeVgpv+v^v^NVe"
+ },
+ {
+  "input": "cnCncViPvaVkv-vsvkV-",
+  "m": 2,
+  "canonical": "V-VaViVkVspv-vkC"
+ },
+ {
+  "input": "v+WWV+V*VsViVivsP",
+  "m": 3,
+  "canonical": "V*V+V+ViViVsVs"
+ },
+ {
+  "input": "VgWcVrNviCveVspvicNn",
+  "m": 1,
+  "canonical": "VeVgViVrnvsPPViC"
+ },
+ {
+  "input": "cnVrPNncCV/nc",
+  "m": 2,
+  "canonical": "V/Vr"
+ },
+ {
+  "input": "v-nVsV^",
+  "m": 3,
+  "canonical": "V-V^Vs"
+ },
+ {
+  "input": "ViWcviWp",
+  "m": 1,
+  "canonical": "ViVi"
+ },
+ {
+  "input": "VenV+V+WccvsPCv+v*",
+  "m": 2,
+  "canonical": "V+V+Venv*v+vsPC"
+ },
+ {
+  "input": "VcWWvkWvcnVkVs",
+  "m": 3,
+  "canonical": "VcVcVkVkVs"
+ },
+ {
+  "input": "v-VlVav+VgpcNV^vlV*npNviN",
+  "m": 1,
+  "canonical": "V+V-VaVgVlppvivlppv*v^"
+ },
+ {
+  "input": "WCV/CvsVeVevinCVcV/CVkv*vkVa",
+  "m": 2,
+  "canonical": "V/V/VaVcVeVeViVkVsnnnv*vk"
+ },
+ {
+  "input": "NV*VgnVgcPV^PV*vipV*vlcnW",
+  "m": 3,
+  "canonical": "V^pv*v*pv*vgvgvipvlPPPc"
+ },
+ {
+  "input": "VcpvlvgvlvlV+VcPcV-pVeVlcVi",
+  "m": 1,
+  "canonical": "V+VcVcpvlnv-vevivlNVgVlVlC"
+ },
+ {
+  "input": "V^VlNVlv^VeV^VaVs",
+  "m": 2,
+  "canonical": "V^V^Vlnv^vavevlvs"
+ },
+ {
+  "input": "v-NVsvsPv-vrcPvivrVr",
+  "m": 3,
+  "canonical": "V-V-ViVrVrVspppvrpvs"
+ },
+ {
+  "input": "V*V-PncNNcCcVcNVlPWVln",
+  "m": 1,
+  "canonical": "V*V-nvcvlPcPVl"
+ },
+ {
+  "input": "PWWVcvlpnV^Cv+",
+  "m": 2,
+  "canonical": "V+Vlpv^vcc"
+ },
+ {
+  "input": "cV^vlnV^nvcWvipViV/",
+  "m": 3,
+  "canonical": "V/V^V^ViVlnnnvcvi"
+ },
+ {
+  "input": "Pnv^vcVc",
+  "m": 1,
+  "canonical": "V^VcVc"
+ },
+ {
+  "input": "NWCPvrWv+va",
+  "m": 2,
+  "canonical": "V+VaVrpc"
+ },
+ {
+  "input": "Ppv^vlvg",
+  "m": 3,
+  "canonical": "pv^vgvl"
+ },
+ {
+  "input": "v/nVkvaviccV^Cv-",
+  "m": 1,
+  "canonical": "V/V^Vkpv-vavi"
+ },
+ {
+  "input": "vcvrveV-cNCv/vlvl",
+  "m": 2,
+  "canonical": "V-V/VcVeVlVlVr"
+ },
+ {
+  "input": "vannVicpnWV-V*V-PvlC",
+  "m": 3,
+  "canonical": "V*V-V-VaVippvlcPC"
+ },
+ {
+  "input": "WnpV+NcV^Wp",
+  "m": 1,
+  "canonical": "V+pv^"
+ },
+ {
+  "input": "v-vsVlccnV+",
+  "m": 2,
+  "canonical": "V+V-VlVs"
+ },
+ {
+  "input": "CPVknV^Cv/V*NvspVcVcncc",
+  "m": 3,
+  "canonical": "pv*v^vkpv/vsPVcVccPPPC"
+ },
+ {
+  "input": "vsveWVeVrVscvcWv/V+",
+  "m": 1,
+  "canonical": "V+V/VcVeVeVrVsVs"
+ },
+ {
+  "input": "nviVgVkVev-CV*Nvl",
+  "m": 2,
+  "canonical": "V*VeVgVkpv-vivlC"
+ },
+ {
+  "input": "viveNV*cV^cvlcVaV-vlnv^cV-NC",
+  "m": 3,
+  "canonical": "VeViVlVlnnv^nnnv*v-v-v^vaNNC"
+ },
+ {
+  "input": "vsNCvlWWV/Vcv/nNvcVg",
+  "m": 1,
+  "canonical": "V/VlVspvcNV/VcNVg"
+ },
+ {
+  "input": "vgV/V*v/pPWCvln",
+  "m": 2,
+  "canonical": "V*V/V/Vgpvl"
+ },
+ {
+  "input": "vgPvlPVkv^VrV/npPVk",
+  "m": 3,
+  "canonical": "V^VgVlppv/vkvrppvk"
+ },
+ {
+  "input": "v/v-V*VsV^V-Pv-Vk",
+  "m": 1,
+  "canonical": "V*V-V-V-V/V^Vsnnnvk"
+ },
+ {
+  "input": "VcpcviV/v/vrV-Wnv/",
+  "m": 2,
+  "canonical": "V-V/Vcpv/vivrcnv/"
+ },
+ {
+  "input": "VgvgWvcvlvrn",
+  "m": 3,
+  "canonical": "VcVgVgVlVr"
+ },
+ {
+  "input": "V+WCVsv-cV^VeviPPNV-NnVc",
+  "m": 1,
+  "canonical": "V+V-V^VeViVspv-nvc"
+ },
+ {
+  "input": "PV/Nvrv*vgv-VeVaCWCcvgV/Vkv+",
+  "m": 2,
+  "canonical": "V*V+V-VgVgVrpv/nv/vavevkc"
+ },
+ {
+  "input": "VlVrVaCv+vacNNvk",
+  "m": 3,
+  "canonical": "V+VaVaVkVlVr"
+ },
+ {
+  "input": "V-v^PVav^VcPvenVlVlcV-",
+  "m": 1,
+  "canonical": "V-V^V^Vepvavcpv-vlvlNC"
+ },
+ {
+  "input": "PV^v-WcVrvivrvlvgvccvg",
+  "m": 2,
+  "canonical": "V-VcVgVgViVlVrpv^vrC"
+ },
+ {
+  "input": "VrccVac",
+  "m": 3,
+  "canonical": "VaVr"
+ },
+ {
+  "input": "CnViWvspPNcCvaV/vl",
+  "m": 1,
+  "canonical": "V/ViVsppvavl"
+ },
+ {
+  "input": "cVcNNPPcv-cWnVc",
+  "m": 2,
+  "canonical": "V-VcVc"
+ },
+ {
+  "input": "PccVsvsCvgNV+CnPVk",
+  "m": 3,
+  "canonical": "VgVspvkvsCnv+"
+ },
+ {
+  "input": "cVeWc",
+  "m": 1,
+  "canonical": "Ve"
+ },
+ {
+  "input": "v/pv-vkPcV/vs",
+  "m": 2,
+  "canonical": "V/pv-vkvsPV/"
+ },
+ {
+  "input": "V+V-V/CWV+V+v/VkcnWVsWnCn",
+  "m": 3,
+  "canonical": "V+V+V+V-V/V/VkVs"
+ },
+ {
+  "input": "VsvaPv+V-vlv*va",
+  "m": 1,
+  "canonical": "V*V+VaVaVlVsnv-"
+ },
+ {
+  "input": "VaviV-Viv-PWVevrvavgnV/vcPNVavc",
+  "m": 2,
+  "canonical": "V-V-VaVaVgViViVrpv/vaveNNNNVcVc"
+ },
+ {
+  "input": "NvgV*VlVsvkv+WvsCWV-vivrVlPv^",
+  "m": 3,
+  "canonical": "V+V^VgViVkVrVsppv*v-vlvlvsc"
+ },
+ {
+  "input": "veVepNv-vlviWpNWP",
+  "m": 1,
+  "canonical": "VeVepv-vivl"
+ },
+ {
+  "input": "NV*PcViCp",
+  "m": 2,
+  "canonical": "Vipv*"
+ },
+ {
+  "input": "Cv*CvkV^VkvlCPv-ncv*PVl",
+  "m": 3,
+  "canonical": "V*V-V^VkVkVlppvlppv*Pc"
+ },
+ {
+  "input": "vrV-VrVgvrV^VsnVeV+Cnvs",
+  "m": 1,
+  "canonical": "V+V-V^VeVgVrVrVrVspppvs"
+ },
+ {
+  "input": "v^v-V/VscWnNVscvspvsV*va",
+  "m": 2,
+  "canonical": "V-V/V^VaVsVsnv*vsvs"
+ },
+ {
+  "input": "vcPNV-vavrnViCVkvaVapVaWv^P",
+  "m": 3,
+  "canonical": "V-VaVaVaVcViVkVrnvannnv^"
+ },
+ {
+  "input": "V*WVgNv-",
+  "m": 1,
+  "canonical": "V*V-Vg"
+ },
+ {
+  "input": "NPPvrVsvrPVcVkveVcppVg",
+  "m": 2,
+  "canonical": "VeVrVrpvsNVcVcVgVk"
+ },
+ {
+  "input": "vaviv*v^v*Cv/CcWv+",
+  "m": 3,
+  "canonical": "V*V*V+V/V^VaVi"
+ },
+ {
+  "input": "v^VlVrviv/CVcVkNPPvcv-vav^v-",
+  "m": 1,
+  "canonical": "V-V-V/V^V^VaVcVcViVkVlVr"
+ },
+ {
+  "input": "Viv*V-v+VcnnVlWVlV/vgv+V*n",
+  "m": 2,
+  "canonical": "V*V*V+V-V/VcViVlVlppppv+vg"
+ },
+ {
+  "input": "VevlvrPV+cV-PCVaPveVePp",
+  "m": 3,
+  "canonical": "VeVeVlVrpv+v-Cpvacpve"
+ },
+ {
+  "input": "pcPv*",
+  "m": 1,
+  "canonical": "V*"
+ },
+ {
+  "input": "CV*Cvsv/VkWvgVkvaV/V*Vrvr",
+  "m": 2,
+  "canonical": "V*V*V/V/VaVgVkVkVrVrVs"
+ },
+ {
+  "input": "V/ncPN",
+  "m": 3,
+  "canonical": "V/"
+ },
+ {
+  "input": "V-Vivkv+Cvrv-vkvsVa",
+  "m": 1,
+  "canonical": "V+V-V-VaViVkVkVrVs"
+ },
+ {
+  "input": "WvspNpvs",
+  "m": 2,
+  "canonical": "Vsnvs"
+ },
+ {
+  "input": "CNvgnpWWpVcvsv+Cvi",
+  "m": 3,
+  "canonical": "Vgpv+vivspvcNNnnC"
+ },
+ {
+  "input": "cVav+Wv+WvsvipP",
+  "m": 1,
+  "canonical": "V+V+VaViVs"
+ },
+ {
+  "input": "nvkvrVcvgv^pPvacNV-p",
+  "m": 2,
+  "canonical": "V-Vcpv^vgvkvrNVannC"
+ },
+ {
+  "input": "Vrv+Pnv-Vgv*VkCv+vev+C",
+  "m": 3,
+  "canonical": "V+Vrpvgvkppv*v+v+v-vePPPC"
+ },
+ {
+  "input": "Pcv/viCVeViV*v+Nv/WVs",
+  "m": 1,
+  "canonical": "V*V+V/V/VeViVippvs"
+ },
+ {
+  "input": "PvsnV-V^viV/vsPVe",
+  "m": 2,
+  "canonical": "Vspv-v/v^pvivsnnve"
+ },
+ {
+  "input": "ViVsCWpcv+VeWVrpn",
+  "m": 3,
+  "canonical": "VeViVrVspv+c"
+ }
+]

@@ -101,13 +101,12 @@ def test_differential_3000_dags() -> None:
     from each, and compares fast_canonical_string with both backends.
     Zero mismatches are required.
 
-    Note: a small number of randomly generated strings produce degenerate DAGs
-    for which the Python oracle also raises RuntimeError ("no valid operation
-    found") — a pre-existing issue in the Python algorithm that is outside the
-    scope of this implementation.  For these cases the C++ backend raises the
-    same RuntimeError, confirming consistent behaviour.  They are counted in
-    ``n_both_fail`` and are not treated as mismatches.  All other 3,000 seeds
-    must match exactly.
+    Every DAG built by S2D satisfies the reachability precondition, so neither
+    engine may raise on any of the 3,000.  An earlier version of this test
+    skipped DAGs on which *both* engines raised RuntimeError, as a "consistent
+    pre-existing limitation"; none occurs today, and skipping them meant that an
+    engine change making every call raise would have passed.  A RuntimeError
+    on either side is therefore a failure.
     """
     mismatches: list[tuple[int, int, str, str, str]] = []
     n_both_fail = 0
@@ -137,32 +136,21 @@ def test_differential_3000_dags() -> None:
             cpp_result = ""
 
         if not py_ok and not cpp_ok:
-            # Both fail with RuntimeError: consistent pre-existing limitation
             n_both_fail += 1
-            continue
 
-        # One failed and the other did not, OR both succeeded but differ
-        if py_ok != cpp_ok or cpp_result != py_result:
+        # Either engine failed, or both succeeded but differ
+        if not (py_ok and cpp_ok) or cpp_result != py_result:
             mismatches.append((seed, n_vars, s, py_result, cpp_result))
 
     n_total = 3000
     n_miss = len(mismatches)
     assert n_miss == 0, (
-        f"{n_miss}/{n_total} mismatches (plus {n_both_fail} consistent pre-existing failures).\n"
+        f"{n_miss}/{n_total} mismatches or failures ({n_both_fail} raised on both engines).\n"
         + "\n".join(
             f"  seed={s}, n_vars={nv}, str={st!r}\n    py ={py!r}\n    cpp={cp!r}"
             for s, nv, st, py, cp in mismatches[:5]
         )
     )
-    # Report consistent failure count informally (not an assertion)
-    if n_both_fail > 0:
-        import warnings
-
-        warnings.warn(
-            f"test_differential_3000_dags: {n_both_fail} DAGs where both backends "
-            "raise RuntimeError (pre-existing Python oracle limitation).",
-            stacklevel=1,
-        )
 
 
 # ---------------------------------------------------------------------------
