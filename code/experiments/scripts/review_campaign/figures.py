@@ -263,6 +263,10 @@ def main() -> None:
             "mathtext.fontset": "cm",
             "axes.labelsize": 9,
             "pdf.fonttype": 42,
+            # Vector PDFs rasterize only what Matplotlib must: a colour bar with
+            # >= 50 levels. At the default 100 dpi that raster lands at 124 ppi in
+            # the supplementary, under IEEE's 300 dpi floor for colour graphics.
+            "savefig.dpi": 300,
         }
     )
 
